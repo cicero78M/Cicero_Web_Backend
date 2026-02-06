@@ -180,3 +180,46 @@ test('safeSendMessage handles persistent Lid errors properly', async () => {
   // sendMessage is called: initial attempt + 3 Lid retries
   expect(waClient.sendMessage).toHaveBeenCalledTimes(4);
 }, 20000);
+
+test('safeSendMessage handles getNumberId returning null', async () => {
+  const waClient = {
+    waitForWaReady: jest.fn().mockResolvedValue(),
+    getNumberId: jest.fn().mockResolvedValue(null), // Returns null - number not registered
+    getContact: jest.fn().mockResolvedValue(null), // Also returns null
+    sendMessage: jest.fn().mockResolvedValue({ id: { _serialized: 'msg-123' } }),
+  };
+
+  const result = await safeSendMessage(waClient, '62123456789', 'hello', {
+    retry: { maxAttempts: 3, baseDelayMs: 0, jitterRatio: 0 },
+  });
+
+  // Should fail because number is not registered
+  expect(result).toBe(false);
+  expect(waClient.getNumberId).toHaveBeenCalledWith('62123456789');
+  expect(waClient.getContact).toHaveBeenCalled();
+  expect(waClient.sendMessage).not.toHaveBeenCalled(); // Should not attempt to send
+}, 10000);
+
+test('safeSendMessage uses getContact when getNumberId returns null but contact exists', async () => {
+  const waClient = {
+    waitForWaReady: jest.fn().mockResolvedValue(),
+    getNumberId: jest.fn().mockResolvedValue(null), // Returns null initially
+    getContact: jest.fn().mockResolvedValue({ 
+      id: { _serialized: '62123456789@c.us' } 
+    }), // Contact exists
+    getChat: jest.fn().mockResolvedValue({ 
+      id: { _serialized: '62123456789@c.us' } 
+    }),
+    sendMessage: jest.fn().mockResolvedValue({ id: { _serialized: 'msg-123' } }),
+  };
+
+  const result = await safeSendMessage(waClient, '62123456789', 'hello', {
+    retry: { maxAttempts: 3, baseDelayMs: 0, jitterRatio: 0 },
+  });
+
+  // Should succeed because contact was found via getContact
+  expect(result).toBe(true);
+  expect(waClient.getNumberId).toHaveBeenCalledWith('62123456789');
+  expect(waClient.getContact).toHaveBeenCalled();
+  expect(waClient.sendMessage).toHaveBeenCalledWith('62123456789@c.us', 'hello', {});
+}, 10000);
