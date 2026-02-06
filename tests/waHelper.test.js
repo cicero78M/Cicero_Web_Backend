@@ -221,5 +221,6 @@ test('safeSendMessage uses getContact when getNumberId returns null but contact 
   expect(result).toBe(true);
   expect(waClient.getNumberId).toHaveBeenCalledWith('62123456789');
   expect(waClient.getContact).toHaveBeenCalled();
+  expect(waClient.getChat).toHaveBeenCalled(); // Verify hydration occurred
   expect(waClient.sendMessage).toHaveBeenCalledWith('62123456789@c.us', 'hello', {});
 }, 10000);
