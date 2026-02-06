@@ -1,12 +1,12 @@
 # Cicero Repository Suite Overview
-*Last updated: 2025-11-06*
+*Last updated: 2026-02-06*
 
 This document summarizes the three main repositories that make up the **Cicero** platform. Each repository has a specific role, but all work together to provide social media monitoring and reporting.
 
 ## Repositories
 
-### 1. Cicero_V2 (Backend)
-- [GitHub: cicero78M/Cicero_V2](https://github.com/cicero78M/Cicero_V2)
+### 1. Cicero_Web_Backend (Backend)
+- [GitHub: cicero78M/Cicero_Web_Backend](https://github.com/cicero78M/Cicero_Web_Backend)
 - Node.js/Express REST API used for monitoring Instagram and TikTok, orchestrating WhatsApp messaging, and running the Penmas editorial workflow.
 - Maintains two WhatsApp sessions (`waClient` and `waGatewayClient`) for operator menus and directorate broadcasts.
 - Cron buckets are activated when each WhatsApp session is ready, covering Instagram/TikTok ingestion, link amplification (reguler & khusus), directorate recaps, and database backups.
@@ -20,8 +20,8 @@ This document summarizes the three main repositories that make up the **Cicero**
 - Pages under `app/` display Instagram and TikTok analytics as well as user directories.
 - Configured through the `NEXT_PUBLIC_API_URL` environment variable.
 
-### 3. pegiat_medsos_apps (Android App)
-- GitHub repository for the mobile client (pegiat_medsos_apps).
+### 3. pegiat_medsos_apps (Android App - External)
+- External Android application repository.
 - Lightweight Android application for field agents with OTP-based data claim and premium subscription upsell screens.
 - Uses a login screen to obtain a JWT from the backend.
 - Displays profile information and Instagram posts for the logged in user.

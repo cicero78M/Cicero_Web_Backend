@@ -60,7 +60,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cicero78M/Cicero_V2.git"
+    "url": "git+https://github.com/cicero78M/Cicero_Web_Backend.git"
   },
   "keywords": [
     "Social",
@@ -68,7 +68,7 @@
     "Manajemen"
   ],
   "bugs": {
-    "url": "https://github.com/cicero78M/Cicero_V2/issues"
+    "url": "https://github.com/cicero78M/Cicero_Web_Backend/issues"
   },
-  "homepage": "https://github.com/cicero78M/Cicero_V2#readme"
+  "homepage": "https://github.com/cicero78M/Cicero_Web_Backend#readme"
 }

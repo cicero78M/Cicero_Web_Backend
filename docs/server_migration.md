@@ -1,5 +1,5 @@
 # Server Migration Guide
-*Last updated: 2025-06-25*
+*Last updated: 2026-02-06*
 
 This document explains how to move the **Cicero_V2** application to a new server. It is intended for system administrators so the migration is safe and no data is lost.
 
@@ -14,7 +14,7 @@ This document explains how to move the **Cicero_V2** application to a new server
 1. Install basic dependencies: `git`, `node`, `npm`, and `postgresql` or your chosen database.
 2. Clone this repository to a directory of your choice:
    ```bash
-   git clone https://github.com/cicero78M/Cicero_V2.git
+   git clone https://github.com/cicero78M/Cicero_Web_Backend.git
    ```
 3. Copy the `.env` file from the old server to the project root.
 4. Run `npm install` to download dependencies.
