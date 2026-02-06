@@ -1,5 +1,5 @@
 # CICERO_V2
-*Last updated: 2025-11-06*
+*Last updated: 2026-02-06*
 
 ## Description
 
@@ -47,7 +47,6 @@ Cicero_V2/
 │   ├── middleware/              # Global middleware
 │   └── data/                    # Static datasets (e.g. satker mappings)
 ├── laphar/                      # Legacy recap artefacts kept for reference
-├── pegiat_medsos_apps/          # Android client (embedded reference copy)
 └── tests/                       # Jest tests
 ```
 

@@ -89,7 +89,7 @@ scope and cached premium flags rather than potentially stale JWT claims.
 
 ## Premium Request Workflow
 
-Mobile users from the `pegiat_medsos_apps` can request a premium
+Mobile users from external Android applications (such as `pegiat_medsos_apps`) can request a premium
 subscription through the `/premium-requests` API. A request is created with the
 name of the account holder, the account number and the originating bank. After
 the user transfers the fee they upload the proof of payment and confirm the
