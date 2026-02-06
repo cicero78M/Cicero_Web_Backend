@@ -35,7 +35,6 @@ const COMMON_CHROME_EXECUTABLE_PATHS = [
 ];
 const PROTOCOL_TIMEOUT_ENV_VAR_BASE = 'WA_WWEBJS_PROTOCOL_TIMEOUT_MS';
 const PROTOCOL_TIMEOUT_ROLE_ALIASES = [
-  { prefix: 'wa-gateway', suffix: 'GATEWAY' },
   { prefix: 'wa-user', suffix: 'USER' },
 ];
 

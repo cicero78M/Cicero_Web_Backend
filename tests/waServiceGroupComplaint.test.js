@@ -74,7 +74,6 @@ describe('waService createHandleMessage group complaints', () => {
     jest.unstable_mockModule('../src/config/env.js', () => ({
       env: {
         USER_WA_CLIENT_ID: 'user-client',
-        GATEWAY_WA_CLIENT_ID: 'gateway-client',
       },
     }));
 

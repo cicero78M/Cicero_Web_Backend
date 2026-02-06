@@ -90,7 +90,6 @@ describe("waService gateway allowed group cache", () => {
     jest.unstable_mockModule("../src/config/env.js", () => ({
       env: {
         USER_WA_CLIENT_ID: "user-client",
-        GATEWAY_WA_CLIENT_ID: "gateway-client",
       },
     }));
 

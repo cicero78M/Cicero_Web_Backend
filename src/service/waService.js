@@ -533,14 +533,9 @@ function formatVerificationSummary(
 const DEFAULT_AUTH_DATA_PARENT_DIR = ".cicero";
 const DEFAULT_AUTH_DATA_DIR = "wwebjs_auth";
 const defaultUserClientId = "wa-userrequest";
-const defaultGatewayClientId = "wa-gateway";
 const rawUserClientId = String(env.USER_WA_CLIENT_ID || "");
-const rawGatewayClientId = String(env.GATEWAY_WA_CLIENT_ID || "");
 const normalizedUserClientId = rawUserClientId.trim();
 const normalizedUserClientIdLower = normalizedUserClientId.toLowerCase();
-const trimmedGatewayClientId = rawGatewayClientId.trim();
-const normalizedGatewayClientId = trimmedGatewayClientId.toLowerCase();
-const resolvedGatewayClientId = normalizedGatewayClientId || undefined;
 const resolveAuthDataPath = () => {
   const configuredPath = String(process.env.WA_AUTH_DATA_PATH || "").trim();
   if (configuredPath) {
@@ -630,61 +625,11 @@ const ensureUserClientIdConsistency = () => {
   }
 };
 
-const ensureGatewayClientIdConsistency = () => {
-  const authDataPath = resolveAuthDataPath();
-  if (
-    trimmedGatewayClientId &&
-    normalizedGatewayClientId &&
-    trimmedGatewayClientId !== normalizedGatewayClientId
-  ) {
-    const sessionPath = findSessionCaseMismatch(
-      authDataPath,
-      normalizedGatewayClientId
-    );
-    const sessionHint = sessionPath
-      ? ` Ditemukan session berbeda di ${sessionPath}.`
-      : "";
-    throwClientIdError(
-      `GATEWAY_WA_CLIENT_ID harus lowercase. Nilai "${trimmedGatewayClientId}" tidak konsisten.${sessionHint} ` +
-        "Perbarui env/folder session agar cocok sebelum menjalankan proses."
-    );
-  }
-  if (normalizedGatewayClientId === defaultGatewayClientId) {
-    throwClientIdError(
-      `GATEWAY_WA_CLIENT_ID masih default (${defaultGatewayClientId}); clientId harus unik dan lowercase. ` +
-        `Perbarui env dan bersihkan session lama di ${authDataPath}.`
-    );
-  }
-  const mismatchedSessionPath = findSessionCaseMismatch(
-    authDataPath,
-    normalizedGatewayClientId
-  );
-  if (mismatchedSessionPath) {
-    throwClientIdError(
-      `Folder session "${path.basename(mismatchedSessionPath)}" tidak konsisten dengan ` +
-        `GATEWAY_WA_CLIENT_ID="${normalizedGatewayClientId}". Rename atau hapus session lama di ` +
-        `${mismatchedSessionPath} agar konsisten.`
-    );
-  }
-};
-
-const ensureClientIdUniqueness = () => {
-  if (normalizedUserClientIdLower === normalizedGatewayClientId) {
-    throwClientIdError(
-      `USER_WA_CLIENT_ID dan GATEWAY_WA_CLIENT_ID sama (${normalizedGatewayClientId}); ` +
-        "clientId harus unik. Perbarui env sebelum menjalankan proses."
-    );
-  }
-};
-
 ensureUserClientIdConsistency();
-ensureGatewayClientIdConsistency();
-ensureClientIdUniqueness();
 
 // Initialize WhatsApp client via whatsapp-web.js
 export let waClient = await createWwebjsClient();
 export let waUserClient = await createWwebjsClient(env.USER_WA_CLIENT_ID);
-export let waGatewayClient = await createWwebjsClient(resolvedGatewayClientId);
 
 const logClientIdIssue = (envVar, issueMessage) => {
   console.error(`[WA] ${envVar} ${issueMessage}; clientId harus unik.`);
@@ -693,29 +638,10 @@ const logClientIdIssue = (envVar, issueMessage) => {
 if (!normalizedUserClientId) {
   logClientIdIssue("USER_WA_CLIENT_ID", "kosong");
 }
-if (!normalizedGatewayClientId) {
-  logClientIdIssue("GATEWAY_WA_CLIENT_ID", "kosong");
-}
 if (normalizedUserClientId === defaultUserClientId) {
   logClientIdIssue(
     "USER_WA_CLIENT_ID",
     `masih default (${defaultUserClientId})`
-  );
-}
-if (normalizedGatewayClientId === defaultGatewayClientId) {
-  logClientIdIssue(
-    "GATEWAY_WA_CLIENT_ID",
-    `masih default (${defaultGatewayClientId})`
-  );
-}
-if (
-  normalizedUserClientId &&
-  normalizedGatewayClientId &&
-  normalizedUserClientId === normalizedGatewayClientId
-) {
-  console.error(
-    `[WA] USER_WA_CLIENT_ID dan GATEWAY_WA_CLIENT_ID sama (${normalizedUserClientId}); ` +
-      "clientId harus unik."
   );
 }
 
@@ -742,11 +668,6 @@ const defaultReadyTimeoutMs = Number.isNaN(
 )
   ? Math.max(authenticatedReadyTimeoutMs, fallbackReadyCheckDelayMs + 5000)
   : Number(process.env.WA_READY_TIMEOUT_MS);
-const gatewayReadyTimeoutMs = Number.isNaN(
-  Number(process.env.WA_GATEWAY_READY_TIMEOUT_MS)
-)
-  ? defaultReadyTimeoutMs + fallbackReadyCheckDelayMs
-  : Number(process.env.WA_GATEWAY_READY_TIMEOUT_MS);
 const fallbackStateRetryCounts = new WeakMap();
 const fallbackReinitCounts = new WeakMap();
 const maxFallbackStateRetries = 3;
@@ -820,9 +741,6 @@ function getClientReadyTimeoutMs(client) {
   const clientOverride = client?.readyTimeoutMs;
   if (typeof clientOverride === "number" && !Number.isNaN(clientOverride)) {
     return clientOverride;
-  }
-  if (client === waGatewayClient) {
-    return gatewayReadyTimeoutMs;
   }
   return defaultReadyTimeoutMs;
 }
@@ -1089,7 +1007,6 @@ export function getWaReadinessSummary() {
   const clients = [
     { label: "WA", client: waClient },
     { label: "WA-USER", client: waUserClient },
-    { label: "WA-GATEWAY", client: waGatewayClient },
   ];
   const formatTimestamp = (value) =>
     value ? new Date(value).toISOString() : null;
@@ -1296,8 +1213,6 @@ function markClientReady(client, src = "unknown") {
 
 registerClientReadiness(waClient, "WA");
 registerClientReadiness(waUserClient, "WA-USER");
-registerClientReadiness(waGatewayClient, "WA-GATEWAY");
-waGatewayClient.readyTimeoutMs = gatewayReadyTimeoutMs;
 
 function handleClientDisconnect(client, label, reason) {
   setClientNotReady(client);
@@ -1343,10 +1258,6 @@ waClient.on("disconnected", (reason) => {
 
 waUserClient.on("disconnected", (reason) => {
   handleClientDisconnect(waUserClient, "WA-USER", reason);
-});
-
-waGatewayClient.on("disconnected", (reason) => {
-  handleClientDisconnect(waGatewayClient, "WA-GATEWAY", reason);
 });
 
 export function queueAdminNotification(message) {
@@ -1473,7 +1384,6 @@ export function waitForWaReady(timeoutMs) {
 // Expose readiness helper for consumers like safeSendMessage
 waClient.waitForWaReady = () => waitForClientReady(waClient);
 waUserClient.waitForWaReady = () => waitForClientReady(waUserClient);
-waGatewayClient.waitForWaReady = () => waitForClientReady(waGatewayClient);
 
 // Pastikan semua pengiriman pesan menunggu hingga client siap
 function wrapSendMessage(client) {
@@ -1515,14 +1425,13 @@ function wrapSendMessage(client) {
 }
 wrapSendMessage(waClient);
 wrapSendMessage(waUserClient);
-wrapSendMessage(waGatewayClient);
 
 /**
  * Wait for all WhatsApp client message queues to be idle (empty and no pending tasks)
  * This ensures all messages have been sent before the caller continues
  */
 export async function waitForAllMessageQueues() {
-  const clients = [waClient, waUserClient, waGatewayClient];
+  const clients = [waClient, waUserClient];
   const idlePromises = [];
   
   for (const client of clients) {
@@ -1539,7 +1448,6 @@ export async function waitForAllMessageQueues() {
 
 export function sendGatewayMessage(jid, text) {
   const waFallbackClients = [
-    { client: waGatewayClient, label: "WA-GATEWAY" },
     { client: waClient, label: "WA" },
     { client: waUserClient, label: "WA-USER" },
   ];
@@ -1640,50 +1548,6 @@ waUserClient.on("change_state", (state) => {
     markClientReady(waUserClient, "state");
   } else if (isDisconnectChangeState(state)) {
     setClientNotReady(waUserClient);
-  }
-});
-
-waGatewayClient.on("qr", (qr) => {
-  resetFallbackReadyState(waGatewayClient);
-  const state = getClientReadinessState(waGatewayClient, "WA-GATEWAY");
-  state.lastQrAt = Date.now();
-  state.lastQrPayloadSeen = qr;
-  state.awaitingQrScan = true;
-  qrcode.generate(qr, { small: true });
-  console.log("[WA-GATEWAY] Scan QR dengan WhatsApp Anda!");
-});
-
-waGatewayClient.on("authenticated", (session) => {
-  const sessionInfo = session ? "session received" : "no session payload";
-  console.log(`[WA-GATEWAY] Authenticated (${sessionInfo}); menunggu ready.`);
-  resetFallbackReadyState(waGatewayClient);
-  clearLogoutAwaitingQr(waGatewayClient);
-  scheduleAuthenticatedReadyFallback(waGatewayClient, "WA-GATEWAY");
-});
-
-waGatewayClient.on("auth_failure", (message) => {
-  clearAuthenticatedFallbackTimer(waGatewayClient);
-  setClientNotReady(waGatewayClient);
-  const state = getClientReadinessState(waGatewayClient, "WA-GATEWAY");
-  state.lastAuthFailureAt = Date.now();
-  state.lastAuthFailureMessage = message || null;
-  console.error(`[WA-GATEWAY] Auth failure: ${message}`);
-});
-
-waGatewayClient.on("ready", () => {
-  clearAuthenticatedFallbackTimer(waGatewayClient);
-  clearLogoutAwaitingQr(waGatewayClient);
-  markClientReady(waGatewayClient, "ready");
-});
-
-waGatewayClient.on("change_state", (state) => {
-  console.log(`[WA-GATEWAY] Client state changed: ${state}`);
-  if (state === "CONNECTED" || state === "open") {
-    clearAuthenticatedFallbackTimer(waGatewayClient);
-    clearLogoutAwaitingQr(waGatewayClient);
-    markClientReady(waGatewayClient, "state");
-  } else if (isDisconnectChangeState(state)) {
-    setClientNotReady(waGatewayClient);
   }
 });
 
@@ -4525,7 +4389,7 @@ async function processGatewayBulkDeletion(chatId, text) {
     session: getSession(chatId),
     chatId,
     text,
-    waClient: waGatewayClient,
+    waClient: waClient,
     userModel,
   });
 }
@@ -4571,13 +4435,13 @@ export async function refreshGatewayAllowedGroups(reason = "") {
       gatewayAllowedGroupState.lastRefreshedAt = Date.now();
 
       console.log(
-        `[WA-GATEWAY] Loaded ${gatewayAllowedGroupIds.size} allowed group(s)${
+        `[WA] Loaded ${gatewayAllowedGroupIds.size} allowed group(s)${
           reason ? ` (${reason})` : ""
         }`
       );
     } catch (err) {
       console.error(
-        `[WA-GATEWAY] Failed to load allowed gateway groups${
+        `[WA] Failed to load allowed gateway groups${
           reason ? ` (${reason})` : ""
         }: ${err?.message || err}`
       );
@@ -4611,38 +4475,38 @@ async function ensureGatewayAllowedGroupsLoaded(reason = "") {
 refreshGatewayAllowedGroups("initial warmup").catch(() => {});
 
 export async function handleGatewayMessage(msg) {
-  const readinessState = getClientReadinessState(waGatewayClient, "WA-GATEWAY");
+  const readinessState = getClientReadinessState(waClient, "WA");
   if (!readinessState.ready) {
-    waGatewayClient
+    waClient
       .waitForWaReady()
       .catch((err) => {
         console.warn(
-          `[WA-GATEWAY] waitForWaReady failed before message handling: ${err?.message || err}`
+          `[WA] waitForWaReady failed before message handling: ${err?.message || err}`
         );
       });
     readinessState.pendingMessages.push({ msg, allowReplay: true });
     console.log(
-      `[WA-GATEWAY] Deferred gateway message from ${msg?.from || "unknown"} until ready`
+      `[WA] Deferred gateway message from ${msg?.from || "unknown"} until ready`
     );
-    return;
+    return false; // Message deferred to pendingMessages queue for replay when client becomes ready
   }
 
   const chatId = msg.from || "";
   const text = (msg.body || "").trim();
-  if (!text) return;
+  if (!text) return false;
 
   await ensureGatewayAllowedGroupsLoaded("gateway message");
 
   const isStatusBroadcast = chatId === "status@broadcast";
 
   if (isStatusBroadcast) {
-    console.log("[WA-GATEWAY] Ignored status broadcast message");
-    return;
+    console.log("[WA] Ignored status broadcast message");
+    return false; // Ignored - status broadcast messages are not processed
   }
 
   if (chatId.endsWith("@g.us") && !gatewayAllowedGroupIds.has(chatId)) {
-    console.log(`[WA-GATEWAY] Ignored group message from ${chatId}`);
-    return;
+    console.log(`[WA] Ignored group message from ${chatId}`);
+    return false; // Message from group not in allowed list - skipped by gateway handler
   }
 
   const senderId = msg.author || chatId;
@@ -4679,40 +4543,40 @@ export async function handleGatewayMessage(msg) {
         session: getSession(chatId),
         chatId,
         text: "",
-        waClient: waGatewayClient,
-        clientLabel: "[WA-GATEWAY]",
+        waClient: waClient,
+        clientLabel: "[WA]",
         args: [pool, userModel, clientService],
         invalidStepMessage:
           "⚠️ Sesi menu client tidak dikenali. Ketik *clientrequest* ulang atau *batal*.",
         failureMessage:
           "❌ Terjadi kesalahan pada menu client. Ketik *clientrequest* ulang untuk memulai kembali.",
       });
-      return;
+      return true;
     }
 
     if (lowered === "batal") {
       clearSession(chatId);
-      await waGatewayClient.sendMessage(
+      await waClient.sendMessage(
         chatId,
         "Baik, penambahan akun resmi Satbinmas dibatalkan."
       );
-      return;
+      return true;
     }
 
-    await waGatewayClient.sendMessage(
+    await waClient.sendMessage(
       chatId,
       session.prompt ||
         "Belum ada akun resmi yang terdaftar. Balas *ya* untuk menambahkan akun resmi Satbinmas atau *batal* untuk membatalkan."
     );
-    return;
+    return true;
   }
 
   const handledClientRequestSession = await handleClientRequestSessionStep({
     session,
     chatId,
     text,
-    waClient: waGatewayClient,
-    clientLabel: "[WA-GATEWAY]",
+    waClient: waClient,
+    clientLabel: "[WA]",
     pool,
     userModel,
     clientService,
@@ -4725,15 +4589,14 @@ export async function handleGatewayMessage(msg) {
     handleFetchLikesInstagram,
     handleFetchKomentarTiktokBatch,
   });
-  if (handledClientRequestSession) return;
-
+  if (handledClientRequestSession) return true;
   if (normalizedText.startsWith("#satbinmasofficial")) {
     if (!isGatewayForward) {
-      await waGatewayClient.sendMessage(
+      await waClient.sendMessage(
         chatId,
         "❌ Permintaan ini hanya diproses untuk pesan yang diteruskan melalui WA Gateway."
       );
-      return;
+      return true;
     }
 
     const waNumber = senderId.replace(/[^0-9]/g, "");
@@ -4744,11 +4607,11 @@ export async function handleGatewayMessage(msg) {
       : "";
 
     if (!waId) {
-      await waGatewayClient.sendMessage(
+      await waClient.sendMessage(
         chatId,
         "❌ Nomor pengirim tidak valid untuk pengecekan akun resmi."
       );
-      return;
+      return true;
     }
 
     let dashUsers = [];
@@ -4756,7 +4619,7 @@ export async function handleGatewayMessage(msg) {
       dashUsers = await dashboardUserModel.findAllByWhatsApp(waId);
     } catch (err) {
       console.error(
-        `[WA-GATEWAY] Failed to load dashboard users for ${waId}: ${err?.message || err}`
+        `[WA] Failed to load dashboard users for ${waId}: ${err?.message || err}`
       );
     }
 
@@ -4765,11 +4628,11 @@ export async function handleGatewayMessage(msg) {
     );
 
     if (validUsers.length === 0) {
-      await waGatewayClient.sendMessage(
+      await waClient.sendMessage(
         chatId,
         "❌ Nomor Anda tidak terdaftar atau belum aktif sebagai dashboard user."
       );
-      return;
+      return true;
     }
 
     const chosenUser =
@@ -4781,11 +4644,11 @@ export async function handleGatewayMessage(msg) {
     const primaryClientId = clientIds[0];
 
     if (!primaryClientId) {
-      await waGatewayClient.sendMessage(
+      await waClient.sendMessage(
         chatId,
         "❌ Nomor dashboard Anda belum memiliki relasi client yang aktif."
       );
-      return;
+      return true;
     }
 
     let clientName = primaryClientId;
@@ -4796,7 +4659,7 @@ export async function handleGatewayMessage(msg) {
       }
     } catch (err) {
       console.error(
-        `[WA-GATEWAY] Failed to load client ${primaryClientId}: ${err?.message || err}`
+        `[WA] Failed to load client ${primaryClientId}: ${err?.message || err}`
       );
     }
 
@@ -4808,13 +4671,13 @@ export async function handleGatewayMessage(msg) {
         );
     } catch (err) {
       console.error(
-        `[WA-GATEWAY] Failed to fetch satbinmas official accounts for ${primaryClientId}: ${err?.message || err}`
+        `[WA] Failed to fetch satbinmas official accounts for ${primaryClientId}: ${err?.message || err}`
       );
-      await waGatewayClient.sendMessage(
+      await waClient.sendMessage(
         chatId,
         "❌ Gagal mengambil data akun resmi Satbinmas. Silakan coba lagi."
       );
-      return;
+      return true;
     }
 
     const formatAccount = (account, idx) => {
@@ -4892,7 +4755,7 @@ export async function handleGatewayMessage(msg) {
       "\n\n" +
       followUpPrompt;
 
-    await waGatewayClient.sendMessage(chatId, responseMessage);
+    await waClient.sendMessage(chatId, responseMessage);
     setSession(chatId, {
       menu: "satbinmasofficial_gateway",
       step: hasOfficialAccounts ? "confirm_manage" : "confirm_add",
@@ -4902,12 +4765,12 @@ export async function handleGatewayMessage(msg) {
       },
       prompt: followUpPrompt,
     });
-    return;
+    return true;
   }
 
   if (isGatewayComplaintForward({ senderId, text })) {
-    console.log("[WA-GATEWAY] Skipped gateway-forwarded complaint message");
-    return;
+    console.log("[WA] Skipped gateway-forwarded complaint message");
+    return true;
   }
 
   const handledComplaint = await handleComplaintMessageIfApplicable({
@@ -4921,7 +4784,7 @@ export async function handleGatewayMessage(msg) {
     adminOptionSessions,
     setSession,
     getSession,
-    waClient: waGatewayClient,
+    waClient: waClient,
     pool,
     userModel,
   });
@@ -4929,11 +4792,27 @@ export async function handleGatewayMessage(msg) {
   if (!handledComplaint) {
     await processGatewayBulkDeletion(chatId, text);
   }
+  
+  return true; // Message was processed by gateway handler
 }
 
-registerClientMessageHandler(waClient, "wwebjs", handleMessage);
+// Create a composite handler for waClient that handles both operator and gateway messages
+const compositeWaClientHandler = async (msg) => {
+  try {
+    // Try gateway handler first (for group messages from allowed groups)
+    const handledByGateway = await handleGatewayMessage(msg);
+    
+    // Only call main operator handler if gateway didn't handle it
+    if (!handledByGateway) {
+      await handleMessage(msg);
+    }
+  } catch (err) {
+    console.error(`[WA] Composite message handler error: ${err?.message || err}`);
+  }
+};
+
+registerClientMessageHandler(waClient, "wwebjs", compositeWaClientHandler);
 registerClientMessageHandler(waUserClient, "wwebjs-user", handleUserMessage);
-registerClientMessageHandler(waGatewayClient, "wwebjs-gateway", handleGatewayMessage);
 
 if (shouldInitWhatsAppClients) {
   console.log('[WA] Attaching message event listeners to WhatsApp clients...');
@@ -4944,7 +4823,7 @@ if (shouldInitWhatsAppClients) {
     if (process.env.WA_DEBUG_LOGGING === 'true') {
       console.log(`[WA-SERVICE] waClient message details - body=${msg.body?.substring(0, 50) || '(empty)'}`);
     }
-    handleIncoming('wwebjs', msg, handleMessage);
+    handleIncoming('wwebjs', msg, compositeWaClientHandler);
   });
 
   waUserClient.on('message', (msg) => {
@@ -4963,25 +4842,15 @@ if (shouldInitWhatsAppClients) {
     handleIncoming('wwebjs-user', msg, handleUserMessage);
   });
 
-  waGatewayClient.on('message', (msg) => {
-    // ALWAYS log message reception at waService level (critical for diagnosing reception issues)
-    console.log(`[WA-SERVICE] waGatewayClient 'message' event received - from=${msg.from}`);
-    if (process.env.WA_DEBUG_LOGGING === 'true') {
-      console.log(`[WA-SERVICE] waGatewayClient message details - body=${msg.body?.substring(0, 50) || '(empty)'}`);
-    }
-    handleIncoming('wwebjs-gateway', msg, handleGatewayMessage);
-  });
-
   console.log('[WA] Message event listeners attached successfully.');
   // Verify listeners are actually attached
-  console.log(`[WA] Listener counts - waClient: ${waClient.listenerCount('message')}, waUserClient: ${waUserClient.listenerCount('message')}, waGatewayClient: ${waGatewayClient.listenerCount('message')}`);
+  console.log(`[WA] Listener counts - waClient: ${waClient.listenerCount('message')}, waUserClient: ${waUserClient.listenerCount('message')}`);
   console.log('[WA] ** IMPORTANT: If you send a message to the bot and see NO logs, the client may not be connected or authenticated. Check for "Client ready event received" logs above. **');
 
 
   const clientsToInit = [
     { label: "WA", client: waClient },
     { label: "WA-USER", client: waUserClient },
-    { label: "WA-GATEWAY", client: waGatewayClient },
   ];
 
   const initPromises = clientsToInit.map(({ label, client }) => {
@@ -5270,11 +5139,11 @@ if (shouldInitWhatsAppClients) {
         }
         const shouldEscalateUnknownState =
           normalizedStateLower === "unknown" &&
-          label === "WA-GATEWAY" &&
+          label === "WA" &&
           unknownStateRetryCount >= maxUnknownStateEscalationRetries;
         const shouldClearFallbackSession =
           normalizedStateLower === "unknown" &&
-          (label === "WA-GATEWAY" || label === "WA-USER");
+          (label === "WA" || label === "WA-USER");
         const hasAuthIndicators = hasAuthFailureIndicator(state);
         const sessionPath = client?.sessionPath || null;
         const sessionPathExists = sessionPath ? fs.existsSync(sessionPath) : false;
@@ -5282,7 +5151,7 @@ if (shouldInitWhatsAppClients) {
           sessionPathExists && hasPersistedAuthSession(sessionPath);
         const shouldClearCloseSession =
           normalizedStateLower === "close" &&
-          label === "WA-GATEWAY" &&
+          label === "WA" &&
           hasSessionContent;
         const canClearFallbackSession =
           sessionPathExists &&
@@ -5389,7 +5258,6 @@ if (shouldInitWhatsAppClients) {
 
   scheduleFallbackReadyCheck(waClient);
   scheduleFallbackReadyCheck(waUserClient);
-  scheduleFallbackReadyCheck(waGatewayClient);
 
   await Promise.allSettled(initPromises);
 
@@ -5421,10 +5289,9 @@ if (shouldInitWhatsAppClients) {
   logWaServiceDiagnostics(
     waClient,
     waUserClient,
-    waGatewayClient,
     getWaReadinessSummary()
   );
-  checkMessageListenersAttached(waClient, waUserClient, waGatewayClient);
+  checkMessageListenersAttached(waClient, waUserClient);
 }
 
 export default waClient;
