@@ -38,10 +38,10 @@ export const updateStatus = async (jobKey, isActive) => {
  * Create a new cron job configuration
  */
 export const create = async (data) => {
-  const { job_key, display_name, description, is_active = true } = data;
+  const { jobKey, displayName, description, isActive = true } = data;
   const res = await query(
     'INSERT INTO cron_job_config (job_key, display_name, description, is_active) VALUES ($1, $2, $3, $4) RETURNING job_key, display_name, description, is_active, created_at, updated_at',
-    [job_key, display_name, description, is_active]
+    [jobKey, displayName, description, isActive]
   );
   return res.rows[0];
 };

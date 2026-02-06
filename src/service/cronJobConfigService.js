@@ -5,16 +5,12 @@ import * as cronJobConfigModel from '../model/cronJobConfigModel.js';
 /**
  * Get all cron job configurations
  */
-export const list = async () => {
-  return await cronJobConfigModel.findAll();
-};
+export const list = () => cronJobConfigModel.findAll();
 
 /**
  * Get a specific cron job by job_key
  */
-export const getByJobKey = async (jobKey) => {
-  return await cronJobConfigModel.findByJobKey(jobKey);
-};
+export const getByJobKey = (jobKey) => cronJobConfigModel.findByJobKey(jobKey);
 
 /**
  * Update cron job status
@@ -30,9 +26,7 @@ export const updateCronJobStatus = async (jobKey, isActive) => {
 /**
  * Create a new cron job configuration
  */
-export const createCronJob = async (data) => {
-  return await cronJobConfigModel.create(data);
-};
+export const createCronJob = (data) => cronJobConfigModel.create(data);
 
 /**
  * Delete a cron job configuration
