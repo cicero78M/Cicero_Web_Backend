@@ -4488,12 +4488,12 @@ export async function handleGatewayMessage(msg) {
     console.log(
       `[WA] Deferred gateway message from ${msg?.from || "unknown"} until ready`
     );
-    return;
+    return false; // Not handled yet, will be replayed later
   }
 
   const chatId = msg.from || "";
   const text = (msg.body || "").trim();
-  if (!text) return;
+  if (!text) return false;
 
   await ensureGatewayAllowedGroupsLoaded("gateway message");
 
@@ -4501,12 +4501,12 @@ export async function handleGatewayMessage(msg) {
 
   if (isStatusBroadcast) {
     console.log("[WA] Ignored status broadcast message");
-    return;
+    return false; // Not a gateway message
   }
 
   if (chatId.endsWith("@g.us") && !gatewayAllowedGroupIds.has(chatId)) {
     console.log(`[WA] Ignored group message from ${chatId}`);
-    return;
+    return false; // Not from an allowed group
   }
 
   const senderId = msg.author || chatId;
@@ -4551,7 +4551,7 @@ export async function handleGatewayMessage(msg) {
         failureMessage:
           "❌ Terjadi kesalahan pada menu client. Ketik *clientrequest* ulang untuk memulai kembali.",
       });
-      return;
+      return true;
     }
 
     if (lowered === "batal") {
@@ -4560,7 +4560,7 @@ export async function handleGatewayMessage(msg) {
         chatId,
         "Baik, penambahan akun resmi Satbinmas dibatalkan."
       );
-      return;
+      return true;
     }
 
     await waClient.sendMessage(
@@ -4568,7 +4568,7 @@ export async function handleGatewayMessage(msg) {
       session.prompt ||
         "Belum ada akun resmi yang terdaftar. Balas *ya* untuk menambahkan akun resmi Satbinmas atau *batal* untuk membatalkan."
     );
-    return;
+    return true;
   }
 
   const handledClientRequestSession = await handleClientRequestSessionStep({
@@ -4589,15 +4589,14 @@ export async function handleGatewayMessage(msg) {
     handleFetchLikesInstagram,
     handleFetchKomentarTiktokBatch,
   });
-  if (handledClientRequestSession) return;
-
+  if (handledClientRequestSession) return true;
   if (normalizedText.startsWith("#satbinmasofficial")) {
     if (!isGatewayForward) {
       await waClient.sendMessage(
         chatId,
         "❌ Permintaan ini hanya diproses untuk pesan yang diteruskan melalui WA Gateway."
       );
-      return;
+      return true;
     }
 
     const waNumber = senderId.replace(/[^0-9]/g, "");
@@ -4612,7 +4611,7 @@ export async function handleGatewayMessage(msg) {
         chatId,
         "❌ Nomor pengirim tidak valid untuk pengecekan akun resmi."
       );
-      return;
+      return true;
     }
 
     let dashUsers = [];
@@ -4633,7 +4632,7 @@ export async function handleGatewayMessage(msg) {
         chatId,
         "❌ Nomor Anda tidak terdaftar atau belum aktif sebagai dashboard user."
       );
-      return;
+      return true;
     }
 
     const chosenUser =
@@ -4649,7 +4648,7 @@ export async function handleGatewayMessage(msg) {
         chatId,
         "❌ Nomor dashboard Anda belum memiliki relasi client yang aktif."
       );
-      return;
+      return true;
     }
 
     let clientName = primaryClientId;
@@ -4678,7 +4677,7 @@ export async function handleGatewayMessage(msg) {
         chatId,
         "❌ Gagal mengambil data akun resmi Satbinmas. Silakan coba lagi."
       );
-      return;
+      return true;
     }
 
     const formatAccount = (account, idx) => {
@@ -4766,12 +4765,12 @@ export async function handleGatewayMessage(msg) {
       },
       prompt: followUpPrompt,
     });
-    return;
+    return true;
   }
 
   if (isGatewayComplaintForward({ senderId, text })) {
     console.log("[WA] Skipped gateway-forwarded complaint message");
-    return;
+    return true;
   }
 
   const handledComplaint = await handleComplaintMessageIfApplicable({
@@ -4793,19 +4792,23 @@ export async function handleGatewayMessage(msg) {
   if (!handledComplaint) {
     await processGatewayBulkDeletion(chatId, text);
   }
+  
+  return true; // Message was processed by gateway handler
 }
 
 // Create a composite handler for waClient that handles both operator and gateway messages
 const compositeWaClientHandler = async (msg) => {
-  // Try gateway handler first (for group messages from allowed groups)
-  await handleGatewayMessage(msg).catch((err) => {
-    console.error(`[WA] Gateway message handler error: ${err?.message || err}`);
-  });
-  
-  // Then try the main operator handler
-  await handleMessage(msg).catch((err) => {
-    console.error(`[WA] Main message handler error: ${err?.message || err}`);
-  });
+  try {
+    // Try gateway handler first (for group messages from allowed groups)
+    const handledByGateway = await handleGatewayMessage(msg);
+    
+    // Only call main operator handler if gateway didn't handle it
+    if (!handledByGateway) {
+      await handleMessage(msg);
+    }
+  } catch (err) {
+    console.error(`[WA] Composite message handler error: ${err?.message || err}`);
+  }
 };
 
 registerClientMessageHandler(waClient, "wwebjs", compositeWaClientHandler);
