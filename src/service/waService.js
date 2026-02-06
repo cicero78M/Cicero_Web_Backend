@@ -4488,7 +4488,7 @@ export async function handleGatewayMessage(msg) {
     console.log(
       `[WA] Deferred gateway message from ${msg?.from || "unknown"} until ready`
     );
-    return false; // Not handled yet, will be replayed later
+    return false; // Message deferred to pendingMessages queue for replay when client becomes ready
   }
 
   const chatId = msg.from || "";
@@ -4501,12 +4501,12 @@ export async function handleGatewayMessage(msg) {
 
   if (isStatusBroadcast) {
     console.log("[WA] Ignored status broadcast message");
-    return false; // Not a gateway message
+    return false; // Ignored - status broadcast messages are not processed
   }
 
   if (chatId.endsWith("@g.us") && !gatewayAllowedGroupIds.has(chatId)) {
     console.log(`[WA] Ignored group message from ${chatId}`);
-    return false; // Not from an allowed group
+    return false; // Message from group not in allowed list - skipped by gateway handler
   }
 
   const senderId = msg.author || chatId;
