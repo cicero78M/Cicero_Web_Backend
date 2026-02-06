@@ -534,7 +534,7 @@ function parseBulkStatusEntries(message) {
 function isGatewayForward(text) {
   if (!text) return false;
   const normalized = text.trim().toLowerCase();
-  return /^(wagateway|wabot)\b/.test(normalized);
+  return /^(wabot)\b/.test(normalized);
 }
 
 function isBulkDeletionSummaryEcho(text) {
