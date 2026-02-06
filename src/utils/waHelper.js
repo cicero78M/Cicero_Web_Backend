@@ -202,15 +202,29 @@ async function resolveChatId(waClient, chatId) {
         return chat?.id?._serialized || numberId._serialized;
       }
       if (numberId == null) {
-        if (canFallback) {
+        // getNumberId returned null - number may not be registered on WhatsApp
+        console.warn(
+          '[WA] getNumberId returned null for:',
+          digits
+        );
+        
+        // Try to verify if the contact exists using getContact
+        if (canFallback && typeof waClient?.getContact === 'function') {
           const fallbackId = formatToWhatsAppId(digits);
-          console.warn(
-            '[WA] getNumberId returned null, using fallback @c.us:',
-            fallbackId
-          );
-          const chat = await hydrateChat(waClient, fallbackId);
-          return chat?.id?._serialized || fallbackId;
+          try {
+            const contact = await waClient.getContact(fallbackId);
+            if (contact?.id?._serialized) {
+              console.log('[WA] Contact found via getContact, using:', contact.id._serialized);
+              const chat = await hydrateChat(waClient, contact.id._serialized);
+              return chat?.id?._serialized || contact.id._serialized;
+            }
+          } catch (contactErr) {
+            console.warn('[WA] getContact also failed for fallback:', contactErr?.message || contactErr);
+          }
         }
+        
+        // If we still can't verify the contact, return empty to indicate invalid
+        console.warn('[WA] Unable to verify WhatsApp registration for:', digits);
         return '';
       }
     } catch (err) {
@@ -496,7 +510,7 @@ export async function safeSendMessage(waClient, chatId, message, options = {}) {
       await ensureClientReady();
       resolvedChatId = await resolveChatId(waClient, chatId);
       if (!resolvedChatId) {
-        const error = new Error('chatId penerima tidak valid');
+        const error = new Error('Nomor WhatsApp tidak terdaftar atau chatId tidak valid');
         error.retryable = false;
         throw error;
       }
