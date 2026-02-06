@@ -4795,9 +4795,21 @@ export async function handleGatewayMessage(msg) {
   }
 }
 
-registerClientMessageHandler(waClient, "wwebjs", handleMessage);
+// Create a composite handler for waClient that handles both operator and gateway messages
+const compositeWaClientHandler = async (msg) => {
+  // Try gateway handler first (for group messages from allowed groups)
+  await handleGatewayMessage(msg).catch((err) => {
+    console.error(`[WA] Gateway message handler error: ${err?.message || err}`);
+  });
+  
+  // Then try the main operator handler
+  await handleMessage(msg).catch((err) => {
+    console.error(`[WA] Main message handler error: ${err?.message || err}`);
+  });
+};
+
+registerClientMessageHandler(waClient, "wwebjs", compositeWaClientHandler);
 registerClientMessageHandler(waUserClient, "wwebjs-user", handleUserMessage);
-registerClientMessageHandler(waClient, "wwebjs-gateway", handleGatewayMessage);
 
 if (shouldInitWhatsAppClients) {
   console.log('[WA] Attaching message event listeners to WhatsApp clients...');
@@ -4808,7 +4820,7 @@ if (shouldInitWhatsAppClients) {
     if (process.env.WA_DEBUG_LOGGING === 'true') {
       console.log(`[WA-SERVICE] waClient message details - body=${msg.body?.substring(0, 50) || '(empty)'}`);
     }
-    handleIncoming('wwebjs', msg, handleMessage);
+    handleIncoming('wwebjs', msg, compositeWaClientHandler);
   });
 
   waUserClient.on('message', (msg) => {
@@ -4825,15 +4837,6 @@ if (shouldInitWhatsAppClients) {
       console.log(`[WA-SERVICE] waUserClient message details - body=${msg.body?.substring(0, 50) || '(empty)'}`);
     }
     handleIncoming('wwebjs-user', msg, handleUserMessage);
-  });
-
-  waClient.on('message', (msg) => {
-    // ALWAYS log message reception at waService level (critical for diagnosing reception issues)
-    console.log(`[WA-SERVICE] waClient 'message' event received - from=${msg.from}`);
-    if (process.env.WA_DEBUG_LOGGING === 'true') {
-      console.log(`[WA-SERVICE] waClient message details - body=${msg.body?.substring(0, 50) || '(empty)'}`);
-    }
-    handleIncoming('wwebjs-gateway', msg, handleGatewayMessage);
   });
 
   console.log('[WA] Message event listeners attached successfully.');
