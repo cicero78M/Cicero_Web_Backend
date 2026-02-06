@@ -6,7 +6,7 @@ This document summarizes the naming style used throughout **Cicero_V2**. Follow 
 ## Folders & Files
 
 - Folder names use lowercase letters with no spaces, for example `controller`, `service`, `middleware`.
-- File names follow *camelCase* with an extension appropriate to the language (`.js`, `.ts`, etc.), e.g. `userController.js`, `cronRekapLink.js`.
+- File names follow *camelCase* with an extension appropriate to the language (`.js`, `.ts`, etc.), e.g. `userController.js`, `rekapLinkService.js`.
 - Avoid special characters other than hyphens (`-`) or underscores (`_`).
 
 ## Functions
