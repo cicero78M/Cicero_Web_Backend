@@ -4642,7 +4642,7 @@ const compositeWaClientHandler = async (msg) => {
   }
 };
 
-registerClientMessageHandler(waClient, "wwebjs", compositeWaClientHandler);
+registerClientMessageHandler(waClient, "baileys", compositeWaClientHandler);
 
 if (shouldInitWhatsAppClients) {
   console.log('[WA] Attaching message event listeners to WhatsApp clients...');
@@ -4653,7 +4653,7 @@ if (shouldInitWhatsAppClients) {
     if (process.env.WA_DEBUG_LOGGING === 'true') {
       console.log(`[WA-SERVICE] waClient message details - body=${msg.body?.substring(0, 50) || '(empty)'}`);
     }
-    handleIncoming('wwebjs', msg, compositeWaClientHandler);
+    handleIncoming('baileys', msg, compositeWaClientHandler);
   });
 
   console.log('[WA] Message event listeners attached successfully.');

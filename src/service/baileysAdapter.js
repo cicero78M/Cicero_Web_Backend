@@ -119,128 +119,120 @@ export async function createBaileysClient(clientId = 'wa-admin') {
             `[BAILEYS] Connecting clientId=${clientId} (attempt ${attempts}/${maxAttempts}, trigger=${triggerLabel})`
           );
 
-          // Create socket
-          sock = makeWASocket({
-            version,
-            logger,
-            printQRInTerminal: false,
-            auth: state,
-            connectTimeoutMs: DEFAULT_CONNECT_TIMEOUT_MS,
-            defaultQueryTimeoutMs: undefined,
-            emitOwnEvents: true,
-            browser: ['Cicero', 'Chrome', '120.0.0'],
-          });
-
-          // Handle connection updates
-          sock.ev.on('connection.update', async (update) => {
-            const { connection, lastDisconnect, qr } = update;
-
-            if (qr) {
-              console.log(`[BAILEYS] QR Code received for clientId=${clientId}`);
-              qrcode.generate(qr, { small: true });
-              emitter.emit('qr', qr);
-            }
-
-            if (connection === 'close') {
-              const statusCode = lastDisconnect?.error?.output?.statusCode;
-              const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-              
-              console.log(
-                `[BAILEYS] Connection closed for clientId=${clientId}, statusCode=${statusCode}, shouldReconnect=${shouldReconnect}`
-              );
-
-              isConnected = false;
-              
-              // Map disconnect reason
-              let reason = 'UNKNOWN';
-              if (statusCode === DisconnectReason.loggedOut) {
-                reason = 'LOGGED_OUT';
-              } else if (statusCode === DisconnectReason.restartRequired) {
-                reason = 'RESTART_REQUIRED';
-              } else if (statusCode === DisconnectReason.connectionClosed) {
-                reason = 'CONNECTION_CLOSED';
-              } else if (statusCode === DisconnectReason.connectionLost) {
-                reason = 'CONNECTION_LOST';
-              } else if (statusCode === DisconnectReason.timedOut) {
-                reason = 'TIMED_OUT';
-              }
-
-              emitter.emit('disconnected', reason);
-
-              if (shouldReconnect && attempts < maxAttempts) {
-                const backoff = DEFAULT_CONNECT_RETRY_BACKOFF_MS * attempts;
-                console.log(`[BAILEYS] Reconnecting in ${backoff}ms...`);
-                await new Promise((resolve) => setTimeout(resolve, backoff));
-                // Will retry in the while loop
-              } else {
-                break;
-              }
-            } else if (connection === 'open') {
-              console.log(`[BAILEYS] Connection opened for clientId=${clientId}`);
-              isConnected = true;
-              emitter.emit('ready');
-              break;
-            }
-          });
-
-          // Handle credential updates
-          sock.ev.on('creds.update', saveCreds);
-
-          // Handle incoming messages
-          sock.ev.on('messages.upsert', async ({ messages, type }) => {
-            if (type !== 'notify') return;
-
-            for (const msg of messages) {
-              if (msg.key.fromMe) continue; // Skip own messages
-
-              // Extract message content
-              const messageContent = msg.message;
-              let body = '';
-
-              if (messageContent?.conversation) {
-                body = messageContent.conversation;
-              } else if (messageContent?.extendedTextMessage?.text) {
-                body = messageContent.extendedTextMessage.text;
-              } else if (messageContent?.imageMessage?.caption) {
-                body = messageContent.imageMessage.caption;
-              } else if (messageContent?.videoMessage?.caption) {
-                body = messageContent.videoMessage.caption;
-              }
-
-              // Emit message event with wwebjs-compatible format
-              emitter.emit('message', {
-                from: msg.key.remoteJid,
-                body: body,
-                id: msg.key.id,
-                author: msg.key.participant || msg.key.remoteJid,
-                timestamp: msg.messageTimestamp,
-                hasMedia: !!(
-                  messageContent?.imageMessage ||
-                  messageContent?.videoMessage ||
-                  messageContent?.audioMessage ||
-                  messageContent?.documentMessage
-                ),
-                isGroup: msg.key.remoteJid?.endsWith('@g.us') || false,
-              });
-            }
-          });
-
-          // Wait for connection to establish
-          await new Promise((resolve, reject) => {
+          // Create a promise that will be resolved when connection is open
+          const connectionPromise = new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
               reject(new Error('Connection timeout'));
             }, DEFAULT_CONNECT_TIMEOUT_MS);
 
-            const checkConnection = () => {
-              if (isConnected) {
+            // Create socket
+            sock = makeWASocket({
+              version,
+              logger,
+              printQRInTerminal: false,
+              auth: state,
+              connectTimeoutMs: DEFAULT_CONNECT_TIMEOUT_MS,
+              defaultQueryTimeoutMs: undefined,
+              emitOwnEvents: true,
+              browser: ['Cicero', 'Chrome', '120.0.0'],
+            });
+
+            // Handle connection updates
+            sock.ev.on('connection.update', async (update) => {
+              const { connection, lastDisconnect, qr } = update;
+
+              if (qr) {
+                console.log(`[BAILEYS] QR Code received for clientId=${clientId}`);
+                qrcode.generate(qr, { small: true });
+                emitter.emit('qr', qr);
+              }
+
+              if (connection === 'close') {
+                const statusCode = lastDisconnect?.error?.output?.statusCode;
+                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+                
+                console.log(
+                  `[BAILEYS] Connection closed for clientId=${clientId}, statusCode=${statusCode}, shouldReconnect=${shouldReconnect}`
+                );
+
+                isConnected = false;
                 clearTimeout(timeout);
+                
+                // Map disconnect reason
+                let reason = 'UNKNOWN';
+                if (statusCode === DisconnectReason.loggedOut) {
+                  reason = 'LOGGED_OUT';
+                } else if (statusCode === DisconnectReason.restartRequired) {
+                  reason = 'RESTART_REQUIRED';
+                } else if (statusCode === DisconnectReason.connectionClosed) {
+                  reason = 'CONNECTION_CLOSED';
+                } else if (statusCode === DisconnectReason.connectionLost) {
+                  reason = 'CONNECTION_LOST';
+                } else if (statusCode === DisconnectReason.timedOut) {
+                  reason = 'TIMED_OUT';
+                }
+
+                emitter.emit('disconnected', reason);
+
+                if (shouldReconnect && attempts < maxAttempts) {
+                  reject(new Error(`Connection closed: ${reason}`));
+                } else {
+                  reject(new Error(`Connection failed: ${reason}`));
+                }
+              } else if (connection === 'open') {
+                console.log(`[BAILEYS] Connection opened for clientId=${clientId}`);
+                isConnected = true;
+                clearTimeout(timeout);
+                emitter.emit('ready');
                 resolve();
               }
-            };
+            });
 
-            emitter.once('ready', checkConnection);
+            // Handle credential updates
+            sock.ev.on('creds.update', saveCreds);
+
+            // Handle incoming messages
+            sock.ev.on('messages.upsert', async ({ messages, type }) => {
+              if (type !== 'notify') return;
+
+              for (const msg of messages) {
+                if (msg.key.fromMe) continue; // Skip own messages
+
+                // Extract message content
+                const messageContent = msg.message;
+                let body = '';
+
+                if (messageContent?.conversation) {
+                  body = messageContent.conversation;
+                } else if (messageContent?.extendedTextMessage?.text) {
+                  body = messageContent.extendedTextMessage.text;
+                } else if (messageContent?.imageMessage?.caption) {
+                  body = messageContent.imageMessage.caption;
+                } else if (messageContent?.videoMessage?.caption) {
+                  body = messageContent.videoMessage.caption;
+                }
+
+                // Emit message event with wwebjs-compatible format
+                emitter.emit('message', {
+                  from: msg.key.remoteJid,
+                  body: body,
+                  id: msg.key.id,
+                  author: msg.key.participant || msg.key.remoteJid,
+                  timestamp: msg.messageTimestamp,
+                  hasMedia: !!(
+                    messageContent?.imageMessage ||
+                    messageContent?.videoMessage ||
+                    messageContent?.audioMessage ||
+                    messageContent?.documentMessage
+                  ),
+                  isGroup: msg.key.remoteJid?.endsWith('@g.us') || false,
+                });
+              }
+            });
           });
 
+          // Wait for connection to establish
+          await connectionPromise;
           break; // Connection successful, exit retry loop
         } catch (err) {
           console.error(
