@@ -217,8 +217,6 @@ Application logs are timestamped using the Asia/Jakarta timezone by the console 
     TELEGRAM_BOT_TOKEN=your-telegram-bot-token
     TELEGRAM_ADMIN_CHAT_ID=your-telegram-admin-chat-id
     APP_SESSION_NAME=wa-admin
-    USER_WA_CLIENT_ID=wa-userrequest-prod
-    GATEWAY_WA_CLIENT_ID=wa-gateway-prod
     WA_AUTH_DATA_PATH=/var/lib/cicero/wa-sessions
     WA_AUTH_CLEAR_SESSION_ON_REINIT=false
     WA_WEB_VERSION_CACHE_URL=https://raw.githubusercontent.com/wppconnect-team/wa-version/main/versions.json
