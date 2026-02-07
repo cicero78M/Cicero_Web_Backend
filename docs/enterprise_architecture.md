@@ -1,5 +1,5 @@
 # Cicero Enterprise Architecture
-*Last updated: 2025-11-06*
+*Last updated: 2026-02-07*
 
 This document provides a high level overview of the architecture behind Cicero Web, consisting of a **backend** service (`Cicero_V2`) and a **Next.js** based dashboard (`cicero-dashboard`).
 
@@ -10,7 +10,7 @@ This document provides a high level overview of the architecture behind Cicero W
 - **Database**: PostgreSQL (with optional support for MySQL or SQLite via the database adapter).
 - **Queue**: RabbitMQ for high‑volume asynchronous jobs.
 - **Cache/Session**: Redis for caching and session storage.
-- **Messaging**: Dual WhatsApp sessions powered by `whatsapp-web.js` (operator-facing `waClient` and broadcast-oriented `waGatewayClient`).
+- **Messaging**: Single unified WhatsApp session powered by `@whiskeysockets/baileys` (direct protocol, handling all operator interactions, user requests, and broadcasts).
 - **External APIs**: Instagram and TikTok data fetched through RapidAPI.
 
 ## Components
@@ -83,7 +83,7 @@ Below is a conceptual diagram of the main components and their interactions:
      |  ^            Redis & RabbitMQ            ^
      |  |--------------------------------------- |
      |        External Services (Instagram, TikTok, WhatsApp, SMTP, Google People API)
-     |             via RapidAPI, whatsapp-web.js, Nodemailer, Google SDK
+     |             via RapidAPI, @whiskeysockets/baileys, Nodemailer, Google SDK
 ```
 
 The frontend communicates only with the backend. The backend orchestrates data retrieval, persistence, caching, and messaging integrations.
