@@ -5,12 +5,10 @@
 
 export function logWaServiceDiagnostics(
   waClient,
-  waUserClient,
   readinessSummary = null
 ) {
   const clients = [
     { name: 'waClient', label: 'WA', client: waClient },
-    { name: 'waUserClient', label: 'WA-USER', client: waUserClient },
   ];
   const readinessByLabel = new Map(
     readinessSummary?.clients?.map((entry) => [entry.label, entry]) || []
@@ -59,10 +57,9 @@ export function logWaServiceDiagnostics(
   console.log('\n===========================================\n');
 }
 
-export function checkMessageListenersAttached(waClient, waUserClient) {
+export function checkMessageListenersAttached(waClient) {
   const clients = [
     { name: 'waClient', client: waClient },
-    { name: 'waUserClient', client: waUserClient },
   ];
 
   let allGood = true;

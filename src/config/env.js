@@ -24,7 +24,6 @@ export const env = cleanEnv(process.env, {
   TELEGRAM_BOT_TOKEN: str({ default: '' }),
   TELEGRAM_ADMIN_CHAT_ID: str({ default: '' }),
   APP_SESSION_NAME: str({ default: '' }),
-  USER_WA_CLIENT_ID: str({ default: 'wa-userrequest' }),
   WA_WEB_VERSION: str({ default: '' }),
   WA_WEB_VERSION_CACHE_URL: str({
     default:
