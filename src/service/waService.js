@@ -11,8 +11,8 @@ import { query } from "../db/index.js";
 import { env } from "../config/env.js";
 const pool = { query };
 
-// WhatsApp client using whatsapp-web.js
-import { createWwebjsClient } from "./wwebjsAdapter.js";
+// WhatsApp client using baileys
+import { createBaileysClient } from "./baileysAdapter.js";
 import { handleIncoming } from "./waEventAggregator.js";
 import {
   logWaServiceDiagnostics,
@@ -530,120 +530,8 @@ function formatVerificationSummary(
 // INISIALISASI CLIENT WA
 // =======================
 
-const DEFAULT_AUTH_DATA_PARENT_DIR = ".cicero";
-const DEFAULT_AUTH_DATA_DIR = "wwebjs_auth";
-const defaultUserClientId = "wa-userrequest";
-const rawUserClientId = String(env.USER_WA_CLIENT_ID || "");
-const normalizedUserClientId = rawUserClientId.trim();
-const normalizedUserClientIdLower = normalizedUserClientId.toLowerCase();
-const resolveAuthDataPath = () => {
-  const configuredPath = String(process.env.WA_AUTH_DATA_PATH || "").trim();
-  if (configuredPath) {
-    return path.resolve(configuredPath);
-  }
-  const homeDir = os.homedir?.();
-  const baseDir = homeDir || process.cwd();
-  return path.resolve(
-    path.join(baseDir, DEFAULT_AUTH_DATA_PARENT_DIR, DEFAULT_AUTH_DATA_DIR)
-  );
-};
-const findSessionCaseMismatch = (authDataPath, clientId) => {
-  if (!authDataPath || !clientId) {
-    return null;
-  }
-  try {
-    const entries = fs.readdirSync(authDataPath, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory()) {
-        continue;
-      }
-      if (!entry.name.startsWith("session-")) {
-        continue;
-      }
-      const existingClientId = entry.name.slice("session-".length);
-      if (
-        existingClientId &&
-        existingClientId.toLowerCase() === clientId &&
-        existingClientId !== clientId
-      ) {
-        return path.join(authDataPath, entry.name);
-      }
-    }
-  } catch (err) {
-    console.warn(
-      `[WA] Gagal memeriksa folder session di ${authDataPath}:`,
-      err?.message || err
-    );
-  }
-  return null;
-};
-
-const throwClientIdError = (message) => {
-  throw new Error(`[WA] ${message}`);
-};
-
-const ensureUserClientIdConsistency = () => {
-  const authDataPath = resolveAuthDataPath();
-  if (!normalizedUserClientIdLower) {
-    throwClientIdError(
-      "USER_WA_CLIENT_ID kosong; set nilai unik lowercase (contoh: wa-userrequest-prod)."
-    );
-  }
-  if (
-    normalizedUserClientId &&
-    normalizedUserClientIdLower &&
-    normalizedUserClientId !== normalizedUserClientIdLower
-  ) {
-    const sessionPath = findSessionCaseMismatch(
-      authDataPath,
-      normalizedUserClientIdLower
-    );
-    const sessionHint = sessionPath
-      ? ` Ditemukan session berbeda di ${sessionPath}.`
-      : "";
-    throwClientIdError(
-      `USER_WA_CLIENT_ID harus lowercase. Nilai "${normalizedUserClientId}" tidak konsisten.${sessionHint} ` +
-        "Perbarui env/folder session agar cocok sebelum menjalankan proses."
-    );
-  }
-  if (normalizedUserClientIdLower === defaultUserClientId) {
-    throwClientIdError(
-      `USER_WA_CLIENT_ID masih default (${defaultUserClientId}); clientId harus unik dan lowercase. ` +
-        `Perbarui env dan bersihkan session lama di ${authDataPath}.`
-    );
-  }
-  const mismatchedSessionPath = findSessionCaseMismatch(
-    authDataPath,
-    normalizedUserClientIdLower
-  );
-  if (mismatchedSessionPath) {
-    throwClientIdError(
-      `Folder session "${path.basename(mismatchedSessionPath)}" tidak konsisten dengan ` +
-        `USER_WA_CLIENT_ID="${normalizedUserClientIdLower}". Rename atau hapus session lama di ` +
-        `${mismatchedSessionPath} agar konsisten.`
-    );
-  }
-};
-
-ensureUserClientIdConsistency();
-
-// Initialize WhatsApp client via whatsapp-web.js
-export let waClient = await createWwebjsClient();
-export let waUserClient = await createWwebjsClient(env.USER_WA_CLIENT_ID);
-
-const logClientIdIssue = (envVar, issueMessage) => {
-  console.error(`[WA] ${envVar} ${issueMessage}; clientId harus unik.`);
-};
-
-if (!normalizedUserClientId) {
-  logClientIdIssue("USER_WA_CLIENT_ID", "kosong");
-}
-if (normalizedUserClientId === defaultUserClientId) {
-  logClientIdIssue(
-    "USER_WA_CLIENT_ID",
-    `masih default (${defaultUserClientId})`
-  );
-}
+// Initialize single WhatsApp client using baileys
+export let waClient = await createBaileysClient('wa-admin');
 
 const clientReadiness = new Map();
 const adminNotificationQueue = [];
@@ -1006,7 +894,6 @@ function getListenerCount(client, eventName) {
 export function getWaReadinessSummary() {
   const clients = [
     { label: "WA", client: waClient },
-    { label: "WA-USER", client: waUserClient },
   ];
   const formatTimestamp = (value) =>
     value ? new Date(value).toISOString() : null;
@@ -1212,7 +1099,6 @@ function markClientReady(client, src = "unknown") {
 }
 
 registerClientReadiness(waClient, "WA");
-registerClientReadiness(waUserClient, "WA-USER");
 
 function handleClientDisconnect(client, label, reason) {
   setClientNotReady(client);
@@ -1254,10 +1140,6 @@ function handleClientDisconnect(client, label, reason) {
 
 waClient.on("disconnected", (reason) => {
   handleClientDisconnect(waClient, "WA", reason);
-});
-
-waUserClient.on("disconnected", (reason) => {
-  handleClientDisconnect(waUserClient, "WA-USER", reason);
 });
 
 export function queueAdminNotification(message) {
@@ -1383,7 +1265,6 @@ export function waitForWaReady(timeoutMs) {
 
 // Expose readiness helper for consumers like safeSendMessage
 waClient.waitForWaReady = () => waitForClientReady(waClient);
-waUserClient.waitForWaReady = () => waitForClientReady(waUserClient);
 
 // Pastikan semua pengiriman pesan menunggu hingga client siap
 function wrapSendMessage(client) {
@@ -1424,14 +1305,13 @@ function wrapSendMessage(client) {
   };
 }
 wrapSendMessage(waClient);
-wrapSendMessage(waUserClient);
 
 /**
  * Wait for all WhatsApp client message queues to be idle (empty and no pending tasks)
  * This ensures all messages have been sent before the caller continues
  */
 export async function waitForAllMessageQueues() {
-  const clients = [waClient, waUserClient];
+  const clients = [waClient];
   const idlePromises = [];
   
   for (const client of clients) {
@@ -1449,7 +1329,6 @@ export async function waitForAllMessageQueues() {
 export function sendGatewayMessage(jid, text) {
   const waFallbackClients = [
     { client: waClient, label: "WA" },
-    { client: waUserClient, label: "WA-USER" },
   ];
   return sendWithClientFallback({
     chatId: jid,
@@ -1504,50 +1383,6 @@ waClient.on("change_state", (state) => {
     markClientReady(waClient, "state");
   } else if (isDisconnectChangeState(state)) {
     setClientNotReady(waClient);
-  }
-});
-
-waUserClient.on("qr", (qr) => {
-  resetFallbackReadyState(waUserClient);
-  const state = getClientReadinessState(waUserClient, "WA-USER");
-  state.lastQrAt = Date.now();
-  state.lastQrPayloadSeen = qr;
-  state.awaitingQrScan = true;
-  qrcode.generate(qr, { small: true });
-  console.log("[WA-USER] Scan QR dengan WhatsApp Anda!");
-});
-
-waUserClient.on("authenticated", (session) => {
-  const sessionInfo = session ? "session received" : "no session payload";
-  console.log(`[WA-USER] Authenticated (${sessionInfo}); menunggu ready.`);
-  resetFallbackReadyState(waUserClient);
-  clearLogoutAwaitingQr(waUserClient);
-  scheduleAuthenticatedReadyFallback(waUserClient, "WA-USER");
-});
-
-waUserClient.on("auth_failure", (message) => {
-  clearAuthenticatedFallbackTimer(waUserClient);
-  setClientNotReady(waUserClient);
-  const state = getClientReadinessState(waUserClient, "WA-USER");
-  state.lastAuthFailureAt = Date.now();
-  state.lastAuthFailureMessage = message || null;
-  console.error(`[WA-USER] Auth failure: ${message}`);
-});
-
-waUserClient.on("ready", () => {
-  clearAuthenticatedFallbackTimer(waUserClient);
-  clearLogoutAwaitingQr(waUserClient);
-  markClientReady(waUserClient, "ready");
-});
-
-waUserClient.on("change_state", (state) => {
-  console.log(`[WA-USER] Client state changed: ${state}`);
-  if (state === "CONNECTED" || state === "open") {
-    clearAuthenticatedFallbackTimer(waUserClient);
-    clearLogoutAwaitingQr(waUserClient);
-    markClientReady(waUserClient, "state");
-  } else if (isDisconnectChangeState(state)) {
-    setClientNotReady(waUserClient);
   }
 });
 
@@ -4370,12 +4205,8 @@ Ketik *angka menu* di atas, atau *batal* untuk keluar.
 }
 
 const handleMessage = createHandleMessage(waClient, {
-  allowUserMenu: false,
-  clientLabel: "[WA]",
-});
-const handleUserMessage = createHandleMessage(waUserClient, {
   allowUserMenu: true,
-  clientLabel: "[WA-USER]",
+  clientLabel: "[WA]",
 });
 
 async function processGatewayBulkDeletion(chatId, text) {
@@ -4812,7 +4643,6 @@ const compositeWaClientHandler = async (msg) => {
 };
 
 registerClientMessageHandler(waClient, "wwebjs", compositeWaClientHandler);
-registerClientMessageHandler(waUserClient, "wwebjs-user", handleUserMessage);
 
 if (shouldInitWhatsAppClients) {
   console.log('[WA] Attaching message event listeners to WhatsApp clients...');
@@ -4826,31 +4656,14 @@ if (shouldInitWhatsAppClients) {
     handleIncoming('wwebjs', msg, compositeWaClientHandler);
   });
 
-  waUserClient.on('message', (msg) => {
-    const from = msg.from || '';
-    if (from.endsWith('@g.us') || from === 'status@broadcast') {
-      if (process.env.WA_DEBUG_LOGGING === 'true') {
-        console.log(`[WA-SERVICE] waUserClient ignoring group/status message from=${from}`);
-      }
-      return;
-    }
-    // ALWAYS log message reception at waService level (critical for diagnosing reception issues)
-    console.log(`[WA-SERVICE] waUserClient 'message' event received - from=${msg.from}`);
-    if (process.env.WA_DEBUG_LOGGING === 'true') {
-      console.log(`[WA-SERVICE] waUserClient message details - body=${msg.body?.substring(0, 50) || '(empty)'}`);
-    }
-    handleIncoming('wwebjs-user', msg, handleUserMessage);
-  });
-
   console.log('[WA] Message event listeners attached successfully.');
   // Verify listeners are actually attached
-  console.log(`[WA] Listener counts - waClient: ${waClient.listenerCount('message')}, waUserClient: ${waUserClient.listenerCount('message')}`);
+  console.log(`[WA] Listener counts - waClient: ${waClient.listenerCount('message')}`);
   console.log('[WA] ** IMPORTANT: If you send a message to the bot and see NO logs, the client may not be connected or authenticated. Check for "Client ready event received" logs above. **');
 
 
   const clientsToInit = [
     { label: "WA", client: waClient },
-    { label: "WA-USER", client: waUserClient },
   ];
 
   const initPromises = clientsToInit.map(({ label, client }) => {
@@ -5257,7 +5070,6 @@ if (shouldInitWhatsAppClients) {
   };
 
   scheduleFallbackReadyCheck(waClient);
-  scheduleFallbackReadyCheck(waUserClient);
 
   await Promise.allSettled(initPromises);
 
@@ -5288,10 +5100,9 @@ if (shouldInitWhatsAppClients) {
   // Diagnostic checks to ensure message listeners are attached
   logWaServiceDiagnostics(
     waClient,
-    waUserClient,
     getWaReadinessSummary()
   );
-  checkMessageListenersAttached(waClient, waUserClient);
+  checkMessageListenersAttached(waClient);
 }
 
 export default waClient;

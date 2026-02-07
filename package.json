@@ -11,6 +11,7 @@
     "format": "prettier --write \"**/*.js\""
   },
   "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "amqplib": "^0.10.8",
     "axios": "^1.6.0",
     "bcrypt": "^5.1.0",
