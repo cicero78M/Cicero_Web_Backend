@@ -6,7 +6,6 @@ import { EventEmitter } from 'events';
 import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
-  makeInMemoryStore,
   fetchLatestBaileysVersion,
 } from '@whiskeysockets/baileys';
 import qrcode from 'qrcode-terminal';
