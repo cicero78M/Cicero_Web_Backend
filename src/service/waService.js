@@ -131,7 +131,8 @@ const messageQueues = new WeakMap();
 
 // Note: WhatsApp bot is configured for SEND-ONLY mode. Message reception has been disabled.
 // Client initialization is still required for sending messages.
-const shouldInitWhatsAppClients = true;
+// Can be skipped in test environments using WA_SERVICE_SKIP_INIT=true
+const shouldInitWhatsAppClients = process.env.WA_SERVICE_SKIP_INIT !== "true";
 
 const sleep = (ms) =>
   new Promise((resolve) => {
