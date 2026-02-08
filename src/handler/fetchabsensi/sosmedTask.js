@@ -106,6 +106,25 @@ function formatSnapshotWindowLabel(snapshotWindow) {
   return `Data rentang ${startLabel}–${endLabel} WIB`;
 }
 
+function formatMessageDeliveryTime() {
+  const now = new Date();
+  const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  const monthNames = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+  
+  const jakartaDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
+  const dayName = dayNames[jakartaDate.getDay()];
+  const day = jakartaDate.getDate();
+  const monthName = monthNames[jakartaDate.getMonth()];
+  const year = jakartaDate.getFullYear();
+  const hours = String(jakartaDate.getHours()).padStart(2, '0');
+  const minutes = String(jakartaDate.getMinutes()).padStart(2, '0');
+  
+  return `${dayName}, ${day} ${monthName} ${year}, ${hours}:${minutes} WIB`;
+}
+
 async function fetchLikesWithAudit(shortcodes, snapshotWindow) {
   if (!Array.isArray(shortcodes) || shortcodes.length === 0) {
     return { likesList: [], auditUsed: false };
@@ -291,9 +310,12 @@ export async function generateSosmedTaskMessage(
     return `${idx + 1}. ${newLabel}${link} ${uploadLabel} : ${count} komentar`;
   });
 
+  const deliveryTime = formatMessageDeliveryTime();
+  
   let msg =
     "Mohon Ijin Komandan, Senior, Rekan Operator dan Personil pelaksana Tugas Likes dan komentar Sosial Media " +
     `${clientName}.\n\n` +
+    `Pesan dikirim: ${deliveryTime}\n\n` +
     "Tugas Likes dan Komentar Konten Instagram dan Tiktok \n" +
     `${clientName}\n` +
     `Jumlah konten Instagram hari ini: ${shortcodes.length} \n` +
