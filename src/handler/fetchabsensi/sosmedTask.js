@@ -106,6 +106,48 @@ function formatSnapshotWindowLabel(snapshotWindow) {
   return `Data rentang ${startLabel}–${endLabel} WIB`;
 }
 
+function formatMessageDeliveryTime() {
+  const now = new Date();
+  const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  const monthNames = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+  
+  // Use Intl.DateTimeFormat for reliable timezone conversion
+  // Using 'id-ID' locale for semantic correctness with Indonesian output
+  const formatter = new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    weekday: 'short',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  });
+  
+  const parts = formatter.formatToParts(now);
+  const partsMap = {};
+  parts.forEach(part => {
+    partsMap[part.type] = part.value;
+  });
+  
+  // Map weekday from Indonesian short name to full name
+  const indonesianWeekdaysShort = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+  const weekdayIndex = indonesianWeekdaysShort.indexOf(partsMap.weekday);
+  const dayName = weekdayIndex >= 0 ? dayNames[weekdayIndex] : dayNames[0];
+  
+  const day = parseInt(partsMap.day, 10);
+  const monthIndex = parseInt(partsMap.month, 10) - 1;
+  const monthName = monthNames[monthIndex] || monthNames[0];
+  const year = partsMap.year;
+  const hours = partsMap.hour.padStart(2, '0');
+  const minutes = partsMap.minute.padStart(2, '0');
+  
+  return `${dayName}, ${day} ${monthName} ${year}, ${hours}:${minutes} WIB`;
+}
+
 async function fetchLikesWithAudit(shortcodes, snapshotWindow) {
   if (!Array.isArray(shortcodes) || shortcodes.length === 0) {
     return { likesList: [], auditUsed: false };
@@ -291,9 +333,12 @@ export async function generateSosmedTaskMessage(
     return `${idx + 1}. ${newLabel}${link} ${uploadLabel} : ${count} komentar`;
   });
 
+  const deliveryTime = formatMessageDeliveryTime();
+  
   let msg =
     "Mohon Ijin Komandan, Senior, Rekan Operator dan Personil pelaksana Tugas Likes dan komentar Sosial Media " +
     `${clientName}.\n\n` +
+    `Pesan dikirim: ${deliveryTime}\n\n` +
     "Tugas Likes dan Komentar Konten Instagram dan Tiktok \n" +
     `${clientName}\n` +
     `Jumlah konten Instagram hari ini: ${shortcodes.length} \n` +
