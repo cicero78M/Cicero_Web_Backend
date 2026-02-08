@@ -7,7 +7,7 @@
 
 The web dashboard lives in a separate Next.js repository, [Cicero_Web](https://github.com/cicero78M/Cicero_Web), which communicates with this API. Refer to [docs/combined_overview.md](docs/combined_overview.md) for how the repositories interact.
 
-The full architecture is described in [docs/enterprise_architecture.md](docs/enterprise_architecture.md). See [docs/metadata_flow.md](docs/metadata_flow.md) for the data movement from collection to reporting. Additional guides are available for [server migration](docs/server_migration.md), [RabbitMQ](docs/rabbitmq.md), [Redis](docs/redis.md), [database structure](docs/database_structure.md), [premium subscriptions](docs/premium_subscription.md), [Nginx configuration](docs/reverse_proxy_config.md), [PostgreSQL backups](docs/pg_backup_gdrive.md), [naming conventions](docs/naming_conventions.md), [Login API guide](docs/login_api.md), [Instagram Rapid API](docs/instaRapidApi.md), [WhatsApp user registration guide](docs/wa_user_registration.md), [WhatsApp client lifecycle & troubleshooting](docs/whatsapp_client_lifecycle.md), [workflow & usage guide](docs/workflow_usage_guide.md), [editorial workflow](docs/wa_operator_request.md), [WhatsApp baileys migration](docs/wa_baileys_migration.md), and [analytics & feedback page design](docs/analyticsFeedbackPage.md).
+The full architecture is described in [docs/enterprise_architecture.md](docs/enterprise_architecture.md). See [docs/metadata_flow.md](docs/metadata_flow.md) for the data movement from collection to reporting. Additional guides are available for [server migration](docs/server_migration.md), [RabbitMQ](docs/rabbitmq.md), [Redis](docs/redis.md), [database structure](docs/database_structure.md), [premium subscriptions](docs/premium_subscription.md), [Nginx configuration](docs/reverse_proxy_config.md), [PostgreSQL backups](docs/pg_backup_gdrive.md), [naming conventions](docs/naming_conventions.md), [Login API guide](docs/login_api.md), [Instagram Rapid API](docs/instaRapidApi.md), [WhatsApp user registration guide](docs/wa_user_registration.md), [WhatsApp client lifecycle & troubleshooting](docs/whatsapp_client_lifecycle.md), [workflow & usage guide](docs/workflow_usage_guide.md), [editorial workflow](docs/wa_operator_request.md), [WhatsApp baileys migration](docs/wa_baileys_migration.md), [Telegram bot setup guide](docs/TELEGRAM_SETUP.md), and [analytics & feedback page design](docs/analyticsFeedbackPage.md).
 Accepted complaint layouts, including `Kendala` and `Rincian Kendala` headers, are documented in [docs/complaint_formats.md](docs/complaint_formats.md).
 Role-aware deactivation flows (per-role removal across WhatsApp menus and REST) are covered in [docs/user_role_deactivation.md](docs/user_role_deactivation.md).
 
@@ -344,6 +344,24 @@ psql -U <dbuser> -h <host> -d <dbname> < cicero_backup.sql
 - Legacy wwebjs adapter code (`src/service/wwebjsAdapter.js`) is retained for reference only and is not used in production.
 
 The OTP worker (`src/service/otpQueue.js`) now resolves immediately because OTP emails are sent synchronously via SMTP to minimise delays.
+
+---
+
+## Telegram Integration
+
+**Cicero V2** now includes Telegram bot integration for admin notifications and login logging:
+
+- **Purpose**: Admin notifications for dashboard login events and user approval requests
+- **Scope**: Send-only mode (bot does not process incoming messages)
+- **Setup**: See [docs/TELEGRAM_SETUP.md](docs/TELEGRAM_SETUP.md) for complete setup instructions
+- **Configuration**: Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_CHAT_ID` to your `.env` file
+- **Notifications**:
+  - Dashboard login events with user details, role, and timestamp
+  - User registration requests awaiting admin approval
+  - User approval/rejection confirmations
+- **Testing**: Set `TELEGRAM_SERVICE_SKIP_INIT=true` to disable Telegram during testing
+
+All notifications are also sent via WhatsApp to maintain backward compatibility. The Telegram integration runs independently and will not affect existing functionality if not configured.
 
 ---
 
