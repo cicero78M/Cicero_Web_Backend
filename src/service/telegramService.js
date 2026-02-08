@@ -5,6 +5,9 @@ import TelegramBot from 'node-telegram-bot-api';
 let bot = null;
 let botReady = false;
 
+// Configuration constants
+const DEFAULT_TIMEZONE = process.env.TIMEZONE || 'Asia/Jakarta';
+
 /**
  * Initialize Telegram bot
  */
@@ -96,7 +99,7 @@ export async function sendLoginLogNotification(logData) {
   const { username, role, loginType, loginSource, timestamp, clientInfo } = logData;
   
   const time = new Date(timestamp || Date.now()).toLocaleString('id-ID', { 
-    timeZone: 'Asia/Jakarta' 
+    timeZone: DEFAULT_TIMEZONE
   });
   
   let message = `🔑 *Login Dashboard*\n\n`;

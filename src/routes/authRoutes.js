@@ -313,7 +313,7 @@ router.post('/penmas-login', async (req, res) => {
 });
 
 router.post('/dashboard-register', async (req, res) => {
-  let { username, password, role_id, role, client_ids, client_id, whatsapp } = req.body;
+  let { username, password, role_id, role, client_ids, client_id, whatsapp, email } = req.body;
   const status = false;
   const clientIds = client_ids || (client_id ? [client_id] : []);
   if (!username || !password || !whatsapp) {
@@ -400,6 +400,7 @@ router.post('/dashboard-register', async (req, res) => {
     dashboard_user_id,
     username,
     whatsapp,
+    email,
     role: roleRow?.role_name,
     clientIds: clientIds.length ? clientIds.join(', ') : '-'
   }).catch((err) => {
@@ -513,7 +514,7 @@ router.post('/dashboard-login', async (req, res) => {
     role: user.role,
     loginType: 'operator',
     loginSource: 'web',
-    timestamp: time,
+    timestamp: new Date(),
     clientInfo: {
       label: clientInfoLabel,
       value: clientInfo
@@ -634,7 +635,7 @@ router.post("/login", async (req, res) => {
     role: role,
     loginType: 'operator',
     loginSource: 'mobile',
-    timestamp: time,
+    timestamp: new Date(),
     clientInfo: {
       label: 'Client ID',
       value: client.client_id
