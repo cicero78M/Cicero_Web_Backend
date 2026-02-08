@@ -21,9 +21,6 @@ import waClient, {
   waitForWaReady,
   queueAdminNotification,
 } from "../service/waService.js";
-import { 
-  sendTelegramApprovalRequest
-} from "../service/telegramService.js";
 import { insertVisitorLog } from "../model/visitorLogModel.js";
 import { insertLoginLog } from "../model/loginLogModel.js";
 
@@ -390,24 +387,12 @@ router.post('/dashboard-register', async (req, res) => {
     await dashboardUserModel.addClients(dashboard_user_id, clientIds);
   }
 
-  // Send approval request to Telegram (new primary method)
-  const telegramSent = await sendTelegramApprovalRequest({
-    username,
-    dashboard_user_id,
-    role: roleRow?.role_name || '-',
-    whatsapp,
-    clientIds
-  });
-
-  // Send to WhatsApp (deprecated fallback)
-  if (!telegramSent) {
-    console.warn('[DEPRECATED] Using WhatsApp approval mechanism. Please configure Telegram bot.');
-    notifyAdmin(
-      `\uD83D\uDCCB Permintaan User Approval dengan data sebagai berikut :\nUsername: ${username}\nID: ${dashboard_user_id}\nRole: ${roleRow?.role_name || '-'}\nWhatsApp: ${whatsapp}\nClient ID: ${
-        clientIds.length ? clientIds.join(', ') : '-'
-      }\n\n⚠️ [DEPRECATED] Balas approvedash#${username} untuk menyetujui atau denydash#${username} untuk menolak.\n\nCatatan: Mekanisme approval via WA akan segera dihapus. Gunakan Telegram bot.`
-    );
-  }
+  // Send approval request to admin via WhatsApp
+  notifyAdmin(
+    `\uD83D\uDCCB Permintaan User Approval dengan data sebagai berikut :\nUsername: ${username}\nID: ${dashboard_user_id}\nRole: ${roleRow?.role_name || '-'}\nWhatsApp: ${whatsapp}\nClient ID: ${
+      clientIds.length ? clientIds.join(', ') : '-'
+    }\n\nBalas approvedash#${username} untuk menyetujui atau denydash#${username} untuk menolak.`
+  );
 
   if (whatsapp) {
     try {
