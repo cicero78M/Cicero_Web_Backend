@@ -1408,42 +1408,9 @@ export async function createWwebjsClient(clientId = 'wa-admin') {
     };
     client.on('disconnected', internalDisconnectedHandler);
     
-    internalMessageHandler = async (msg) => {
-      // CRITICAL: This log proves whatsapp-web.js is emitting message events
-      console.log(`[WWEBJS-ADAPTER] *** MESSAGE EVENT TRIGGERED *** clientId=${clientId}, from=${msg.from}`);
-      if (debugLoggingEnabled) {
-        console.log(`[WWEBJS-ADAPTER] Raw message details - body=${msg.body?.substring(0, 50) || '(empty)'}`);
-      }
-      let contactMeta = {};
-      try {
-        const contact = await msg.getContact();
-        contactMeta = {
-          contactName: contact?.name || null,
-          contactPushname: contact?.pushname || null,
-          isMyContact: contact?.isMyContact ?? null,
-        };
-      } catch (err) {
-        contactMeta = { error: err?.message || 'contact_fetch_failed' };
-      }
-      // ALWAYS log before emitting to emitter (critical for diagnosing reception issues)
-      console.log(`[WWEBJS-ADAPTER] Emitting 'message' event to emitter - clientId=${clientId}, from=${msg.from}`);
-      if (debugLoggingEnabled) {
-        console.log(`[WWEBJS-ADAPTER] Message ID: ${msg.id?.id || msg.id?._serialized || 'unknown'}`);
-      }
-      emitter.emit('message', {
-        from: msg.from,
-        body: msg.body,
-        id: msg.id,
-        author: msg.author,
-        timestamp: msg.timestamp,
-        ...contactMeta,
-      });
-    };
-    client.on('message', internalMessageHandler);
-    console.log(`[WWEBJS] Internal message handler registered for clientId=${clientId}`);
-    console.log(`[WWEBJS] Message handler function signature: ${typeof internalMessageHandler === 'function' ? 'valid' : 'INVALID'}`);
-    console.log(`[WWEBJS] When messages arrive, watch for "[WWEBJS-ADAPTER] *** MESSAGE EVENT TRIGGERED ***" ` +
-      `to confirm whatsapp-web.js is working. If missing, check client connection/authentication.`);
+    // Message reception disabled - WhatsApp client configured for SEND-ONLY mode
+    // internalMessageHandler not registered
+    console.log(`[WWEBJS] Message reception disabled - client configured for send-only mode (clientId=${clientId})`);
   };
 
   const reinitializeClient = async (trigger, reason, options = {}) => {
