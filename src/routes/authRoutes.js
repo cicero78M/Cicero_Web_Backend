@@ -9,35 +9,23 @@ import * as dashboardPasswordResetModel from "../model/dashboardPasswordResetMod
 import * as userModel from "../model/userModel.js";
 import * as dashboardSubscriptionService from "../service/dashboardSubscriptionService.js";
 import {
-  isAdminWhatsApp,
-  formatToWhatsAppId,
-  getAdminWAIds,
   minPhoneDigitLength,
   normalizeWhatsappNumber,
-  safeSendMessage,
 } from "../utils/waHelper.js";
 import redis from "../config/redis.js";
-import waClient, {
-  waitForWaReady,
+import {
+  notifyAdmin,
   queueAdminNotification,
-} from "../service/waService.js";
+  sendTelegramMessage,
+} from "../service/telegramService.js";
+import {
+  formatDashboardApprovalRequest,
+  formatLoginNotification,
+  formatPasswordResetNotification,
+  formatSimpleNotification,
+} from "../utils/telegramHelper.js";
 import { insertVisitorLog } from "../model/visitorLogModel.js";
 import { insertLoginLog } from "../model/loginLogModel.js";
-
-async function notifyAdmin(message) {
-  try {
-    await waitForWaReady();
-  } catch (err) {
-    console.warn(
-      `[WA] Queueing admin notification: ${err.message}`
-    );
-    queueAdminNotification(message);
-    return;
-  }
-  for (const wa of getAdminWAIds()) {
-    safeSendMessage(waClient, wa, message);
-  }
-}
 
 const RESET_TOKEN_EXPIRY_MINUTES = Number(
   process.env.DASHBOARD_RESET_TOKEN_EXPIRY_MINUTES || 15,
@@ -306,7 +294,12 @@ router.post('/penmas-login', async (req, res) => {
   });
   const time = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
   notifyAdmin(
-    `\uD83D\uDD11 Login Penmas: ${user.username} (${user.role})\nWaktu: ${time}`
+    formatLoginNotification({
+      type: 'penmas',
+      username: user.username,
+      role: user.role,
+      time
+    })
   );
   return res.json({ success: true, token, user: payload });
 });
@@ -387,28 +380,15 @@ router.post('/dashboard-register', async (req, res) => {
     await dashboardUserModel.addClients(dashboard_user_id, clientIds);
   }
 
-  // Send approval request to admin via WhatsApp
+  // Send approval request to admin via Telegram
   notifyAdmin(
-    `\uD83D\uDCCB Permintaan User Approval dengan data sebagai berikut :\nUsername: ${username}\nID: ${dashboard_user_id}\nRole: ${roleRow?.role_name || '-'}\nWhatsApp: ${whatsapp}\nClient ID: ${
-      clientIds.length ? clientIds.join(', ') : '-'
-    }\n\nBalas approvedash#${username} untuk menyetujui atau denydash#${username} untuk menolak.`
+    formatDashboardApprovalRequest({
+      username,
+      dashboard_user_id,
+      role: roleRow?.role_name || '-',
+      whatsapp
+    })
   );
-
-  if (whatsapp) {
-    try {
-      await waitForWaReady();
-      const wid = formatToWhatsAppId(whatsapp);
-      safeSendMessage(
-        waClient,
-        wid,
-        "\uD83D\uDCCB Permintaan registrasi dashboard Anda telah diterima dan menunggu persetujuan admin."
-      );
-    } catch (err) {
-      console.warn(
-        `[WA] Skipping user notification for ${whatsapp}: ${err.message}`
-      );
-    }
-  }
   return res
     .status(201)
     .json({ success: true, dashboard_user_id: user.dashboard_user_id, status: user.status });
@@ -487,10 +467,14 @@ router.post('/dashboard-login', async (req, res) => {
     loginSource: 'web'
   });
   const time = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
-  const clientInfoLabel = user.client_ids.length === 1 ? 'Client ID' : 'Client IDs';
-  const clientInfo = user.client_ids.length === 1 ? user.client_ids[0] : user.client_ids.join(', ');
   notifyAdmin(
-    `\uD83D\uDD11 Login dashboard: ${user.username} (${user.role})\n${clientInfoLabel}: ${clientInfo}\nWaktu: ${time}`
+    formatLoginNotification({
+      type: 'dashboard',
+      username: user.username,
+      role: user.role,
+      clientIds: user.client_ids,
+      time
+    })
   );
   return res.json({ success: true, token, user: payload });
 });
@@ -510,8 +494,12 @@ router.post("/login", async (req, res) => {
       timeZone: "Asia/Jakarta",
     });
     notifyAdmin(
-      `❌ Login gagal\nAlasan: ${reason}\nID: ${client_id || "-"}\nOperator: ${
-        client_operator || "-"}\nWaktu: ${time}`
+      formatSimpleNotification('❌', 'Login gagal', {
+        'Alasan': reason,
+        'ID': client_id || '-',
+        'Operator': client_operator || '-',
+        'Waktu': time
+      })
     );
     return res
       .status(400)
@@ -593,7 +581,13 @@ router.post("/login", async (req, res) => {
   });
   const time = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
   notifyAdmin(
-    `\uD83D\uDD11 Login: ${client.nama} (${client.client_id})\nOperator: ${client_operator}\nWaktu: ${time}`
+    formatLoginNotification({
+      type: 'client',
+      username: client.nama,
+      userId: client.client_id,
+      role: client_operator,
+      time
+    })
   );
   // Kembalikan token dan data client
   return res.json({ success: true, token, client: payload });
@@ -678,7 +672,12 @@ router.post('/user-login', async (req, res) => {
       timeZone: 'Asia/Jakarta'
     });
     queueAdminNotification(
-      `\uD83D\uDD11 Login user: ${user.user_id} - ${user.nama}\nWaktu: ${time}`
+      formatLoginNotification({
+        type: 'user',
+        userId: user.user_id,
+        username: user.nama,
+        time
+      })
     );
   }
   return res.json({ success: true, token, user: payload });
@@ -690,7 +689,11 @@ router.get('/open', async (req, res) => {
   const ua = req.headers['user-agent'] || '';
   await insertVisitorLog({ ip, userAgent: ua });
   notifyAdmin(
-    `\uD83D\uDD0D Web dibuka\nIP: ${ip}\nUA: ${ua}\nWaktu: ${time}`
+    formatSimpleNotification('🔍', 'Web dibuka', {
+      'IP': ip,
+      'UA': ua,
+      'Waktu': time
+    })
   );
   return res.json({ success: true });
 });
