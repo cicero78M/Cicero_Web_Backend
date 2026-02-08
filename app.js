@@ -13,7 +13,10 @@ import { notFound, errorHandler } from './src/middleware/errorHandler.js';
 import { authRequired } from './src/middleware/authMiddleware.js';
 import { dedupRequest } from './src/middleware/dedupRequestMiddleware.js';
 import { sensitivePathGuard } from './src/middleware/sensitivePathGuard.js';
-// Import waService to initialize WhatsApp clients at startup
+// Import Telegram service to initialize bot at startup
+// eslint-disable-next-line no-unused-vars
+import { telegramClient } from './src/service/telegramService.js';
+// Import waService to initialize WhatsApp clients at startup (deprecated, kept for compatibility)
 // eslint-disable-next-line no-unused-vars
 import { waClient } from './src/service/waService.js';
 import { startOtpWorker } from './src/service/otpQueue.js';

@@ -3,7 +3,7 @@
 
 ## Description
 
-**Cicero_V2** is an automation backend for monitoring social media, managing editorial workflows, and orchestrating WhatsApp messaging. The service ingests Instagram and TikTok metrics for multiple clients, tracks attendance, powers daily/weekly reporting, manages premium subscriptions, and now drives the Penmas editorial approval process. A single unified WhatsApp client (using baileys) handles all messaging including operator interactions, user requests, and directorate broadcasts. OTP distribution has moved to instant email delivery.
+**Cicero_V2** is an automation backend for monitoring social media, managing editorial workflows, and providing admin notifications via Telegram. The service ingests Instagram and TikTok metrics for multiple clients, tracks attendance, powers daily/weekly reporting, manages premium subscriptions, and drives the Penmas editorial approval process. Admin notifications for approvals and login events are delivered through Telegram bot. OTP distribution has moved to instant email delivery.
 
 The web dashboard lives in a separate Next.js repository, [Cicero_Web](https://github.com/cicero78M/Cicero_Web), which communicates with this API. Refer to [docs/combined_overview.md](docs/combined_overview.md) for how the repositories interact.
 
@@ -342,6 +342,59 @@ psql -U <dbuser> -h <host> -d <dbname> < cicero_backup.sql
 - For migration details from the previous wwebjs dual-client setup, see [docs/wa_baileys_migration.md](docs/wa_baileys_migration.md).
 - WhatsApp readiness is tracked and logged with `[BAILEYS]` prefix in the console.
 - Legacy wwebjs adapter code (`src/service/wwebjsAdapter.js`) is retained for reference only and is not used in production.
+
+The OTP worker (`src/service/otpQueue.js`) now resolves immediately because OTP emails are sent synchronously via SMTP to minimise delays.
+
+---
+
+## Telegram Bot Configuration
+
+**Cicero V2** uses Telegram for admin notifications, approval mechanisms, and login logs.
+
+### Setup
+
+1. **Create a Telegram Bot**:
+   - Open Telegram and search for `@BotFather`
+   - Send `/newbot` and follow the instructions
+   - Save the bot token provided
+
+2. **Get Your Chat ID**:
+   - Start a conversation with your new bot
+   - Send any message to the bot
+   - Visit `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
+   - Find your `chat.id` in the response
+
+3. **Configure Environment Variables**:
+   ```ini
+   TELEGRAM_BOT_TOKEN=your-telegram-bot-token-here
+   TELEGRAM_ADMIN_CHAT_IDS=123456789,987654321
+   ```
+
+### Features
+
+- **Dashboard User Approval**: Admins receive approval requests via Telegram
+- **Login Notifications**: All login events are logged to admin Telegram chats
+- **Command Processing**: Approve/reject users directly from Telegram:
+  - `approvedash#username` - Approve dashboard registration
+  - `denydash#username` - Deny dashboard registration
+  - `grantdashsub#username` - Grant premium subscription
+  - `denydashsub#username` - Deny premium subscription
+  - `/help` - Show available commands
+
+- Telegram bot logs are prefixed with `[TELEGRAM]` in the console
+
+---
+
+## WhatsApp Sessions (Legacy)
+
+**Note**: WhatsApp integration using **@whiskeysockets/baileys** is being phased out in favor of Telegram for approval and notification workflows. WhatsApp functionality is retained for backward compatibility with existing features.
+
+- The single `waClient` handles remaining messaging needs
+- Authentication uses multi-file auth state stored in `~/.cicero/baileys_auth/session-wa-admin/`
+- On first startup, scan the QR code displayed in the console with your WhatsApp mobile app
+- For migration details from the previous wwebjs dual-client setup, see [docs/wa_baileys_migration.md](docs/wa_baileys_migration.md)
+- WhatsApp readiness is tracked and logged with `[BAILEYS]` prefix in the console
+- Legacy wwebjs adapter code (`src/service/wwebjsAdapter.js`) is retained for reference only and is not used in production
 
 The OTP worker (`src/service/otpQueue.js`) now resolves immediately because OTP emails are sent synchronously via SMTP to minimise delays.
 
