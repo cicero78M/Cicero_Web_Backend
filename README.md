@@ -216,8 +216,6 @@ Application logs are timestamped using the Asia/Jakarta timezone by the console 
     REDIS_URL=redis://localhost:6379
     ADMIN_WHATSAPP=628xxxxxx,628yyyyyy
     GATEWAY_WHATSAPP_ADMIN=628zzzzzz
-    TELEGRAM_BOT_TOKEN=your-telegram-bot-token
-    TELEGRAM_ADMIN_CHAT_ID=your-telegram-admin-chat-id
     APP_SESSION_NAME=wa-admin
     WA_AUTH_DATA_PATH=/var/lib/cicero/wa-sessions
     WA_AUTH_CLEAR_SESSION_ON_REINIT=false
@@ -260,7 +258,6 @@ Application logs are timestamped using the Asia/Jakarta timezone by the console 
     ```
    Use `DB_DRIVER=postgres`, `postgresql`, or `pg` when connecting to Postgres so the backend applies the session settings (`app.current_*`) required by database row-level security. Switching `DB_DRIVER` to another value disables these Postgres-only settings.
    `ADMIN_WHATSAPP` accepts numbers with or without the `@c.us` suffix. When the suffix is omitted, the application automatically appends it.
-   `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_CHAT_ID` configure the Telegram bot for dashboard user approval (see [docs/telegram_bot_setup.md](docs/telegram_bot_setup.md)). When configured, approval notifications are sent via Telegram instead of WhatsApp. The WhatsApp approval mechanism (`approvedash#`, `denydash#`) is now deprecated.
    `GATEWAY_WHATSAPP_ADMIN` identifies the WhatsApp account that receives gateway connection updates.
    `WA_AUTH_DATA_PATH` overrides the baileys auth directory (default: `~/.cicero/baileys_auth`). Ensure the directory is owned by or writable to the runtime user.
    `WA_AUTH_CLEAR_SESSION_ON_REINIT=true` forces the adapter to remove the `session-<clientId>` folder before reinitializing after `auth_failure` or `LOGGED_OUT`. Back up the session folder before manual cleanup.
