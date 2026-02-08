@@ -134,6 +134,10 @@ const messageQueues = new WeakMap();
 // Can be skipped in test environments using WA_SERVICE_SKIP_INIT=true
 const shouldInitWhatsAppClients = process.env.WA_SERVICE_SKIP_INIT !== "true";
 
+// Response delay for message queue (in milliseconds)
+// Default is 0 (no delay) since the queue already handles concurrency
+const responseDelayMs = Number(process.env.WA_RESPONSE_DELAY_MS || 0);
+
 const sleep = (ms) =>
   new Promise((resolve) => {
     setTimeout(resolve, ms);
