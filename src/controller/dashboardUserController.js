@@ -2,6 +2,7 @@ import * as dashboardUserModel from '../model/dashboardUserModel.js';
 import { formatToWhatsAppId, safeSendMessage } from '../utils/waHelper.js';
 import waClient, { waitForWaReady } from '../service/waService.js';
 import { sendSuccess } from '../utils/response.js';
+import { sendUserApprovalConfirmation, sendUserRejectionConfirmation } from '../service/telegramService.js';
 
 export async function approveDashboardUser(req, res, next) {
   try {
@@ -14,6 +15,13 @@ export async function approveDashboardUser(req, res, next) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
     const updated = await dashboardUserModel.updateStatus(id, true);
+    
+    // Send Telegram notification to admin
+    sendUserApprovalConfirmation(usr).catch((err) => {
+      console.warn(`[Telegram] Failed to send approval notification: ${err.message}`);
+    });
+    
+    // Send WhatsApp notification to user
     if (usr.whatsapp) {
       try {
         await waitForWaReady();
@@ -46,6 +54,13 @@ export async function rejectDashboardUser(req, res, next) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
     const updated = await dashboardUserModel.updateStatus(id, false);
+    
+    // Send Telegram notification to admin
+    sendUserRejectionConfirmation(usr).catch((err) => {
+      console.warn(`[Telegram] Failed to send rejection notification: ${err.message}`);
+    });
+    
+    // Send WhatsApp notification to user
     if (usr.whatsapp) {
       try {
         await waitForWaReady();
