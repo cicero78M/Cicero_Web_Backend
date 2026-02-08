@@ -26,6 +26,8 @@ Role-aware deactivation flows (per-role removal across WhatsApp menus and REST) 
 - PostgreSQL and Redis (configure `.env` accordingly)
 - Run `npm install` before starting
 
+**Note**: The `whatsapp-web.js` package remains in package.json for legacy reference but is not actively used. The system now uses `@whiskeysockets/baileys` for WhatsApp integration.
+
 ---
 
 ## Folder Structure
@@ -217,8 +219,6 @@ Application logs are timestamped using the Asia/Jakarta timezone by the console 
     TELEGRAM_BOT_TOKEN=your-telegram-bot-token
     TELEGRAM_ADMIN_CHAT_ID=your-telegram-admin-chat-id
     APP_SESSION_NAME=wa-admin
-    USER_WA_CLIENT_ID=wa-userrequest-prod
-    GATEWAY_WA_CLIENT_ID=wa-gateway-prod
     WA_AUTH_DATA_PATH=/var/lib/cicero/wa-sessions
     WA_AUTH_CLEAR_SESSION_ON_REINIT=false
     WA_WEB_VERSION_CACHE_URL=https://raw.githubusercontent.com/wppconnect-team/wa-version/main/versions.json
@@ -337,13 +337,14 @@ psql -U <dbuser> -h <host> -d <dbname> < cicero_backup.sql
 
 ## WhatsApp Sessions
 
-**Cicero V2** now uses a single unified WhatsApp client powered by **@whiskeysockets/baileys** (direct protocol) instead of whatsapp-web.js. This eliminates the browser dependency and provides more stable connections.
+**Cicero V2** uses a single unified WhatsApp client powered by **@whiskeysockets/baileys** (direct protocol), which provides more stable connections without browser dependencies.
 
 - The single `waClient` handles all messaging: operator interactions, user requests, and broadcasts.
 - Authentication uses multi-file auth state stored in `~/.cicero/baileys_auth/session-wa-admin/`.
 - On first startup, scan the QR code displayed in the console with your WhatsApp mobile app.
 - For migration details from the previous wwebjs dual-client setup, see [docs/wa_baileys_migration.md](docs/wa_baileys_migration.md).
 - WhatsApp readiness is tracked and logged with `[BAILEYS]` prefix in the console.
+- Legacy wwebjs adapter code (`src/service/wwebjsAdapter.js`) is retained for reference only and is not used in production.
 
 The OTP worker (`src/service/otpQueue.js`) now resolves immediately because OTP emails are sent synchronously via SMTP to minimise delays.
 
