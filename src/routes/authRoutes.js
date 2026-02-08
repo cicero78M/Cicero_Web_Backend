@@ -11,17 +11,19 @@ import * as dashboardSubscriptionService from "../service/dashboardSubscriptionS
 import {
   minPhoneDigitLength,
   normalizeWhatsappNumber,
+  formatToWhatsAppId,
+  safeSendMessage,
+  isAdminWhatsApp,
 } from "../utils/waHelper.js";
 import redis from "../config/redis.js";
+import waClient, { waitForWaReady } from "../service/waService.js";
 import {
   notifyAdmin,
   queueAdminNotification,
-  sendTelegramMessage,
 } from "../service/telegramService.js";
 import {
   formatDashboardApprovalRequest,
   formatLoginNotification,
-  formatPasswordResetNotification,
   formatSimpleNotification,
 } from "../utils/telegramHelper.js";
 import { insertVisitorLog } from "../model/visitorLogModel.js";
