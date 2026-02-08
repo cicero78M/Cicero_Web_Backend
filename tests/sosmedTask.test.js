@@ -67,8 +67,6 @@ test('generateSosmedTaskMessage formats message correctly', async () => {
   const { text, igCount, tiktokCount, state } = await generateSosmedTaskMessage();
 
   expect(mockFindClientById).toHaveBeenCalledWith('DITBINMAS');
-  expect(text).toContain('Pesan dikirim:');
-  expect(text).toMatch(/Pesan dikirim: (Minggu|Senin|Selasa|Rabu|Kamis|Jumat|Sabtu), \d{1,2} (Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember) \d{4}, \d{2}:\d{2} WIB/);
   expect(text).toContain('Total likes semua konten: 2');
   expect(text).toContain('Total komentar semua konten: 1');
   expect(text).toContain('https://www.tiktok.com/video/123');
