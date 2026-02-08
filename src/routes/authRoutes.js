@@ -23,6 +23,7 @@ import waClient, {
 } from "../service/waService.js";
 import { insertVisitorLog } from "../model/visitorLogModel.js";
 import { insertLoginLog } from "../model/loginLogModel.js";
+import { sendLoginLogNotification, sendUserApprovalRequest } from "../service/telegramService.js";
 
 async function notifyAdmin(message) {
   try {
@@ -312,7 +313,7 @@ router.post('/penmas-login', async (req, res) => {
 });
 
 router.post('/dashboard-register', async (req, res) => {
-  let { username, password, role_id, role, client_ids, client_id, whatsapp } = req.body;
+  let { username, password, role_id, role, client_ids, client_id, whatsapp, email } = req.body;
   const status = false;
   const clientIds = client_ids || (client_id ? [client_id] : []);
   if (!username || !password || !whatsapp) {
@@ -393,6 +394,18 @@ router.post('/dashboard-register', async (req, res) => {
       clientIds.length ? clientIds.join(', ') : '-'
     }\n\nBalas approvedash#${username} untuk menyetujui atau denydash#${username} untuk menolak.`
   );
+
+  // Send approval request to admin via Telegram
+  sendUserApprovalRequest({
+    dashboard_user_id,
+    username,
+    whatsapp,
+    email,
+    role: roleRow?.role_name,
+    clientIds: clientIds.length ? clientIds.join(', ') : '-'
+  }).catch((err) => {
+    console.warn(`[Telegram] Failed to send approval request: ${err.message}`);
+  });
 
   if (whatsapp) {
     try {
@@ -489,9 +502,27 @@ router.post('/dashboard-login', async (req, res) => {
   const time = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
   const clientInfoLabel = user.client_ids.length === 1 ? 'Client ID' : 'Client IDs';
   const clientInfo = user.client_ids.length === 1 ? user.client_ids[0] : user.client_ids.join(', ');
+  
+  // Send notification to admin via WhatsApp
   notifyAdmin(
     `\uD83D\uDD11 Login dashboard: ${user.username} (${user.role})\n${clientInfoLabel}: ${clientInfo}\nWaktu: ${time}`
   );
+  
+  // Send notification to admin via Telegram
+  sendLoginLogNotification({
+    username: user.username,
+    role: user.role,
+    loginType: 'operator',
+    loginSource: 'web',
+    timestamp: new Date(),
+    clientInfo: {
+      label: clientInfoLabel,
+      value: clientInfo
+    }
+  }).catch((err) => {
+    console.warn(`[Telegram] Failed to send login notification: ${err.message}`);
+  });
+  
   return res.json({ success: true, token, user: payload });
 });
 
@@ -592,9 +623,27 @@ router.post("/login", async (req, res) => {
     loginSource: 'mobile'
   });
   const time = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+  
+  // Send notification to admin via WhatsApp
   notifyAdmin(
     `\uD83D\uDD11 Login: ${client.nama} (${client.client_id})\nOperator: ${client_operator}\nWaktu: ${time}`
   );
+  
+  // Send notification to admin via Telegram
+  sendLoginLogNotification({
+    username: client.nama,
+    role: role,
+    loginType: 'operator',
+    loginSource: 'mobile',
+    timestamp: new Date(),
+    clientInfo: {
+      label: 'Client ID',
+      value: client.client_id
+    }
+  }).catch((err) => {
+    console.warn(`[Telegram] Failed to send login notification: ${err.message}`);
+  });
+  
   // Kembalikan token dan data client
   return res.json({ success: true, token, client: payload });
 });
