@@ -115,7 +115,8 @@ function formatMessageDeliveryTime() {
   ];
   
   // Use Intl.DateTimeFormat for reliable timezone conversion
-  const formatter = new Intl.DateTimeFormat('en-US', {
+  // Using 'id-ID' locale for semantic correctness with Indonesian output
+  const formatter = new Intl.DateTimeFormat('id-ID', {
     timeZone: 'Asia/Jakarta',
     year: 'numeric',
     month: 'numeric',
@@ -132,14 +133,14 @@ function formatMessageDeliveryTime() {
     partsMap[part.type] = part.value;
   });
   
-  // Map weekday from English short name to Indonesian
-  const englishWeekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const weekdayIndex = englishWeekdays.indexOf(partsMap.weekday);
-  const dayName = weekdayIndex >= 0 ? dayNames[weekdayIndex] : dayNames[now.getDay()];
+  // Map weekday from Indonesian short name to full name
+  const indonesianWeekdaysShort = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+  const weekdayIndex = indonesianWeekdaysShort.indexOf(partsMap.weekday);
+  const dayName = weekdayIndex >= 0 ? dayNames[weekdayIndex] : dayNames[0];
   
   const day = parseInt(partsMap.day, 10);
   const monthIndex = parseInt(partsMap.month, 10) - 1;
-  const monthName = monthNames[monthIndex];
+  const monthName = monthNames[monthIndex] || monthNames[0];
   const year = partsMap.year;
   const hours = partsMap.hour.padStart(2, '0');
   const minutes = partsMap.minute.padStart(2, '0');
