@@ -49,8 +49,6 @@ export const adminCommands = [
   "grantaccess#",
   "dennyaccess#",
   "denyaccess#",
-  "dashrequest",
-  "dirrequest",
   "savecontact",
 ];
 

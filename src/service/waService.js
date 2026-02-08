@@ -60,33 +60,17 @@ import { getShortcodesTodayByClient } from "../model/instaPostModel.js";
 import { getUsersByClient } from "../model/userModel.js";
 
 // Handler Imports
-import { userMenuHandlers } from "../handler/menu/userMenuHandlers.js";
 import {
   BULK_STATUS_HEADER_REGEX,
   clientRequestHandlers,
   processBulkDeletionRequest,
 } from "../handler/menu/clientRequestHandlers.js";
-import { oprRequestHandlers } from "../handler/menu/oprRequestHandlers.js";
-import { dashRequestHandlers } from "../handler/menu/dashRequestHandlers.js";
-import { dirRequestHandlers } from "../handler/menu/dirRequestHandlers.js";
-import { wabotDitbinmasHandlers } from "../handler/menu/wabotDitbinmasHandlers.js";
 
 import { handleFetchKomentarTiktokBatch } from "../handler/fetchengagement/fetchCommentTiktok.js";
 
-// >>> HANYA SATU INI <<< (Pastikan di helper semua diekspor)
+// >>> Session helpers - only keep what's actively used <<<
 import {
-  userMenuContext,
-  updateUsernameSession,
-  userRequestLinkSessions,
-  knownUserSet,
-  setMenuTimeout,
-  waBindSessions,
-  setBindTimeout,
-  operatorOptionSessions,
-  setOperatorOptionTimeout,
   adminOptionSessions,
-  setAdminOptionTimeout,
-  setUserRequestLinkTimeout,
   setSession,
   getSession,
   clearSession,
@@ -174,50 +158,6 @@ function formatCurrencyId(value) {
   const numeric = Number(value);
   if (Number.isNaN(numeric)) return String(value);
   return `Rp ${numberFormatter.format(numeric)}`;
-}
-
-async function startAdminOprRequestSelection({
-  chatId,
-  waClient,
-  clientLabel,
-}) {
-  const orgClients = await clientService.findAllClientsByType("org");
-  const availableClients = (orgClients || [])
-    .filter((client) => client?.client_id)
-    .map((client) => ({
-      client_id: String(client.client_id).toUpperCase(),
-      nama: client.nama || client.client_id,
-    }));
-
-  if (availableClients.length === 0) {
-    await waClient.sendMessage(
-      chatId,
-      "❌ Tidak ada client bertipe Org yang tersedia untuk menu operator."
-    );
-    return false;
-  }
-
-  setSession(chatId, {
-    menu: "oprrequest",
-    step: "choose_client",
-    opr_clients: availableClients,
-  });
-
-  await runMenuHandler({
-    handlers: oprRequestHandlers,
-    menuName: "oprrequest",
-    session: getSession(chatId),
-    chatId,
-    text: "",
-    waClient,
-    clientLabel,
-    args: [pool, userModel],
-    invalidStepMessage:
-      "⚠️ Sesi menu operator tidak dikenali. Ketik *oprrequest* ulang atau *batal*.",
-    failureMessage:
-      "❌ Terjadi kesalahan pada menu operator. Ketik *oprrequest* ulang untuk memulai kembali.",
-  });
-  return true;
 }
 
 async function runMenuHandler({
