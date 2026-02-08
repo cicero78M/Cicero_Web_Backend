@@ -114,13 +114,35 @@ function formatMessageDeliveryTime() {
     'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
   ];
   
-  const jakartaDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
-  const dayName = dayNames[jakartaDate.getDay()];
-  const day = jakartaDate.getDate();
-  const monthName = monthNames[jakartaDate.getMonth()];
-  const year = jakartaDate.getFullYear();
-  const hours = String(jakartaDate.getHours()).padStart(2, '0');
-  const minutes = String(jakartaDate.getMinutes()).padStart(2, '0');
+  // Use Intl.DateTimeFormat for reliable timezone conversion
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    weekday: 'short',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  });
+  
+  const parts = formatter.formatToParts(now);
+  const partsMap = {};
+  parts.forEach(part => {
+    partsMap[part.type] = part.value;
+  });
+  
+  // Map weekday from English short name to Indonesian
+  const englishWeekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const weekdayIndex = englishWeekdays.indexOf(partsMap.weekday);
+  const dayName = weekdayIndex >= 0 ? dayNames[weekdayIndex] : dayNames[now.getDay()];
+  
+  const day = parseInt(partsMap.day, 10);
+  const monthIndex = parseInt(partsMap.month, 10) - 1;
+  const monthName = monthNames[monthIndex];
+  const year = partsMap.year;
+  const hours = partsMap.hour.padStart(2, '0');
+  const minutes = partsMap.minute.padStart(2, '0');
   
   return `${dayName}, ${day} ${monthName} ${year}, ${hours}:${minutes} WIB`;
 }
