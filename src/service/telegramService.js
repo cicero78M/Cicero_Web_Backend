@@ -9,6 +9,21 @@ let botReady = false;
 const DEFAULT_TIMEZONE = process.env.TIMEZONE || 'Asia/Jakarta';
 
 /**
+ * Check if a chat ID is authorized as admin
+ * @param {number|string} chatId - Telegram chat ID
+ * @returns {boolean}
+ */
+export function isTelegramAdmin(chatId) {
+  const adminChatIds = (process.env.TELEGRAM_ADMIN_CHAT_ID || '')
+    .split(',')
+    .map(id => id.trim())
+    .filter(Boolean)
+    .map(id => String(id));
+  
+  return adminChatIds.includes(String(chatId));
+}
+
+/**
  * Initialize Telegram bot
  */
 export function initializeTelegramBot() {
@@ -21,9 +36,15 @@ export function initializeTelegramBot() {
   }
 
   try {
-    bot = new TelegramBot(token, { polling: false });
+    // Enable polling to receive messages and callbacks
+    bot = new TelegramBot(token, { polling: true });
     botReady = true;
-    console.log('[Telegram] Bot initialized successfully (send-only mode)');
+    console.log('[Telegram] Bot initialized successfully (interactive mode with polling)');
+    
+    // Set up command and callback handlers
+    setupCommandHandlers();
+    setupCallbackHandlers();
+    
     return bot;
   } catch (error) {
     console.error('[Telegram] Failed to initialize bot:', error.message);
@@ -114,7 +135,7 @@ export async function sendLoginLogNotification(logData) {
 }
 
 /**
- * Send dashboard user approval request notification
+ * Send dashboard user approval request notification with inline buttons
  * @param {object} userData - User data
  * @returns {Promise<object|null>}
  */
@@ -127,9 +148,22 @@ export async function sendUserApprovalRequest(userData) {
   if (whatsapp) message += `*WhatsApp:* ${whatsapp}\n`;
   if (email) message += `*Email:* ${email}\n`;
   if (role) message += `*Role:* ${role}\n`;
-  message += `\n_Menunggu persetujuan admin_`;
+  message += `\n_Menunggu persetujuan admin_\n\n`;
+  message += `Gunakan tombol di bawah atau ketik:\n`;
+  message += `\`/approvedash ${username}\` untuk menyetujui\n`;
+  message += `\`/denydash ${username}\` untuk menolak`;
   
-  return sendTelegramAdminMessage(message);
+  // Add inline keyboard with approve/deny buttons
+  const inlineKeyboard = {
+    inline_keyboard: [
+      [
+        { text: '✅ Setujui', callback_data: `approve:${username}` },
+        { text: '❌ Tolak', callback_data: `deny:${username}` }
+      ]
+    ]
+  };
+  
+  return sendTelegramAdminMessage(message, { reply_markup: inlineKeyboard });
 }
 
 /**
@@ -158,6 +192,275 @@ export async function sendUserRejectionConfirmation(userData) {
   return sendTelegramAdminMessage(message);
 }
 
+/**
+ * Handle /approvedash command
+ * @param {object} msg - Telegram message object
+ */
+async function handleApproveDashCommand(msg) {
+  const chatId = msg.chat.id;
+  const username = msg.text.split(' ')[1];
+  
+  // Check if sender is admin
+  if (!isTelegramAdmin(chatId)) {
+    await bot.sendMessage(chatId, '❌ Anda tidak memiliki akses ke sistem ini.');
+    return;
+  }
+  
+  if (!username) {
+    await bot.sendMessage(
+      chatId, 
+      '❌ Format salah. Gunakan: `/approvedash username`',
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+  
+  await processApproval(chatId, username);
+}
+
+/**
+ * Handle /denydash command
+ * @param {object} msg - Telegram message object
+ */
+async function handleDenyDashCommand(msg) {
+  const chatId = msg.chat.id;
+  const username = msg.text.split(' ')[1];
+  
+  // Check if sender is admin
+  if (!isTelegramAdmin(chatId)) {
+    await bot.sendMessage(chatId, '❌ Anda tidak memiliki akses ke sistem ini.');
+    return;
+  }
+  
+  if (!username) {
+    await bot.sendMessage(
+      chatId, 
+      '❌ Format salah. Gunakan: `/denydash username`',
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+  
+  await processRejection(chatId, username);
+}
+
+/**
+ * Process user approval
+ * @param {number|string} chatId - Telegram chat ID
+ * @param {string} username - Username to approve
+ */
+async function processApproval(chatId, username) {
+  try {
+    const { default: dashboardUserModel } = await import('../model/dashboardUserModel.js');
+    const { formatToWhatsAppId, safeSendMessage } = await import('../utils/waHelper.js');
+    const { default: waClient, waitForWaReady } = await import('./waService.js');
+    
+    // Find user by username
+    const user = await dashboardUserModel.findByUsername(username);
+    if (!user) {
+      await bot.sendMessage(
+        chatId, 
+        `❌ User dengan username "${username}" tidak ditemukan.`
+      );
+      return;
+    }
+    
+    // Check if user is already approved (status = true means approved)
+    // Note: status = false means either pending or rejected (no distinction in DB)
+    if (user.status) {
+      await bot.sendMessage(
+        chatId, 
+        `✅ User "${username}" sudah disetujui sebelumnya.`
+      );
+      return;
+    }
+    
+    // Approve user (set status to true)
+    await dashboardUserModel.updateStatus(user.dashboard_user_id, true);
+    
+    // Send confirmation to admin via Telegram
+    await bot.sendMessage(
+      chatId, 
+      `✅ User "${username}" berhasil disetujui.`
+    );
+    
+    // Send notification to user via WhatsApp if available
+    if (user.whatsapp) {
+      try {
+        await waitForWaReady();
+        const wid = formatToWhatsAppId(user.whatsapp);
+        await safeSendMessage(
+          waClient,
+          wid,
+          `✅ Registrasi dashboard Anda telah disetujui.\nUsername: ${user.username}`
+        );
+      } catch (err) {
+        console.warn(`[Telegram->WA] Failed to notify user ${username}:`, err.message);
+      }
+    }
+    
+  } catch (err) {
+    console.error('[Telegram] Error handling approve command:', err);
+    await bot.sendMessage(
+      chatId, 
+      `❌ Terjadi kesalahan: ${err.message}`
+    );
+  }
+}
+
+/**
+ * Process user rejection
+ * @param {number|string} chatId - Telegram chat ID
+ * @param {string} username - Username to reject
+ */
+async function processRejection(chatId, username) {
+  try {
+    const { default: dashboardUserModel } = await import('../model/dashboardUserModel.js');
+    const { formatToWhatsAppId, safeSendMessage } = await import('../utils/waHelper.js');
+    const { default: waClient, waitForWaReady } = await import('./waService.js');
+    
+    // Find user by username
+    const user = await dashboardUserModel.findByUsername(username);
+    if (!user) {
+      await bot.sendMessage(
+        chatId, 
+        `❌ User dengan username "${username}" tidak ditemukan.`
+      );
+      return;
+    }
+    
+    // Check if user is not approved (status = false means either pending or already rejected)
+    // Note: The system doesn't distinguish between pending and rejected states
+    // Both have status = false, only approved users have status = true
+    if (!user.status) {
+      await bot.sendMessage(
+        chatId, 
+        `✅ User "${username}" sudah ditolak sebelumnya.`
+      );
+      return;
+    }
+    
+    // Reject user (set status to false)
+    await dashboardUserModel.updateStatus(user.dashboard_user_id, false);
+    
+    // Send confirmation to admin via Telegram
+    await bot.sendMessage(
+      chatId, 
+      `✅ User "${username}" berhasil ditolak.`
+    );
+    
+    // Send notification to user via WhatsApp if available
+    if (user.whatsapp) {
+      try {
+        await waitForWaReady();
+        const wid = formatToWhatsAppId(user.whatsapp);
+        await safeSendMessage(
+          waClient,
+          wid,
+          `❌ Registrasi dashboard Anda ditolak.\nUsername: ${user.username}`
+        );
+      } catch (err) {
+        console.warn(`[Telegram->WA] Failed to notify user ${username}:`, err.message);
+      }
+    }
+    
+  } catch (err) {
+    console.error('[Telegram] Error handling deny command:', err);
+    await bot.sendMessage(
+      chatId, 
+      `❌ Terjadi kesalahan: ${err.message}`
+    );
+  }
+}
+
+/**
+ * Setup command handlers for the bot
+ */
+function setupCommandHandlers() {
+  if (!bot) return;
+  
+  // Handle /approvedash command
+  bot.onText(/\/approvedash/, handleApproveDashCommand);
+  
+  // Handle /denydash command
+  bot.onText(/\/denydash/, handleDenyDashCommand);
+  
+  // Handle /start command
+  bot.onText(/\/start/, async (msg) => {
+    const chatId = msg.chat.id;
+    if (isTelegramAdmin(chatId)) {
+      await bot.sendMessage(
+        chatId,
+        'Selamat datang di Cicero Admin Bot!\n\n' +
+        'Perintah yang tersedia:\n' +
+        '/approvedash <username> - Setujui registrasi user\n' +
+        '/denydash <username> - Tolak registrasi user'
+      );
+    } else {
+      await bot.sendMessage(chatId, '❌ Anda tidak memiliki akses ke sistem ini.');
+    }
+  });
+  
+  console.log('[Telegram] Command handlers registered');
+}
+
+/**
+ * Setup callback query handlers for inline buttons
+ */
+function setupCallbackHandlers() {
+  if (!bot) return;
+  
+  bot.on('callback_query', async (callbackQuery) => {
+    const chatId = callbackQuery.message.chat.id;
+    const messageId = callbackQuery.message.message_id;
+    const data = callbackQuery.data;
+    
+    // Check if sender is admin
+    if (!isTelegramAdmin(chatId)) {
+      await bot.answerCallbackQuery(callbackQuery.id, {
+        text: '❌ Anda tidak memiliki akses ke sistem ini.',
+        show_alert: true
+      });
+      return;
+    }
+    
+    // Parse callback data: "approve:username" or "deny:username"
+    const [action, username] = data.split(':');
+    
+    if (!username) {
+      await bot.answerCallbackQuery(callbackQuery.id, {
+        text: '❌ Data tidak valid',
+        show_alert: true
+      });
+      return;
+    }
+    
+    // Answer callback query immediately
+    await bot.answerCallbackQuery(callbackQuery.id, {
+      text: `Memproses ${action === 'approve' ? 'persetujuan' : 'penolakan'}...`
+    });
+    
+    // Process the action
+    if (action === 'approve') {
+      await processApproval(chatId, username);
+    } else if (action === 'deny') {
+      await processRejection(chatId, username);
+    }
+    
+    // Edit the message to remove buttons
+    try {
+      await bot.editMessageReplyMarkup(
+        { inline_keyboard: [] },
+        { chat_id: chatId, message_id: messageId }
+      );
+    } catch (err) {
+      console.warn('[Telegram] Failed to remove inline keyboard:', err.message);
+    }
+  });
+  
+  console.log('[Telegram] Callback handlers registered');
+}
+
 // Initialize bot on module load
 initializeTelegramBot();
 
@@ -165,6 +468,7 @@ export default {
   initializeTelegramBot,
   getTelegramBot,
   isTelegramReady,
+  isTelegramAdmin,
   sendTelegramMessage,
   sendTelegramAdminMessage,
   sendLoginLogNotification,

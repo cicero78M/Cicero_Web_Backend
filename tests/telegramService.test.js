@@ -4,8 +4,17 @@ import { jest } from '@jest/globals';
 
 // Mock node-telegram-bot-api before importing telegramService
 const mockSendMessage = jest.fn();
+const mockOnText = jest.fn();
+const mockOn = jest.fn();
+const mockAnswerCallbackQuery = jest.fn();
+const mockEditMessageReplyMarkup = jest.fn();
+
 const mockBot = {
-  sendMessage: mockSendMessage
+  sendMessage: mockSendMessage,
+  onText: mockOnText,
+  on: mockOn,
+  answerCallbackQuery: mockAnswerCallbackQuery,
+  editMessageReplyMarkup: mockEditMessageReplyMarkup
 };
 
 jest.unstable_mockModule('node-telegram-bot-api', () => ({
@@ -16,6 +25,7 @@ const {
   initializeTelegramBot,
   getTelegramBot,
   isTelegramReady,
+  isTelegramAdmin,
   sendTelegramMessage,
   sendTelegramAdminMessage,
   sendLoginLogNotification,
@@ -62,6 +72,30 @@ describe('telegramService', () => {
     it('should return boolean indicating bot readiness', () => {
       const ready = isTelegramReady();
       expect(typeof ready).toBe('boolean');
+    });
+  });
+
+  describe('isTelegramAdmin', () => {
+    it('should return true for authorized chat ID', () => {
+      process.env.TELEGRAM_ADMIN_CHAT_ID = '123456,789012';
+      expect(isTelegramAdmin('123456')).toBe(true);
+      expect(isTelegramAdmin(123456)).toBe(true);
+    });
+
+    it('should return false for unauthorized chat ID', () => {
+      process.env.TELEGRAM_ADMIN_CHAT_ID = '123456';
+      expect(isTelegramAdmin('999999')).toBe(false);
+    });
+
+    it('should handle negative chat IDs for groups', () => {
+      process.env.TELEGRAM_ADMIN_CHAT_ID = '-987654321';
+      expect(isTelegramAdmin('-987654321')).toBe(true);
+      expect(isTelegramAdmin(-987654321)).toBe(true);
+    });
+
+    it('should return false when no admin chat IDs configured', () => {
+      delete process.env.TELEGRAM_ADMIN_CHAT_ID;
+      expect(isTelegramAdmin('123456')).toBe(false);
     });
   });
 
@@ -151,7 +185,7 @@ describe('telegramService', () => {
   });
 
   describe('sendUserApprovalRequest', () => {
-    it('should format and send approval request', async () => {
+    it('should format and send approval request with inline buttons', async () => {
       process.env.TELEGRAM_ADMIN_CHAT_ID = '987654';
       process.env.TELEGRAM_BOT_TOKEN = 'test-token';
       mockSendMessage.mockResolvedValue({ message_id: 4 });
@@ -168,9 +202,19 @@ describe('telegramService', () => {
       
       if (isTelegramReady()) {
         expect(mockSendMessage).toHaveBeenCalled();
-        const message = mockSendMessage.mock.calls[0][1];
+        const [chatId, message, options] = mockSendMessage.mock.calls[0];
         expect(message).toContain('Permintaan Registrasi Dashboard');
         expect(message).toContain('newuser');
+        expect(message).toContain('/approvedash');
+        expect(message).toContain('/denydash');
+        
+        // Check for inline keyboard
+        expect(options.reply_markup).toBeDefined();
+        expect(options.reply_markup.inline_keyboard).toBeDefined();
+        expect(options.reply_markup.inline_keyboard[0]).toEqual([
+          { text: '✅ Setujui', callback_data: 'approve:newuser' },
+          { text: '❌ Tolak', callback_data: 'deny:newuser' }
+        ]);
       }
     });
   });
