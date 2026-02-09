@@ -332,9 +332,9 @@ async function sendUserWhatsAppNotification(user, message) {
     const wid = formatToWhatsAppId(user.whatsapp);
     const sent = await safeSendMessage(waClient, wid, message);
     
-    result.userNotified = sent !== false;
+    result.userNotified = sent === true;
     if (!result.userNotified) {
-      result.userNotificationError = 'WhatsApp message send returned false';
+      result.userNotificationError = 'WhatsApp message send returned false or error';
     }
   } catch (err) {
     console.error(`[Telegram->WA] Failed to notify user ${user.username}:`, err.message);
