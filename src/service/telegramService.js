@@ -4,6 +4,7 @@ import TelegramBot from 'node-telegram-bot-api';
 
 let bot = null;
 let botReady = false;
+let isInitializing = false;
 
 // Configuration constants
 const DEFAULT_TIMEZONE = process.env.TIMEZONE || 'Asia/Jakarta';
@@ -35,11 +36,71 @@ export function initializeTelegramBot() {
     return null;
   }
 
+  // Prevent multiple simultaneous initializations (singleton pattern)
+  if (isInitializing) {
+    console.log('[Telegram] Bot initialization already in progress, skipping duplicate call');
+    return bot;
+  }
+  
+  // If bot is already initialized and polling, return existing instance
+  if (bot && botReady) {
+    console.log('[Telegram] Bot already initialized, returning existing instance');
+    return bot;
+  }
+
+  isInitializing = true;
+
   try {
+    // Stop existing bot if any to prevent conflicts
+    if (bot) {
+      try {
+        bot.stopPolling();
+        console.log('[Telegram] Stopped existing bot polling');
+      } catch (stopError) {
+        console.warn('[Telegram] Error stopping existing bot:', stopError.message);
+      }
+    }
+    
     // Enable polling to receive messages and callbacks
-    bot = new TelegramBot(token, { polling: true });
+    bot = new TelegramBot(token, { 
+      polling: {
+        interval: 1000,
+        autoStart: true,
+        params: {
+          timeout: 10
+        }
+      }
+    });
+    
     botReady = true;
     console.log('[Telegram] Bot initialized successfully (interactive mode with polling)');
+    
+    // Set up polling error handler
+    bot.on('polling_error', (error) => {
+      console.error('[Telegram] Polling error:', error.message);
+      
+      // Handle 409 Conflict specifically
+      // Check for HTTP 409 status or error message indicating conflict
+      const is409Conflict = 
+        (error.response && error.response.statusCode === 409) ||
+        (error.code === 'ETELEGRAM' && error.message.includes('409 Conflict'));
+      
+      if (is409Conflict) {
+        console.warn('[Telegram] Detected 409 Conflict - another bot instance may be running');
+        console.warn('[Telegram] Stopping this instance to prevent conflicts');
+        
+        // Set botReady to false first to prevent race conditions
+        botReady = false;
+        
+        // Stop polling on this instance
+        try {
+          bot.stopPolling();
+          console.log('[Telegram] Polling stopped due to conflict');
+        } catch (stopErr) {
+          console.error('[Telegram] Error stopping polling:', stopErr.message);
+        }
+      }
+    });
     
     // Set up command and callback handlers
     setupCommandHandlers();
@@ -48,7 +109,10 @@ export function initializeTelegramBot() {
     return bot;
   } catch (error) {
     console.error('[Telegram] Failed to initialize bot:', error.message);
+    botReady = false;
     return null;
+  } finally {
+    isInitializing = false;
   }
 }
 
