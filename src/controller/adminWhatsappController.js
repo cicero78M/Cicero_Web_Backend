@@ -9,6 +9,27 @@ import { rm } from 'fs/promises';
 const registrationSessions = new Map();
 
 /**
+ * Cleanup a registration session
+ */
+async function cleanupSession(sessionId, sessionInfo) {
+  try {
+    if (sessionInfo.client) {
+      await sessionInfo.client.disconnect();
+      console.log(`[ADMIN_REG] Disconnected session ${sessionId}`);
+      
+      // Clean up session files
+      if (sessionInfo.client.sessionPath) {
+        await rm(sessionInfo.client.sessionPath, { recursive: true, force: true });
+        console.log(`[ADMIN_REG] Cleaned up session files for ${sessionId}`);
+      }
+    }
+    registrationSessions.delete(sessionId);
+  } catch (err) {
+    console.warn(`[ADMIN_REG] Failed to cleanup session ${sessionId}:`, err.message);
+  }
+}
+
+/**
  * Start admin WhatsApp registration
  * Generates QR code for Baileys pairing
  */
@@ -17,7 +38,7 @@ export async function startRegistration(req, res, next) {
     const { registered_by = 'self', notes = null } = req.body;
     
     // Generate unique session ID
-    const sessionId = `admin-reg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const sessionId = `admin-reg-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
     
     // Create a temporary Baileys client for registration
     const regClient = await createBaileysClient(sessionId);
@@ -70,7 +91,7 @@ export async function startRegistration(req, res, next) {
             try {
               await regClient.sendMessage(
                 me.id,
-                '✅ Selamat! Nomor WhatsApp Anda telah berhasil didaftarkan sebagai admin Cicero.'
+                '✅ Selamat! Nomor WhatsApp Anda telah berhasil terdaftar sebagai admin Cicero.'
               );
             } catch (err) {
               console.warn('[ADMIN_REG] Failed to send confirmation message:', err.message);
@@ -87,17 +108,9 @@ export async function startRegistration(req, res, next) {
         
         // Disconnect the registration client
         setTimeout(async () => {
-          try {
-            await regClient.disconnect();
-            console.log(`[ADMIN_REG] Disconnected session ${sessionId}`);
-            
-            // Clean up session files
-            if (regClient.sessionPath) {
-              await rm(regClient.sessionPath, { recursive: true, force: true });
-              console.log(`[ADMIN_REG] Cleaned up session files for ${sessionId}`);
-            }
-          } catch (err) {
-            console.warn(`[ADMIN_REG] Failed to cleanup session ${sessionId}:`, err.message);
+          const sessionInfo = registrationSessions.get(sessionId);
+          if (sessionInfo) {
+            await cleanupSession(sessionId, sessionInfo);
           }
         }, 5000);
       } catch (err) {
@@ -123,13 +136,7 @@ export async function startRegistration(req, res, next) {
       const session = registrationSessions.get(sessionId);
       if (session && session.status === 'pending') {
         console.log(`[ADMIN_REG] Session ${sessionId} timed out`);
-        session.client.disconnect().catch(() => {});
-        registrationSessions.delete(sessionId);
-        
-        // Clean up session files
-        if (session.client.sessionPath) {
-          rm(session.client.sessionPath, { recursive: true, force: true }).catch(() => {});
-        }
+        cleanupSession(sessionId, session);
       }
     }, 180000); // 3 minutes timeout
     

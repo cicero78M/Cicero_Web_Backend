@@ -90,6 +90,7 @@ import {
 } from "./waAutoComplaintService.js";
 import {
   isAdminWhatsApp,
+  isAdminWhatsAppAsync,
   formatToWhatsAppId,
   formatClientData,
   safeSendMessage,
@@ -1865,7 +1866,6 @@ async function handleAdminCommands(from, body) {
     
     try {
       // Check if sender is admin
-      const { isAdminWhatsAppAsync } = await import('../utils/waHelper.js');
       const isAdmin = await isAdminWhatsAppAsync(from);
       if (!isAdmin) {
         await safeSendMessage(
