@@ -131,6 +131,23 @@ export function isAdminWhatsApp(number) {
   return adminNumbers.includes(normalized);
 }
 
+// Cek apakah nomor WhatsApp adalah admin (async version with database check)
+export async function isAdminWhatsAppAsync(number) {
+  // First check env variable (synchronous)
+  if (isAdminWhatsApp(number)) {
+    return true;
+  }
+  
+  // Then check database
+  try {
+    const { isAdmin } = await import('../model/adminWhatsappModel.js');
+    return await isAdmin(number);
+  } catch (err) {
+    console.warn('[waHelper] Failed to check admin from database:', err.message);
+    return false;
+  }
+}
+
 // Konversi nomor ke WhatsAppID (xxxx@c.us)
 export function formatToWhatsAppId(nohp) {
   const number = extractPhoneDigits(nohp);
