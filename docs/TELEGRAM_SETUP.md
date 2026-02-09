@@ -53,8 +53,9 @@ TELEGRAM_ADMIN_CHAT_ID=987654321
 
 **Important Notes:**
 - `TELEGRAM_BOT_TOKEN`: The token you received from @BotFather
-- `TELEGRAM_ADMIN_CHAT_ID`: Your personal chat ID or group chat ID
+- `TELEGRAM_ADMIN_CHAT_ID`: Your personal chat ID or group chat ID. **For multiple admins, use comma-separated chat IDs** (e.g., `987654321,123456789,-987654321`)
 - For group chats, include the negative sign (e.g., `-987654321`)
+- All chat IDs in this list will have permission to approve/reject users via bot commands
 
 ## Step 4: Restart the Application
 
@@ -66,7 +67,9 @@ npm start
 
 Check the logs for successful initialization:
 ```
-[Telegram] Bot initialized successfully (send-only mode)
+[Telegram] Bot initialized successfully (interactive mode with polling)
+[Telegram] Command handlers registered
+[Telegram] Callback handlers registered
 ```
 
 ## What Notifications You'll Receive
@@ -86,8 +89,8 @@ Sumber: web
 Waktu: 08/02/2026 13:30:45
 ```
 
-### 2. User Registration Requests
-When a new user registers:
+### 2. User Registration Requests (Interactive)
+When a new user registers, you'll receive an interactive message with buttons:
 ```
 📋 Permintaan Registrasi Dashboard
 
@@ -97,7 +100,17 @@ WhatsApp: 628123456789
 Role: operator
 
 Menunggu persetujuan admin
+
+Gunakan tombol di bawah atau ketik:
+/approvedash newuser untuk menyetujui
+/denydash newuser untuk menolak
+
+[✅ Setujui] [❌ Tolak]
 ```
+
+You can:
+- **Click the buttons** to instantly approve or reject
+- **Use commands**: `/approvedash newuser` or `/denydash newuser`
 
 ### 3. Approval Confirmations
 When an admin approves a user:
@@ -139,7 +152,72 @@ curl -X POST http://localhost:3000/api/auth/dashboard-register \
   }'
 ```
 
-You should receive a Telegram notification for the registration request.
+You should receive a Telegram notification for the registration request with interactive buttons.
+
+### 3. Test Approval Commands
+
+Send a message to your bot:
+```
+/approvedash newuser
+```
+
+Or:
+```
+/denydash newuser
+```
+
+You should receive a confirmation message, and the user should receive a WhatsApp notification.
+
+### 4. Test Inline Buttons
+
+1. Click on the "✅ Setujui" or "❌ Tolak" buttons in the registration notification
+2. The bot will process the action and send a confirmation
+3. The buttons will be removed from the message after processing
+
+## Bot Commands
+
+The Telegram bot supports the following commands:
+
+### `/start`
+Shows welcome message and available commands. Only works for authorized admins.
+
+### `/approvedash <username>`
+Approve a pending dashboard user registration.
+
+**Example:**
+```
+/approvedash john_doe
+```
+
+**Response:**
+```
+✅ User "john_doe" berhasil disetujui.
+```
+
+### `/denydash <username>`
+Reject a pending dashboard user registration.
+
+**Example:**
+```
+/denydash jane_smith
+```
+
+**Response:**
+```
+✅ User "jane_smith" berhasil ditolak.
+```
+
+## Authorization
+
+Only users/groups with chat IDs listed in `TELEGRAM_ADMIN_CHAT_ID` can:
+- Receive approval request notifications
+- Execute approval/rejection commands
+- Click inline buttons
+
+Non-admin users will receive:
+```
+❌ Anda tidak memiliki akses ke sistem ini.
+```
 
 ## Troubleshooting
 
@@ -164,6 +242,35 @@ Check logs for:
 This means either:
 - `TELEGRAM_BOT_TOKEN` is not set
 - `TELEGRAM_SERVICE_SKIP_INIT=true` is set (for testing)
+
+### Commands Not Working
+
+1. **Check authorization**: Ensure your chat ID is in `TELEGRAM_ADMIN_CHAT_ID`
+   - Send `/start` to the bot to verify authorization
+   - If you see "❌ Anda tidak memiliki akses", your chat ID is not configured
+2. **Check command format**: Commands are case-sensitive
+   - Use `/approvedash username` not `/approveDash` or `approvedash`
+3. **Check polling**: The bot must be initialized with polling enabled
+   - Look for `[Telegram] Bot initialized successfully (interactive mode with polling)` in logs
+4. **Check for errors**: Look for error messages in logs:
+   ```
+   [Telegram] Error handling approve command: ...
+   ```
+
+### Inline Buttons Not Appearing
+
+1. **Check bot initialization**: Buttons require interactive mode (polling enabled)
+2. **Check message format**: Ensure `reply_markup` is properly set
+3. **Old messages**: Buttons only appear on new messages after the update
+
+### Buttons Not Responding
+
+1. **Check callback handler**: Ensure `setupCallbackHandlers()` is called during initialization
+2. **Check authorization**: Only admin chat IDs can use buttons
+3. **Check logs**: Look for callback query errors:
+   ```
+   [Telegram] Failed to remove inline keyboard: ...
+   ```
 
 ### Message Format Issues
 
@@ -199,7 +306,15 @@ export async function sendTelegramMessage(chatId, message, options = {}) {
 
 ### Multiple Admin Chats
 
-To send notifications to multiple chats, modify the service to accept comma-separated chat IDs:
+Multiple admin chat IDs are already supported via comma-separated values in the environment variable:
+
+```bash
+TELEGRAM_ADMIN_CHAT_ID=987654321,123456789,-987654321
+```
+
+Each chat ID in this list will:
+- Receive approval request notifications
+- Have permission to approve/reject users via commands or buttons
 
 ```javascript
 const adminChatIds = process.env.TELEGRAM_ADMIN_CHAT_ID?.split(',') || [];

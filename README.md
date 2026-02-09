@@ -349,16 +349,23 @@ The OTP worker (`src/service/otpQueue.js`) now resolves immediately because OTP 
 
 ## Telegram Integration
 
-**Cicero V2** now includes Telegram bot integration for admin notifications and login logging:
+**Cicero V2** now includes interactive Telegram bot integration for admin notifications and user approval management:
 
-- **Purpose**: Admin notifications for dashboard login events and user approval requests
-- **Scope**: Send-only mode (bot does not process incoming messages)
+- **Purpose**: Admin notifications for dashboard login events and interactive user approval/rejection
+- **Mode**: Interactive mode with polling (processes commands and button clicks)
 - **Setup**: See [docs/TELEGRAM_SETUP.md](docs/TELEGRAM_SETUP.md) for complete setup instructions
 - **Configuration**: Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_CHAT_ID` to your `.env` file
-- **Notifications**:
-  - Dashboard login events with user details, role, and timestamp
-  - User registration requests awaiting admin approval
-  - User approval/rejection confirmations
+- **Features**:
+  - Dashboard login notifications with user details, role, and timestamp
+  - Interactive user registration requests with approve/reject buttons
+  - Slash commands: `/approvedash <username>` and `/denydash <username>`
+  - Inline keyboard buttons for one-click approval/rejection
+  - Admin authorization based on chat ID
+  - Automatic WhatsApp notification to users after approval/rejection
+- **Commands**:
+  - `/start` - Show welcome message and available commands
+  - `/approvedash <username>` - Approve a dashboard user registration
+  - `/denydash <username>` - Reject a dashboard user registration
 - **Testing**: Set `TELEGRAM_SERVICE_SKIP_INIT=true` to disable Telegram during testing
 
 All notifications are also sent via WhatsApp to maintain backward compatibility. The Telegram integration runs independently and will not affect existing functionality if not configured.
