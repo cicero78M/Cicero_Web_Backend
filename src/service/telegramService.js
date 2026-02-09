@@ -80,14 +80,21 @@ export function initializeTelegramBot() {
       console.error('[Telegram] Polling error:', error.message);
       
       // Handle 409 Conflict specifically
-      if (error.code === 'ETELEGRAM' && error.message.includes('409 Conflict')) {
+      // Check for HTTP 409 status or error message indicating conflict
+      const is409Conflict = 
+        (error.response && error.response.statusCode === 409) ||
+        (error.code === 'ETELEGRAM' && error.message.includes('409 Conflict'));
+      
+      if (is409Conflict) {
         console.warn('[Telegram] Detected 409 Conflict - another bot instance may be running');
         console.warn('[Telegram] Stopping this instance to prevent conflicts');
+        
+        // Set botReady to false first to prevent race conditions
+        botReady = false;
         
         // Stop polling on this instance
         try {
           bot.stopPolling();
-          botReady = false;
           console.log('[Telegram] Polling stopped due to conflict');
         } catch (stopErr) {
           console.error('[Telegram] Error stopping polling:', stopErr.message);
