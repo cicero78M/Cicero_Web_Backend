@@ -69,7 +69,19 @@ The `whatsapp` field should contain digits only; any non-numeric characters will
 }
 ```
 
-Every new dashboard account is created with `status` set to `false` and an approval request containing the username, ID, role, WhatsApp number, and client ID is sent to the WhatsApp administrators. They can approve using `approvedash#<username>` or reject with `denydash#<username>`.
+Every new dashboard account is created with `status` set to `false` and an approval request containing the username, ID, role, WhatsApp number, and client ID is sent to the WhatsApp administrators. 
+
+**New Admin Registration Feature**: Admins can now approve or reject dashboard users via WhatsApp using:
+- `approvedash#<username>` to approve
+- `denydash#<username>` to reject
+
+If a non-admin tries to use these commands, they will receive a message with instructions to register as an admin. Admins can register their WhatsApp number by:
+
+1. Accessing the registration endpoint: `POST /api/admin/register-whatsapp`
+2. Scanning the QR code provided with their WhatsApp mobile app
+3. After successful pairing, their number is automatically registered in the system
+
+See [Admin WhatsApp Registration](#admin-whatsapp-registration) section below for more details.
 
 Successful dashboard login responses now include premium metadata when available:
 
@@ -430,3 +442,157 @@ Contoh response ringkas:
   }
 }
 ```
+
+
+## 7. Admin WhatsApp Registration
+
+*Last updated: 2026-02-09*
+
+### Overview
+
+Admins can now approve or reject dashboard user registrations directly via WhatsApp using the commands:
+- `approvedash#<username>` - Approve a dashboard user
+- `denydash#<username>` - Reject a dashboard user
+
+Only registered admin WhatsApp numbers can execute these commands. If a non-admin tries to use these commands, they will receive instructions on how to register.
+
+### Admin Registration Process
+
+Admin WhatsApp numbers can be registered in two ways:
+
+1. **Environment Variable** (existing method): Add numbers to `ADMIN_WHATSAPP` in `.env`
+   ```
+   ADMIN_WHATSAPP=628123456789,628987654321
+   ```
+
+2. **Dynamic Registration** (new method): Register via QR code pairing using Baileys
+
+### Dynamic Registration via QR Code
+
+**Endpoint**: `POST /api/admin/register-whatsapp`
+
+**Request Body** (optional):
+```json
+{
+  "registered_by": "admin_username",
+  "notes": "Optional registration notes"
+}
+```
+
+**Response** (QR code generated):
+```json
+{
+  "success": true,
+  "sessionId": "admin-reg-1234567890-abc123",
+  "qr": "2@BASE64_ENCODED_QR_DATA...",
+  "status": "awaiting_scan",
+  "message": "Scan QR code dengan WhatsApp Anda untuk mendaftar sebagai admin"
+}
+```
+
+**Process**:
+1. Call the registration endpoint
+2. Display or convert the QR code on frontend (QR data is provided as base64 string)
+3. Scan the QR code with WhatsApp mobile app
+4. After successful pairing, the phone number is automatically extracted and registered
+5. User receives a confirmation message via WhatsApp
+
+**Check Registration Status**: `GET /api/admin/register-whatsapp/:sessionId/status`
+
+Response when completed:
+```json
+{
+  "success": true,
+  "status": "registered",
+  "phoneNumber": "628123456789",
+  "createdAt": 1707467890000
+}
+```
+
+### Other Admin Endpoints
+
+**Check if WhatsApp number is admin**: `GET /api/admin/check-admin?whatsapp=628123456789`
+
+Response:
+```json
+{
+  "success": true,
+  "isAdmin": true,
+  "source": "database"
+}
+```
+
+**List all admin WhatsApp numbers** (requires admin dashboard auth): `GET /api/admin/whatsapp`
+
+Response:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 1,
+      "whatsapp": "628123456789",
+      "registered_at": "2026-02-09T05:15:00.000Z",
+      "registered_by": "admin_username",
+      "is_active": true,
+      "notes": "Primary admin"
+    }
+  ]
+}
+```
+
+**Deactivate an admin** (requires admin dashboard auth): `DELETE /api/admin/whatsapp/:whatsapp`
+
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "whatsapp": "628123456789",
+    "is_active": false
+  }
+}
+```
+
+### WhatsApp Command Responses
+
+When an admin executes `approvedash#username`:
+- ✅ Success: "User 'username' berhasil disetujui."
+- ❌ User not found: "User dengan username 'username' tidak ditemukan."
+- ✅ Already approved: "User 'username' sudah disetujui sebelumnya."
+
+When a non-admin tries to use the command:
+```
+❌ Anda tidak memiliki akses ke sistem ini.
+
+Untuk mendaftar sebagai admin, silakan hubungi administrator atau akses:
+
+🔗 [Backend URL]/api/admin/register-whatsapp
+
+Anda akan mendapatkan QR code untuk mendaftarkan nomor WhatsApp Anda sebagai admin.
+```
+
+### Database Schema
+
+Admin WhatsApp numbers are stored in the `admin_whatsapp` table:
+
+```sql
+CREATE TABLE admin_whatsapp (
+  id SERIAL PRIMARY KEY,
+  whatsapp VARCHAR(20) NOT NULL UNIQUE,
+  registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  registered_by VARCHAR(100),
+  is_active BOOLEAN DEFAULT TRUE,
+  notes TEXT
+);
+```
+
+### Security Notes
+
+- Admin registration endpoints do not require authentication (to allow initial admin setup)
+- Admin list and deactivation endpoints require dashboard admin authentication
+- WhatsApp numbers are stored without the `@c.us` suffix (digits only)
+- Both environment variable and database admins have equal privileges
+- Deactivated admins can be reactivated by calling the registration endpoint again
+
