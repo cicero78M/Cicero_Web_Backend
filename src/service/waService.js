@@ -1815,26 +1815,43 @@ async function handleAdminCommands(from, body) {
       // Approve user
       await dashboardUserModel.updateStatus(user.dashboard_user_id, true);
       
-      // Send notification to admin
-      await safeSendMessage(
-        waClient,
-        from,
-        `✅ User "${username}" berhasil disetujui.`
-      );
-      
       // Send notification to user via WhatsApp if available
+      let userNotified = false;
+      let userNotificationError = null;
       if (user.whatsapp) {
         try {
           const wid = formatToWhatsAppId(user.whatsapp);
-          await safeSendMessage(
+          const sent = await safeSendMessage(
             waClient,
             wid,
             `✅ Registrasi dashboard Anda telah disetujui.\nUsername: ${user.username}`
           );
+          userNotified = sent !== false;
+          if (!userNotified) {
+            userNotificationError = 'WhatsApp message send returned false';
+          }
         } catch (err) {
-          console.warn(`[WA] Failed to notify user ${username}:`, err.message);
+          console.error(`[WA] Failed to notify user ${username}:`, err.message);
+          userNotificationError = err.message;
         }
       }
+      
+      // Send confirmation to admin with notification status
+      let confirmationMessage = `✅ User "${username}" berhasil disetujui.`;
+      if (user.whatsapp) {
+        if (userNotified) {
+          confirmationMessage += `\n✅ Notifikasi telah dikirim ke ${user.whatsapp}`;
+        } else {
+          confirmationMessage += `\n⚠️ Notifikasi ke ${user.whatsapp} gagal dikirim`;
+          if (userNotificationError) {
+            confirmationMessage += `\nAlasan: ${userNotificationError}`;
+          }
+        }
+      } else {
+        confirmationMessage += `\n⚠️ User tidak memiliki nomor WhatsApp terdaftar`;
+      }
+      
+      await safeSendMessage(waClient, from, confirmationMessage);
       
       return true;
     } catch (err) {
@@ -1868,26 +1885,43 @@ async function handleAdminCommands(from, body) {
       // Deny user
       await dashboardUserModel.updateStatus(user.dashboard_user_id, false);
       
-      // Send notification to admin
-      await safeSendMessage(
-        waClient,
-        from,
-        `✅ User "${username}" berhasil ditolak.`
-      );
-      
       // Send notification to user via WhatsApp if available
+      let userNotified = false;
+      let userNotificationError = null;
       if (user.whatsapp) {
         try {
           const wid = formatToWhatsAppId(user.whatsapp);
-          await safeSendMessage(
+          const sent = await safeSendMessage(
             waClient,
             wid,
             `❌ Registrasi dashboard Anda ditolak.\nUsername: ${user.username}`
           );
+          userNotified = sent !== false;
+          if (!userNotified) {
+            userNotificationError = 'WhatsApp message send returned false';
+          }
         } catch (err) {
-          console.warn(`[WA] Failed to notify user ${username}:`, err.message);
+          console.error(`[WA] Failed to notify user ${username}:`, err.message);
+          userNotificationError = err.message;
         }
       }
+      
+      // Send confirmation to admin with notification status
+      let confirmationMessage = `✅ User "${username}" berhasil ditolak.`;
+      if (user.whatsapp) {
+        if (userNotified) {
+          confirmationMessage += `\n✅ Notifikasi telah dikirim ke ${user.whatsapp}`;
+        } else {
+          confirmationMessage += `\n⚠️ Notifikasi ke ${user.whatsapp} gagal dikirim`;
+          if (userNotificationError) {
+            confirmationMessage += `\nAlasan: ${userNotificationError}`;
+          }
+        }
+      } else {
+        confirmationMessage += `\n⚠️ User tidak memiliki nomor WhatsApp terdaftar`;
+      }
+      
+      await safeSendMessage(waClient, from, confirmationMessage);
       
       return true;
     } catch (err) {
