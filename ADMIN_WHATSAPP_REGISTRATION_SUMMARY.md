@@ -179,12 +179,6 @@ Non-admin sends: `approvedash#john_doe`
 Response:
 ```
 ❌ Anda tidak memiliki akses ke sistem ini.
-
-Untuk mendaftar sebagai admin, silakan hubungi administrator atau akses:
-
-🔗 [Backend URL]/api/admin/register-whatsapp
-
-Anda akan mendapatkan QR code untuk mendaftarkan nomor WhatsApp Anda sebagai admin.
 ```
 
 ## Migration Steps

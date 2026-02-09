@@ -565,12 +565,6 @@ When an admin executes `approvedash#username`:
 When a non-admin tries to use the command:
 ```
 ❌ Anda tidak memiliki akses ke sistem ini.
-
-Untuk mendaftar sebagai admin, silakan hubungi administrator atau akses:
-
-🔗 [Backend URL]/api/admin/register-whatsapp
-
-Anda akan mendapatkan QR code untuk mendaftarkan nomor WhatsApp Anda sebagai admin.
 ```
 
 ### Database Schema
