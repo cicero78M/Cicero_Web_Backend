@@ -265,6 +265,8 @@ async function processApproval(chatId, username) {
       return;
     }
     
+    // Check if user is already approved (status = true means approved)
+    // Note: status = false means either pending or rejected (no distinction in DB)
     if (user.status) {
       await bot.sendMessage(
         chatId, 
@@ -273,7 +275,7 @@ async function processApproval(chatId, username) {
       return;
     }
     
-    // Approve user
+    // Approve user (set status to true)
     await dashboardUserModel.updateStatus(user.dashboard_user_id, true);
     
     // Send confirmation to admin via Telegram
@@ -327,6 +329,9 @@ async function processRejection(chatId, username) {
       return;
     }
     
+    // Check if user is not approved (status = false means either pending or already rejected)
+    // Note: The system doesn't distinguish between pending and rejected states
+    // Both have status = false, only approved users have status = true
     if (!user.status) {
       await bot.sendMessage(
         chatId, 
@@ -335,7 +340,7 @@ async function processRejection(chatId, username) {
       return;
     }
     
-    // Reject user
+    // Reject user (set status to false)
     await dashboardUserModel.updateStatus(user.dashboard_user_id, false);
     
     // Send confirmation to admin via Telegram
