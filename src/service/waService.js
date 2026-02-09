@@ -1795,7 +1795,7 @@ if (shouldInitWhatsAppClients) {
  * @param {string} message - Message to send
  * @returns {Promise<object>} - Object with userNotified boolean and userNotificationError string
  */
-async function sendUserWhatsAppNotificationFromWA(user, message) {
+async function sendUserWhatsAppNotification(user, message) {
   const result = {
     userNotified: false,
     userNotificationError: null
@@ -1829,7 +1829,7 @@ async function sendUserWhatsAppNotificationFromWA(user, message) {
  * @param {string|null} userNotificationError - Error message if notification failed
  * @returns {string} - Complete confirmation message
  */
-function buildConfirmationMessageForWA(baseMessage, user, userNotified, userNotificationError) {
+function buildConfirmationMessage(baseMessage, user, userNotified, userNotificationError) {
   let confirmationMessage = baseMessage;
   
   if (user.whatsapp) {
@@ -1879,13 +1879,13 @@ async function handleAdminCommands(from, body) {
       await dashboardUserModel.updateStatus(user.dashboard_user_id, true);
       
       // Send notification to user via WhatsApp if available
-      const { userNotified, userNotificationError } = await sendUserWhatsAppNotificationFromWA(
+      const { userNotified, userNotificationError } = await sendUserWhatsAppNotification(
         user,
         `✅ Registrasi dashboard Anda telah disetujui.\nUsername: ${user.username}`
       );
       
       // Send confirmation to admin with notification status
-      const confirmationMessage = buildConfirmationMessageForWA(
+      const confirmationMessage = buildConfirmationMessage(
         `✅ User "${username}" berhasil disetujui.`,
         user,
         userNotified,
@@ -1927,13 +1927,13 @@ async function handleAdminCommands(from, body) {
       await dashboardUserModel.updateStatus(user.dashboard_user_id, false);
       
       // Send notification to user via WhatsApp if available
-      const { userNotified, userNotificationError } = await sendUserWhatsAppNotificationFromWA(
+      const { userNotified, userNotificationError } = await sendUserWhatsAppNotification(
         user,
         `❌ Registrasi dashboard Anda ditolak.\nUsername: ${user.username}`
       );
       
       // Send confirmation to admin with notification status
-      const confirmationMessage = buildConfirmationMessageForWA(
+      const confirmationMessage = buildConfirmationMessage(
         `✅ User "${username}" berhasil ditolak.`,
         user,
         userNotified,
