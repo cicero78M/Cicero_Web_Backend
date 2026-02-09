@@ -90,6 +90,7 @@ import {
 } from "./waAutoComplaintService.js";
 import {
   isAdminWhatsApp,
+  isAdminWhatsAppAsync,
   formatToWhatsAppId,
   formatClientData,
   safeSendMessage,
@@ -1782,6 +1783,168 @@ if (shouldInitWhatsAppClients) {
     getWaReadinessSummary()
   );
   console.log('[WA] WhatsApp client initialized for send-only mode (message reception disabled).');
+}
+
+// =======================
+// ADMIN COMMAND HANDLER
+// =======================
+async function handleAdminCommands(from, body) {
+  const trimmedBody = body.trim().toLowerCase();
+  
+  // Check for approvedash# command
+  if (trimmedBody.startsWith('approvedash#')) {
+    const username = trimmedBody.substring('approvedash#'.length).trim();
+    if (!username) {
+      await safeSendMessage(waClient, from, '❌ Format salah. Gunakan: approvedash#username');
+      return true;
+    }
+    
+    try {
+      // Check if sender is admin
+      const { isAdminWhatsAppAsync } = await import('../utils/waHelper.js');
+      const isAdmin = await isAdminWhatsAppAsync(from);
+      if (!isAdmin) {
+        await safeSendMessage(
+          waClient,
+          from,
+          '❌ Anda tidak memiliki akses ke sistem ini.\n\nUntuk mendaftar sebagai admin, silakan hubungi administrator atau akses:\n\n🔗 [Backend URL]/api/admin/register-whatsapp\n\nAnda akan mendapatkan QR code untuk mendaftarkan nomor WhatsApp Anda sebagai admin.'
+        );
+        return true;
+      }
+      
+      // Find user by username
+      const user = await dashboardUserModel.findByUsername(username);
+      if (!user) {
+        await safeSendMessage(waClient, from, `❌ User dengan username "${username}" tidak ditemukan.`);
+        return true;
+      }
+      
+      if (user.status) {
+        await safeSendMessage(waClient, from, `✅ User "${username}" sudah disetujui sebelumnya.`);
+        return true;
+      }
+      
+      // Approve user
+      await dashboardUserModel.updateStatus(user.dashboard_user_id, true);
+      
+      // Send notification to admin
+      await safeSendMessage(
+        waClient,
+        from,
+        `✅ User "${username}" berhasil disetujui.`
+      );
+      
+      // Send notification to user via WhatsApp if available
+      if (user.whatsapp) {
+        try {
+          const wid = formatToWhatsAppId(user.whatsapp);
+          await safeSendMessage(
+            waClient,
+            wid,
+            `✅ Registrasi dashboard Anda telah disetujui.\nUsername: ${user.username}`
+          );
+        } catch (err) {
+          console.warn(`[WA] Failed to notify user ${username}:`, err.message);
+        }
+      }
+      
+      return true;
+    } catch (err) {
+      console.error('[WA] Error handling approvedash command:', err);
+      await safeSendMessage(waClient, from, `❌ Terjadi kesalahan: ${err.message}`);
+      return true;
+    }
+  }
+  
+  // Check for denydash# command
+  if (trimmedBody.startsWith('denydash#')) {
+    const username = trimmedBody.substring('denydash#'.length).trim();
+    if (!username) {
+      await safeSendMessage(waClient, from, '❌ Format salah. Gunakan: denydash#username');
+      return true;
+    }
+    
+    try {
+      // Check if sender is admin
+      const isAdmin = await isAdminWhatsAppAsync(from);
+      if (!isAdmin) {
+        await safeSendMessage(
+          waClient,
+          from,
+          '❌ Anda tidak memiliki akses ke sistem ini.\n\nUntuk mendaftar sebagai admin, silakan hubungi administrator atau akses:\n\n🔗 [Backend URL]/api/admin/register-whatsapp\n\nAnda akan mendapatkan QR code untuk mendaftarkan nomor WhatsApp Anda sebagai admin.'
+        );
+        return true;
+      }
+      
+      // Find user by username
+      const user = await dashboardUserModel.findByUsername(username);
+      if (!user) {
+        await safeSendMessage(waClient, from, `❌ User dengan username "${username}" tidak ditemukan.`);
+        return true;
+      }
+      
+      if (!user.status) {
+        await safeSendMessage(waClient, from, `✅ User "${username}" sudah ditolak sebelumnya.`);
+        return true;
+      }
+      
+      // Deny user
+      await dashboardUserModel.updateStatus(user.dashboard_user_id, false);
+      
+      // Send notification to admin
+      await safeSendMessage(
+        waClient,
+        from,
+        `✅ User "${username}" berhasil ditolak.`
+      );
+      
+      // Send notification to user via WhatsApp if available
+      if (user.whatsapp) {
+        try {
+          const wid = formatToWhatsAppId(user.whatsapp);
+          await safeSendMessage(
+            waClient,
+            wid,
+            `❌ Registrasi dashboard Anda ditolak.\nUsername: ${user.username}`
+          );
+        } catch (err) {
+          console.warn(`[WA] Failed to notify user ${username}:`, err.message);
+        }
+      }
+      
+      return true;
+    } catch (err) {
+      console.error('[WA] Error handling denydash command:', err);
+      await safeSendMessage(waClient, from, `❌ Terjadi kesalahan: ${err.message}`);
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+// Add message listener for admin commands only
+if (shouldInitWhatsAppClients) {
+  console.log('[WA] Attaching message listener for admin commands...');
+  
+  waClient.on('message', async (msg) => {
+    try {
+      const from = msg.from || msg.author;
+      const body = msg.body || '';
+      
+      if (!from || !body) {
+        return;
+      }
+      
+      // Only process admin commands
+      const trimmedBody = body.trim().toLowerCase();
+      if (trimmedBody.startsWith('approvedash#') || trimmedBody.startsWith('denydash#')) {
+        await handleAdminCommands(from, body);
+      }
+    } catch (err) {
+      console.error('[WA] Error in message handler:', err);
+    }
+  });
 }
 
 export default waClient;
