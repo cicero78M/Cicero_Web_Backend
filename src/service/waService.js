@@ -1800,18 +1800,6 @@ async function handleAdminCommands(from, body) {
     }
     
     try {
-      // Check if sender is admin
-      const { isAdminWhatsAppAsync } = await import('../utils/waHelper.js');
-      const isAdmin = await isAdminWhatsAppAsync(from);
-      if (!isAdmin) {
-        await safeSendMessage(
-          waClient,
-          from,
-          '❌ Anda tidak memiliki akses ke sistem ini.'
-        );
-        return true;
-      }
-      
       // Find user by username
       const user = await dashboardUserModel.findByUsername(username);
       if (!user) {
@@ -1865,17 +1853,6 @@ async function handleAdminCommands(from, body) {
     }
     
     try {
-      // Check if sender is admin
-      const isAdmin = await isAdminWhatsAppAsync(from);
-      if (!isAdmin) {
-        await safeSendMessage(
-          waClient,
-          from,
-          '❌ Anda tidak memiliki akses ke sistem ini.'
-        );
-        return true;
-      }
-      
       // Find user by username
       const user = await dashboardUserModel.findByUsername(username);
       if (!user) {
