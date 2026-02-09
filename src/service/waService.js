@@ -1807,7 +1807,7 @@ async function handleAdminCommands(from, body) {
         await safeSendMessage(
           waClient,
           from,
-          '❌ Anda tidak memiliki akses ke sistem ini.\n\nUntuk mendaftar sebagai admin, silakan hubungi administrator atau akses:\n\n🔗 [Backend URL]/api/admin/register-whatsapp\n\nAnda akan mendapatkan QR code untuk mendaftarkan nomor WhatsApp Anda sebagai admin.'
+          '❌ Anda tidak memiliki akses ke sistem ini.'
         );
         return true;
       }
@@ -1871,7 +1871,7 @@ async function handleAdminCommands(from, body) {
         await safeSendMessage(
           waClient,
           from,
-          '❌ Anda tidak memiliki akses ke sistem ini.\n\nUntuk mendaftar sebagai admin, silakan hubungi administrator atau akses:\n\n🔗 [Backend URL]/api/admin/register-whatsapp\n\nAnda akan mendapatkan QR code untuk mendaftarkan nomor WhatsApp Anda sebagai admin.'
+          '❌ Anda tidak memiliki akses ke sistem ini.'
         );
         return true;
       }
