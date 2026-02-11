@@ -24,7 +24,7 @@ The backend exposes REST endpoints to manage clients, users, and social media an
 - `src/service` – Cron helpers, API wrappers, WhatsApp helpers, OTP/email delivery, Google contact sync, RabbitMQ queues, and various utility functions.
 - `src/handler` – WhatsApp menu logic, link amplification processors, and fetch helpers for automation.
 - `src/routes` – API routes for auth, clients, users, Instagram/TikTok, logs, metadata, dashboards, aggregator widgets, Penmas editorial workflows, OTP claim flows, premium requests, and link amplification.
-- `src/middleware` – Authentication (JWT, dashboard, Penmas), request deduplication, debugging, and global error handling.
+- `src/middleware` – Authentication (JWT, dashboard, Penmas), request deduplication, debugging, and global error handling. The global `errorHandler` always returns JSON (`success: false`, `message`) with a safe fallback message and logs minimal request metadata (`method`, `path`, `status`) for production tracing.
 - `src/repository` – Database helper queries.
 - `src/model` – Database models for clients, users, social media posts, metrics, and visitor logs.
 - `src/config` – Environment management (`env.js`) and Redis connection (`redis.js`).
