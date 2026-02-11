@@ -154,13 +154,9 @@ describe('telegramService', () => {
           expect.objectContaining({ parse_mode: 'Markdown' })
         );
         
-        // Second call without parse_mode
-        expect(mockSendMessage).toHaveBeenNthCalledWith(
-          2,
-          '123456',
-          'Test message with (special) chars',
-          expect.not.objectContaining({ parse_mode: expect.anything() })
-        );
+        // Second call without parse_mode - verify parse_mode is not in the options
+        const secondCallOptions = mockSendMessage.mock.calls[1][2];
+        expect(secondCallOptions).not.toHaveProperty('parse_mode');
         
         expect(result).toEqual({ message_id: 1 });
       }

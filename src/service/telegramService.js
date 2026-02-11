@@ -456,7 +456,7 @@ export async function sendPasswordResetToken(chatId, resetData) {
   message += `${url}\n\n`;
   message += `*Username:* ${escapeMarkdown(username)}\n`;
   message += `*Token:* \`${escapeMarkdown(token)}\`\n\n`;
-  message += `Token berlaku selama ${RESET_TOKEN_EXPIRY_MINUTES} menit\\.\n`;
+  message += `Token berlaku selama ${RESET_TOKEN_EXPIRY_MINUTES} menit.\n`;
   message += `Base URL: ${escapeMarkdown(baseResetPath)}`;
   
   return sendTelegramMessage(chatId, message);
@@ -596,7 +596,7 @@ async function processApproval(chatId, username) {
     if (!user) {
       await bot.sendMessage(
         chatId, 
-        `❌ User dengan username "${escapeMarkdown(username)}" tidak ditemukan\\.`
+        `❌ User dengan username "${escapeMarkdown(username)}" tidak ditemukan.`
       );
       return;
     }
@@ -606,7 +606,7 @@ async function processApproval(chatId, username) {
     if (user.status) {
       await bot.sendMessage(
         chatId, 
-        `✅ User "${escapeMarkdown(username)}" sudah disetujui sebelumnya\\.`
+        `✅ User "${escapeMarkdown(username)}" sudah disetujui sebelumnya.`
       );
       return;
     }
@@ -617,12 +617,12 @@ async function processApproval(chatId, username) {
     // Send notification to user via Telegram if available
     const { userNotified, userNotificationError } = await sendUserTelegramNotification(
       user,
-      `✅ Registrasi dashboard Anda telah disetujui\\.\nUsername: ${escapeMarkdown(user.username)}`
+      `✅ Registrasi dashboard Anda telah disetujui.\nUsername: ${escapeMarkdown(user.username)}`
     );
     
     // Send confirmation to admin via Telegram with notification status
     const confirmationMessage = buildConfirmationMessage(
-      `✅ User "${escapeMarkdown(username)}" berhasil disetujui\\.`,
+      `✅ User "${escapeMarkdown(username)}" berhasil disetujui.`,
       user,
       userNotified,
       userNotificationError
@@ -653,7 +653,7 @@ async function processRejection(chatId, username) {
     if (!user) {
       await bot.sendMessage(
         chatId, 
-        `❌ User dengan username "${escapeMarkdown(username)}" tidak ditemukan\\.`
+        `❌ User dengan username "${escapeMarkdown(username)}" tidak ditemukan.`
       );
       return;
     }
@@ -664,7 +664,7 @@ async function processRejection(chatId, username) {
     if (!user.status) {
       await bot.sendMessage(
         chatId, 
-        `✅ User "${escapeMarkdown(username)}" sudah ditolak sebelumnya\\.`
+        `✅ User "${escapeMarkdown(username)}" sudah ditolak sebelumnya.`
       );
       return;
     }
@@ -675,12 +675,12 @@ async function processRejection(chatId, username) {
     // Send notification to user via Telegram if available
     const { userNotified, userNotificationError } = await sendUserTelegramNotification(
       user,
-      `❌ Registrasi dashboard Anda ditolak\\.\nUsername: ${escapeMarkdown(user.username)}`
+      `❌ Registrasi dashboard Anda ditolak.\nUsername: ${escapeMarkdown(user.username)}`
     );
     
     // Send confirmation to admin via Telegram with notification status
     const confirmationMessage = buildConfirmationMessage(
-      `✅ User "${escapeMarkdown(username)}" berhasil ditolak\\.`,
+      `✅ User "${escapeMarkdown(username)}" berhasil ditolak.`,
       user,
       userNotified,
       userNotificationError
