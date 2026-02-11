@@ -81,7 +81,10 @@ export async function createLinkReport(req, res) {
     const report = await linkReportModel.createLinkReport(data);
 
     // Note: User notification for amplification link submission has been removed
-    // as per requirement to remove user message sending in amplification mechanisms
+    // as per requirement: "pada mekanisme yang berkaitan dengan amplifikasi 
+    // buang fitur pengiriman pesan ke user" (for amplification mechanisms, 
+    // remove the feature of sending messages to users)
+    // This was part of the WhatsApp to Telegram refactor (Feb 2026)
 
     sendSuccess(res, report, 201);
   } catch (err) {
