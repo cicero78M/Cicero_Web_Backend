@@ -45,8 +45,8 @@ function buildResetMessage({ username, token }) {
   return `${header}\n\nSilakan buka tautan berikut untuk mengatur ulang password Anda:\n${url}\n\n${instruction}`;
 }
 
-async function clearDashboardSessions(dashboardUserId) {
-  const sessionKey = `dashboard_login:${dashboardUserId}`;
+async function clearSessions(userId, keyPrefix) {
+  const sessionKey = `${keyPrefix}:${userId}`;
   try {
     if (typeof redis.sMembers === "function") {
       const tokens = await redis.sMembers(sessionKey);
@@ -69,96 +69,25 @@ async function clearDashboardSessions(dashboardUserId) {
     }
   } catch (err) {
     console.error(
-      `[AUTH] Gagal menghapus sesi dashboard ${dashboardUserId}: ${err.message}`,
+      `[AUTH] Gagal menghapus sesi ${keyPrefix} ${userId}: ${err.message}`,
     );
   }
+}
+
+async function clearDashboardSessions(dashboardUserId) {
+  return clearSessions(dashboardUserId, 'dashboard_login');
 }
 
 async function clearPenmasSessions(userId) {
-  const sessionKey = `penmas_login:${userId}`;
-  try {
-    if (typeof redis.sMembers === "function") {
-      const tokens = await redis.sMembers(sessionKey);
-      if (Array.isArray(tokens) && tokens.length > 0) {
-        await Promise.all(
-          tokens.map((token) =>
-            redis
-              .del(`login_token:${token}`)
-              .catch((err) =>
-                console.error(
-                  `[AUTH] Gagal menghapus token login ${token}: ${err.message}`,
-                ),
-              ),
-          ),
-        );
-      }
-    }
-    if (typeof redis.del === "function") {
-      await redis.del(sessionKey);
-    }
-  } catch (err) {
-    console.error(
-      `[AUTH] Gagal menghapus sesi penmas ${userId}: ${err.message}`,
-    );
-  }
+  return clearSessions(userId, 'penmas_login');
 }
 
 async function clearClientSessions(clientId) {
-  const sessionKey = `login:${clientId}`;
-  try {
-    if (typeof redis.sMembers === "function") {
-      const tokens = await redis.sMembers(sessionKey);
-      if (Array.isArray(tokens) && tokens.length > 0) {
-        await Promise.all(
-          tokens.map((token) =>
-            redis
-              .del(`login_token:${token}`)
-              .catch((err) =>
-                console.error(
-                  `[AUTH] Gagal menghapus token login ${token}: ${err.message}`,
-                ),
-              ),
-          ),
-        );
-      }
-    }
-    if (typeof redis.del === "function") {
-      await redis.del(sessionKey);
-    }
-  } catch (err) {
-    console.error(
-      `[AUTH] Gagal menghapus sesi client ${clientId}: ${err.message}`,
-    );
-  }
+  return clearSessions(clientId, 'login');
 }
 
 async function clearUserSessions(userId) {
-  const sessionKey = `user_login:${userId}`;
-  try {
-    if (typeof redis.sMembers === "function") {
-      const tokens = await redis.sMembers(sessionKey);
-      if (Array.isArray(tokens) && tokens.length > 0) {
-        await Promise.all(
-          tokens.map((token) =>
-            redis
-              .del(`login_token:${token}`)
-              .catch((err) =>
-                console.error(
-                  `[AUTH] Gagal menghapus token login ${token}: ${err.message}`,
-                ),
-              ),
-          ),
-        );
-      }
-    }
-    if (typeof redis.del === "function") {
-      await redis.del(sessionKey);
-    }
-  } catch (err) {
-    console.error(
-      `[AUTH] Gagal menghapus sesi user ${userId}: ${err.message}`,
-    );
-  }
+  return clearSessions(userId, 'user_login');
 }
 
 const router = express.Router();
