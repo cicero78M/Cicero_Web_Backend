@@ -1,5 +1,5 @@
 # Link Reports API
-*Last updated: 2026-02-11*
+*Last updated: 2026-02-11 (update endpoint `POST /api/link-reports-khusus`)*
 
 Dokumen ini menjelaskan endpoint untuk mengambil data link report.
 
@@ -88,6 +88,14 @@ GET /api/link-reports-khusus?user_id=84110583&post_id=DSl7lfmgd14
 ## POST /api/link-reports-khusus
 Membuat link report khusus (hanya `instagram_link`).
 
+### Autentikasi
+Endpoint ini **wajib** menggunakan Bearer token (`Authorization: Bearer <token>`).
+
+### Field Request
+- `instagram_link` (**wajib**): URL post/reel Instagram yang valid.
+- `client_id` (**wajib**): dapat dikirim dari payload request, atau fallback dari token jika implementasi issue #1 sudah diterapkan.
+- `user_id` (kondisional): kirim jika proses insert link report khusus masih membutuhkan `user_id` eksplisit dari request.
+
 ### Resolusi `client_id`
 Untuk endpoint ini, backend meresolusi `client_id` secara berurutan:
 1. `req.body.client_id`
@@ -100,6 +108,51 @@ Jika ketiganya kosong, API akan mengembalikan `400 client_id is required`.
 Jika token memiliki `client_ids`, maka `client_id` hasil resolusi harus termasuk dalam daftar tersebut.
 Jika tidak termasuk, API akan mengembalikan `403 client_id tidak diizinkan`.
 
-### Catatan payload
-- `instagram_link` wajib diisi dan harus URL post/reel Instagram yang valid.
-- Link platform lain (`facebook_link`, `twitter_link`, `tiktok_link`, `youtube_link`) tidak diizinkan untuk endpoint khusus ini.
+### Field yang Dilarang untuk Mode Khusus
+Field berikut tidak boleh dikirim untuk endpoint khusus ini:
+- `facebook_link`
+- `twitter_link`
+- `tiktok_link`
+- `youtube_link`
+
+Jika salah satu field tersebut dikirim, request dianggap invalid dan API dapat mengembalikan `400`.
+
+### Contoh Request Sukses (201)
+```
+POST /api/link-reports-khusus
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "instagram_link": "https://www.instagram.com/p/DSl7lfmgd14/",
+  "client_id": "cicero-client-01",
+  "user_id": "84110583"
+}
+```
+
+### Contoh Response Sukses (201)
+```
+{
+  "success": true,
+  "message": "Link report khusus berhasil dibuat",
+  "data": {
+    "shortcode": "DSl7lfmgd14",
+    "instagram_link": "https://www.instagram.com/p/DSl7lfmgd14/",
+    "client_id": "cicero-client-01",
+    "user_id": "84110583",
+    "created_at": "2026-02-11T09:10:00.000Z"
+  }
+}
+```
+
+### Contoh Error Input Invalid (400)
+```
+{
+  "success": false,
+  "message": "Invalid request",
+  "errors": [
+    "instagram_link harus URL post Instagram yang valid",
+    "facebook_link tidak diizinkan untuk mode khusus"
+  ]
+}
+```
