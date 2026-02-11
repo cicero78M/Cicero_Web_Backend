@@ -1,5 +1,5 @@
 import { getClientContactsById } from '../repository/clientContactRepository.js';
-import { formatToWhatsAppId, getAdminWAIds } from './waHelper.js';
+import { formatToWhatsAppId } from './waHelper.js';
 
 function normalizeRecipient(value) {
   if (!value) return null;
@@ -27,14 +27,15 @@ function addRecipients(targetSet, candidates = []) {
 
 export async function buildClientRecipientSet(
   clientId,
-  { includeGroup = true, includeAdmins = true, includeSuper = true, includeOperator = true } = {}
+  { includeGroup = true, includeSuper = true, includeOperator = true } = {}
 ) {
   const recipients = new Set();
   const contacts = await getClientContactsById(clientId);
 
-  if (includeAdmins) {
-    addRecipients(recipients, getAdminWAIds());
-  }
+  // Admin WhatsApp notification removed (using Telegram)
+  // if (includeAdmins) {
+  //   addRecipients(recipients, getAdminWAIds());
+  // }
 
   if (includeSuper) {
     addRecipients(recipients, contacts.clientSuper);

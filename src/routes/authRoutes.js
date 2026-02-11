@@ -11,6 +11,7 @@ import * as dashboardSubscriptionService from "../service/dashboardSubscriptionS
 import {
   minPhoneDigitLength,
   normalizeWhatsappNumber,
+  formatToWhatsAppId,
 } from "../utils/waHelper.js";
 import redis from "../config/redis.js";
 import { insertVisitorLog } from "../model/visitorLogModel.js";
@@ -286,7 +287,7 @@ router.post('/penmas-login', async (req, res) => {
     loginSource: 'web'
   });
   const time = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
-  notifyAdmin(
+  console.log('[AUTH]', 
     `\uD83D\uDD11 Login Penmas: ${user.username} (${user.role})\nWaktu: ${time}`
   );
   return res.json({ success: true, token, user: payload });
@@ -369,7 +370,7 @@ router.post('/dashboard-register', async (req, res) => {
   }
 
   // Send approval request to admin via WhatsApp
-  notifyAdmin(
+  console.log('[AUTH]', 
     `\uD83D\uDCCB Permintaan User Approval dengan data sebagai berikut :\nUsername: ${username}\nID: ${dashboard_user_id}\nRole: ${roleRow?.role_name || '-'}\nWhatsApp: ${whatsapp}\nClient ID: ${
       clientIds.length ? clientIds.join(', ') : '-'
     }\n\nBalas approvedash#${username} untuk menyetujui atau denydash#${username} untuk menolak.`
@@ -470,7 +471,7 @@ router.post('/dashboard-login', async (req, res) => {
   const clientInfo = user.client_ids.length === 1 ? user.client_ids[0] : user.client_ids.join(', ');
   
   // Send notification to admin via WhatsApp
-  notifyAdmin(
+  console.log('[AUTH]', 
     `\uD83D\uDD11 Login dashboard: ${user.username} (${user.role})\n${clientInfoLabel}: ${clientInfo}\nWaktu: ${time}`
   );
   
@@ -506,7 +507,7 @@ router.post("/login", async (req, res) => {
     const time = new Date().toLocaleString("id-ID", {
       timeZone: "Asia/Jakarta",
     });
-    notifyAdmin(
+    console.log('[AUTH]', 
       `❌ Login gagal\nAlasan: ${reason}\nID: ${client_id || "-"}\nOperator: ${
         client_operator || "-"}\nWaktu: ${time}`
     );
@@ -524,7 +525,7 @@ router.post("/login", async (req, res) => {
   if (!client) {
     const reason = "client_id tidak ditemukan";
     const time = new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" });
-    notifyAdmin(
+    console.log('[AUTH]', 
       `❌ Login gagal\nAlasan: ${reason}\nID: ${client_id}\nOperator: ${client_operator}\nWaktu: ${time}`
     );
     return res.status(401).json({
@@ -589,7 +590,7 @@ router.post("/login", async (req, res) => {
   const time = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
   
   // Send notification to admin via WhatsApp
-  notifyAdmin(
+  console.log('[AUTH]', 
     `\uD83D\uDD11 Login: ${client.nama} (${client.client_id})\nOperator: ${client_operator}\nWaktu: ${time}`
   );
   
@@ -690,7 +691,7 @@ router.post('/user-login', async (req, res) => {
     const time = new Date().toLocaleString('id-ID', {
       timeZone: 'Asia/Jakarta'
     });
-    queueAdminNotification(
+    console.warn('[AUTH]', 
       `\uD83D\uDD11 Login user: ${user.user_id} - ${user.nama}\nWaktu: ${time}`
     );
   }
@@ -702,7 +703,7 @@ router.get('/open', async (req, res) => {
   const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress;
   const ua = req.headers['user-agent'] || '';
   await insertVisitorLog({ ip, userAgent: ua });
-  notifyAdmin(
+  console.log('[AUTH]', 
     `\uD83D\uDD0D Web dibuka\nIP: ${ip}\nUA: ${ua}\nWaktu: ${time}`
   );
   return res.json({ success: true });
