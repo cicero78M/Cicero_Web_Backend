@@ -172,7 +172,7 @@ export async function sendTelegramAdminMessage(message, options = {}) {
   
   if (adminChatIds.length === 0) {
     console.warn('[Telegram] TELEGRAM_ADMIN_CHAT_ID not configured');
-    return null;
+    return [];
   }
 
   // Send message to all admin chat IDs

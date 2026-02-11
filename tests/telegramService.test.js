@@ -134,10 +134,11 @@ describe('telegramService', () => {
   });
 
   describe('sendTelegramAdminMessage', () => {
-    it('should skip when admin chat ID is not configured', async () => {
+    it('should return empty array when admin chat ID is not configured', async () => {
       delete process.env.TELEGRAM_ADMIN_CHAT_ID;
       const result = await sendTelegramAdminMessage('Admin message');
-      expect(result).toBeNull();
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBe(0);
     });
 
     it('should send message to single admin chat', async () => {
