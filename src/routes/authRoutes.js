@@ -45,8 +45,8 @@ function buildResetMessage({ username, token }) {
   return `${header}\n\nSilakan buka tautan berikut untuk mengatur ulang password Anda:\n${url}\n\n${instruction}`;
 }
 
-async function clearDashboardSessions(dashboardUserId) {
-  const sessionKey = `dashboard_login:${dashboardUserId}`;
+async function clearSessions(userId, keyPrefix) {
+  const sessionKey = `${keyPrefix}:${userId}`;
   try {
     if (typeof redis.sMembers === "function") {
       const tokens = await redis.sMembers(sessionKey);
@@ -69,9 +69,25 @@ async function clearDashboardSessions(dashboardUserId) {
     }
   } catch (err) {
     console.error(
-      `[AUTH] Gagal menghapus sesi dashboard ${dashboardUserId}: ${err.message}`,
+      `[AUTH] Gagal menghapus sesi ${keyPrefix} ${userId}: ${err.message}`,
     );
   }
+}
+
+async function clearDashboardSessions(dashboardUserId) {
+  return clearSessions(dashboardUserId, 'dashboard_login');
+}
+
+async function clearPenmasSessions(userId) {
+  return clearSessions(userId, 'penmas_login');
+}
+
+async function clearClientSessions(clientId) {
+  return clearSessions(clientId, 'login');
+}
+
+async function clearUserSessions(userId) {
+  return clearSessions(userId, 'user_login');
 }
 
 const router = express.Router();
@@ -286,6 +302,7 @@ router.post('/penmas-login', async (req, res) => {
   const token = jwt.sign(payload, process.env.JWT_SECRET, {
     expiresIn: '2h',
   });
+  await clearPenmasSessions(user.user_id);
   try {
     await redis.sAdd(`penmas_login:${user.user_id}`, token);
     await redis.set(`login_token:${token}`, `penmas:${user.user_id}`, {
@@ -461,6 +478,7 @@ router.post('/dashboard-login', async (req, res) => {
   const token = jwt.sign(payload, process.env.JWT_SECRET, {
     expiresIn: '2h',
   });
+  await clearDashboardSessions(user.dashboard_user_id);
   try {
     await redis.sAdd(`dashboard_login:${user.dashboard_user_id}`, token);
     await redis.set(`login_token:${token}`, `dashboard:${user.dashboard_user_id}`, {
@@ -572,6 +590,7 @@ router.post("/login", async (req, res) => {
   const token = jwt.sign(payload, process.env.JWT_SECRET, {
     expiresIn: "2h",
   });
+  await clearClientSessions(client_id);
   try {
     const setKey = `login:${client_id}`;
     await redis.sAdd(setKey, token);
@@ -666,6 +685,7 @@ router.post('/user-login', async (req, res) => {
   const token = jwt.sign(payload, process.env.JWT_SECRET, {
     expiresIn: '2h'
   });
+  await clearUserSessions(user.user_id);
   try {
     await redis.sAdd(`user_login:${user.user_id}`, token);
     await redis.set(`login_token:${token}`, `user:${user.user_id}`, {
