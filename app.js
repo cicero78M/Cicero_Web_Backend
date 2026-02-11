@@ -8,15 +8,10 @@ import routes from './src/routes/index.js';
 import authRoutes from './src/routes/authRoutes.js';
 import passwordResetAliasRoutes from './src/routes/passwordResetAliasRoutes.js';
 import claimRoutes from './src/routes/claimRoutes.js';
-import waHealthRoutes from './src/routes/waHealthRoutes.js';
-import adminRoutes from './src/routes/adminRoutes.js';
 import { notFound, errorHandler } from './src/middleware/errorHandler.js';
 import { authRequired } from './src/middleware/authMiddleware.js';
 import { dedupRequest } from './src/middleware/dedupRequestMiddleware.js';
 import { sensitivePathGuard } from './src/middleware/sensitivePathGuard.js';
-// Import waService to initialize WhatsApp clients at startup
-// eslint-disable-next-line no-unused-vars
-import { waClient } from './src/service/waService.js';
 import { startOtpWorker } from './src/service/otpQueue.js';
 
 startOtpWorker().catch(err => console.error('[OTP] worker error', err));
@@ -42,8 +37,6 @@ app.all('/_next/dev/', (req, res) => res.status(200).json({ status: 'ok' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/claim', claimRoutes);
 app.use('/api/password-reset', passwordResetAliasRoutes);
-app.use('/api/health/wa', waHealthRoutes);
-app.use('/api/admin', adminRoutes);
 
 // ===== ROUTE LAIN (WAJIB TOKEN) =====
 app.use('/api', authRequired, routes);

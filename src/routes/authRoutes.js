@@ -9,36 +9,18 @@ import * as dashboardPasswordResetModel from "../model/dashboardPasswordResetMod
 import * as userModel from "../model/userModel.js";
 import * as dashboardSubscriptionService from "../service/dashboardSubscriptionService.js";
 import {
-  isAdminWhatsApp,
-  formatToWhatsAppId,
-  getAdminWAIds,
   minPhoneDigitLength,
   normalizeWhatsappNumber,
-  safeSendMessage,
 } from "../utils/waHelper.js";
 import redis from "../config/redis.js";
-import waClient, {
-  waitForWaReady,
-  queueAdminNotification,
-} from "../service/waService.js";
 import { insertVisitorLog } from "../model/visitorLogModel.js";
 import { insertLoginLog } from "../model/loginLogModel.js";
-import { sendLoginLogNotification, sendUserApprovalRequest } from "../service/telegramService.js";
-
-async function notifyAdmin(message) {
-  try {
-    await waitForWaReady();
-  } catch (err) {
-    console.warn(
-      `[WA] Queueing admin notification: ${err.message}`
-    );
-    queueAdminNotification(message);
-    return;
-  }
-  for (const wa of getAdminWAIds()) {
-    safeSendMessage(waClient, wa, message);
-  }
-}
+import { 
+  sendLoginLogNotification, 
+  sendUserApprovalRequest,
+  sendPasswordResetFailureNotification,
+  sendTelegramAdminMessage
+} from "../service/telegramService.js";
 
 const RESET_TOKEN_EXPIRY_MINUTES = Number(
   process.env.DASHBOARD_RESET_TOKEN_EXPIRY_MINUTES || 15,
@@ -50,7 +32,7 @@ function buildResetMessage({ username, token }) {
   const configuredBaseUrl =
     process.env.DASHBOARD_PASSWORD_RESET_URL || process.env.DASHBOARD_URL;
   const resetBaseUrl = configuredBaseUrl || DEFAULT_RESET_BASE_URL;
-  const header = "\uD83D\uDD10 Reset Password Dashboard";
+  const header = "🔐 Reset Password Dashboard";
   const baseUrlWithoutTrailingSlash = resetBaseUrl.replace(/\/$/, "");
   const baseResetPath = baseUrlWithoutTrailingSlash.endsWith("/reset-password")
     ? baseUrlWithoutTrailingSlash
@@ -58,7 +40,7 @@ function buildResetMessage({ username, token }) {
   const url = `${baseResetPath}?token=${token}`;
   const instruction =
     `Username: ${username}\nToken: ${token}\nToken berlaku selama ${RESET_TOKEN_EXPIRY_MINUTES} menit. Dengan url ${baseResetPath}`;
-  return `${header}\n\nSilakan buka tautan berikut untuk mengatur ulang password Anda:\n${url}\n\n${instruction}\nCopy`;
+  return `${header}\n\nSilakan buka tautan berikut untuk mengatur ulang password Anda:\n${url}\n\n${instruction}`;
 }
 
 async function clearDashboardSessions(dashboardUserId) {
@@ -148,20 +130,18 @@ export async function handleDashboardPasswordResetRequest(req, res) {
     });
 
     try {
-      await waitForWaReady();
-      const wid = formatToWhatsAppId(normalizedContact);
       const message = buildResetMessage({ username: user.username, token: resetToken });
-      const sent = await safeSendMessage(waClient, wid, message);
+      const sent = await sendTelegramAdminMessage(message);
       if (!sent) {
-        throw new Error('WA send returned false');
+        throw new Error('Telegram send returned null');
       }
     } catch (err) {
       console.warn(
-        `[WA] Gagal mengirim reset password dashboard untuk ${username}: ${err.message}`,
+        `[Telegram] Gagal mengirim reset password dashboard untuk ${username}: ${err.message}`,
       );
-      queueAdminNotification(
+      await sendPasswordResetFailureNotification(
         `⚠️ Reset password dashboard gagal dikirim. Username: ${username}. Kontak: ${contact}. Token: ${resetToken}`,
-      );
+      ).catch(e => console.error('[Telegram] Failed to send failure notification:', e));
       return res.status(500).json({
         success: false,
         message:
@@ -171,7 +151,7 @@ export async function handleDashboardPasswordResetRequest(req, res) {
 
     return res.json({
       success: true,
-      message: 'Instruksi reset password telah dikirim melalui WhatsApp.',
+      message: 'Instruksi reset password telah dikirim ke admin melalui Telegram.',
     });
   } catch (err) {
     console.error('[AUTH] Gagal membuat permintaan reset password dashboard:', err);
