@@ -29,13 +29,40 @@ export async function getLinkReportByShortcode(req, res, next) {
 export async function createLinkReport(req, res, next) {
   try {
     const data = { ...req.body };
+    const resolvedClientId =
+      data.client_id ||
+      req.query?.client_id ||
+      req.user?.client_id;
+
+    const normalizedResolvedClientId = resolvedClientId
+      ? String(resolvedClientId).toLowerCase()
+      : null;
+    const userClientIds = req.user?.client_ids
+      ? Array.isArray(req.user.client_ids)
+        ? req.user.client_ids
+        : [req.user.client_ids]
+      : [];
+    const normalizedUserClientIds = userClientIds.map((clientId) =>
+      String(clientId).toLowerCase()
+    );
     
     // Validate required fields first (fail fast)
-    if (!data.client_id) {
+    if (!resolvedClientId) {
       const error = new Error('client_id is required');
       error.statusCode = 400;
       throw error;
     }
+
+    if (
+      req.user?.client_ids &&
+      !normalizedUserClientIds.includes(normalizedResolvedClientId)
+    ) {
+      const error = new Error('client_id tidak diizinkan');
+      error.statusCode = 403;
+      throw error;
+    }
+
+    data.client_id = resolvedClientId;
     
     // Validate that Instagram link is provided
     if (!data.instagram_link) {
