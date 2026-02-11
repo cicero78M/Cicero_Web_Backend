@@ -278,6 +278,7 @@ Script ini akan:
 ### Client integration for protected endpoints
 
 Untuk endpoint protected seperti `/api/link-reports`, `/api/link-reports-khusus`, dan `/api/users/:id`, client harus menyimpan token dari `POST /api/auth/user-login` lalu mengirimkannya di setiap request melalui header `Authorization: Bearer <token>`.
+Jika header `Authorization` dikirim tetapi tidak menggunakan format `Bearer <token>`, backend akan merespons `401` dengan pesan `Authorization harus format Bearer token` untuk memudahkan diagnosis integrasi. Jika header/cookie token tidak ada sama sekali, respons tetap `401 Token required`.
 
 Repository ini menyediakan helper `createProtectedApiClient` di `src/service/protectedApiClient.js` sebagai acuan integrasi client:
 

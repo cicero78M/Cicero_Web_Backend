@@ -34,6 +34,7 @@ describe('authRequired middleware', () => {
     app.use('/api', authRequired, router);
   });
 
+
   test('blocks operator role on claim routes when protected by authRequired', async () => {
     const token = jwt.sign({ user_id: 'o1', role: 'operator' }, process.env.JWT_SECRET);
     const res = await request(app)
@@ -207,5 +208,31 @@ describe('authRequired middleware', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
+  });
+
+  test('passes with Authorization Bearer token format', async () => {
+    const token = jwt.sign({ user_id: 'u2', role: 'user' }, process.env.JWT_SECRET);
+    const res = await request(app)
+      .get('/api/other')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
+  test('fails with clear message when Authorization is not Bearer format', async () => {
+    const token = jwt.sign({ user_id: 'u2', role: 'user' }, process.env.JWT_SECRET);
+    const res = await request(app)
+      .get('/api/other')
+      .set('Authorization', token);
+    expect(res.status).toBe(401);
+    expect(res.body.success).toBe(false);
+    expect(res.body.message).toBe('Authorization harus format Bearer token');
+  });
+
+  test('fails with Token required when Authorization header is missing', async () => {
+    const res = await request(app).get('/api/other');
+    expect(res.status).toBe(401);
+    expect(res.body.success).toBe(false);
+    expect(res.body.message).toBe('Token required');
   });
 });

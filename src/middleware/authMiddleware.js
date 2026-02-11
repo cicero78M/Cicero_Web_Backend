@@ -47,7 +47,12 @@ function isOperatorAllowedPath(method, pathname) {
 }
 
 export function authRequired(req, res, next) {
-  const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
+  const authorizationHeader = req.headers.authorization;
+  if (authorizationHeader && !authorizationHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, message: 'Authorization harus format Bearer token' });
+  }
+
+  const token = req.cookies?.token || authorizationHeader?.split(' ')[1];
   if (!token) return res.status(401).json({ success: false, message: 'Token required' });
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
