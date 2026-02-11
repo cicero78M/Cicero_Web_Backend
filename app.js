@@ -19,8 +19,12 @@ startOtpWorker().catch(err => console.error('[OTP] worker error', err));
 const app = express();
 app.disable('etag');
 
+const corsOrigin = env.CORS_ORIGIN.split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+
 app.use(cors({
-  origin: env.CORS_ORIGIN,
+  origin: corsOrigin,
   credentials: true,
 }));
 

@@ -1,6 +1,6 @@
 # Login API Guide
 
-*Last updated: 2025-02-18*
+*Last updated: 2026-02-11*
 
 This document explains how clients, regular users and dashboard operators authenticate with the backend. Available endpoints:
 - `/api/auth/login` for client operators,
@@ -9,6 +9,38 @@ This document explains how clients, regular users and dashboard operators authen
 - `/api/auth/dashboard-password-reset/request` and `/api/auth/dashboard-password-reset/confirm` for dashboard password recovery (aliases available at `/api/auth/password-reset/request`, `/api/auth/password-reset/confirm`, and the unauthenticated `/api/password-reset/request` plus `/api/password-reset/confirm`).
 
 All return a JSON Web Token (JWT) that must be included in subsequent requests unless noted otherwise.
+
+
+## Cookie & CORS Deployment Notes (Web Browser)
+
+Untuk deployment web yang mengandalkan cookie token lintas origin:
+
+- `CORS_ORIGIN` **wajib** diisi origin frontend spesifik (contoh `https://frontend.example.com`) dan jangan gunakan `*`.
+- Frontend harus mengirim request dengan credentials (`fetch(..., { credentials: 'include' })` atau konfigurasi setara di axios).
+- Respons login (`/api/auth/login`, `/api/auth/penmas-login`, `/api/auth/user-login`, `/api/auth/dashboard-login`) mengembalikan `Set-Cookie: token=...` dan browser hanya akan menyimpannya jika CORS + cookie attribute valid.
+
+### Matriks Environment Auth/Cookie
+
+| Environment | `CORS_ORIGIN` | `AUTH_COOKIE_SAME_SITE` | `AUTH_COOKIE_SECURE` | `AUTH_COOKIE_DOMAIN` | Catatan |
+|---|---|---|---|---|---|
+| Local dev (FE & BE localhost) | `http://localhost:5173` | `lax` | `false` | *(kosong)* | Cocok untuk FE/BE localhost tanpa HTTPS. |
+| Staging (cross-subdomain HTTPS) | `https://staging-frontend.example.com` | `none` | `true` | `.example.com` | Wajib HTTPS jika `sameSite=none`. |
+| Production (cross-subdomain HTTPS) | `https://frontend.example.com` | `none` | `true` | `.example.com` | Rekomendasi untuk FE/BE beda subdomain. |
+| Production (same-site domain) | `https://app.example.com` | `lax` | `true` | `.example.com` atau *(kosong)* | Gunakan `lax` bila FE/BE masih same-site. |
+
+### Verifikasi `Set-Cookie` pada Login
+
+1. Jalankan login dari browser (DevTools → Network).
+2. Pastikan response memiliki header `Set-Cookie`.
+3. Pastikan request login memuat credentials (`include`).
+4. Cek tab Application/Storage → Cookies, lalu pastikan cookie `token` tersimpan untuk domain backend/parent domain yang tepat.
+5. Jika cookie tidak tersimpan, cek kombinasi `sameSite`, `secure`, domain cookie, dan origin CORS.
+
+### Panduan `sameSite` & `secure`
+
+- FE/BE beda domain atau beda subdomain umumnya perlu `AUTH_COOKIE_SAME_SITE=none` dan `AUTH_COOKIE_SECURE=true`.
+- `sameSite=none` akan ditolak browser jika `secure=false`.
+- Jika deployment HTTP non-HTTPS (khusus lokal), gunakan `sameSite=lax` dan `secure=false`.
 
 ## 1. Payload Format
 

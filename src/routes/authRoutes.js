@@ -1,6 +1,7 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import { query } from "../db/index.js";
+import { env } from "../config/env.js";
 import bcrypt from "bcrypt";
 import { v4 as uuidv4 } from "uuid";
 import * as penmasUserModel from "../model/penmasUserModel.js";
@@ -74,6 +75,24 @@ async function clearDashboardSessions(dashboardUserId) {
 }
 
 const router = express.Router();
+
+
+const cookieSameSite = ['lax', 'strict', 'none'].includes(env.AUTH_COOKIE_SAME_SITE.toLowerCase())
+  ? env.AUTH_COOKIE_SAME_SITE.toLowerCase()
+  : 'lax';
+
+const cookieSecure = ['true', '1', 'yes'].includes(String(env.AUTH_COOKIE_SECURE).toLowerCase());
+
+const cookieOptions = {
+  httpOnly: true,
+  sameSite: cookieSameSite,
+  maxAge: 2 * 60 * 60 * 1000,
+  secure: cookieSecure,
+};
+
+if (env.AUTH_COOKIE_DOMAIN) {
+  cookieOptions.domain = env.AUTH_COOKIE_DOMAIN;
+}
 
 export async function handleDashboardPasswordResetRequest(req, res) {
   const { username, contact } = req.body;
@@ -275,12 +294,7 @@ router.post('/penmas-login', async (req, res) => {
   } catch (err) {
     console.error('[AUTH] Gagal menyimpan token login penmas:', err.message);
   }
-  res.cookie('token', token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 2 * 60 * 60 * 1000,
-    secure: process.env.NODE_ENV === 'production',
-  });
+  res.cookie('token', token, cookieOptions);
   await insertLoginLog({
     actorId: user.user_id,
     loginType: 'operator',
@@ -455,12 +469,7 @@ router.post('/dashboard-login', async (req, res) => {
   } catch (err) {
     console.error('[AUTH] Gagal menyimpan token login dashboard:', err.message);
   }
-  res.cookie('token', token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 2 * 60 * 60 * 1000,
-    secure: process.env.NODE_ENV === 'production',
-  });
+  res.cookie('token', token, cookieOptions);
   await insertLoginLog({
     actorId: user.dashboard_user_id,
     loginType: 'operator',
@@ -570,12 +579,7 @@ router.post("/login", async (req, res) => {
   } catch (err) {
     console.error('[AUTH] Gagal menyimpan token login:', err.message);
   }
-  res.cookie('token', token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 2 * 60 * 60 * 1000,
-    secure: process.env.NODE_ENV === 'production'
-  });
+  res.cookie('token', token, cookieOptions);
   await insertLoginLog({
     actorId: client.client_id,
     loginType: 'operator',
@@ -670,12 +674,7 @@ router.post('/user-login', async (req, res) => {
   } catch (err) {
     console.error('[AUTH] Gagal menyimpan token login user:', err.message);
   }
-  res.cookie('token', token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 2 * 60 * 60 * 1000,
-    secure: process.env.NODE_ENV === 'production'
-  });
+  res.cookie('token', token, cookieOptions);
   await insertLoginLog({
     actorId: user.user_id,
     loginType: 'user',
