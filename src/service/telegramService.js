@@ -10,6 +10,41 @@ let isInitializing = false;
 const DEFAULT_TIMEZONE = process.env.TIMEZONE || 'Asia/Jakarta';
 
 /**
+ * Escape Markdown special characters for Telegram
+ * @param {string} text - Text to escape
+ * @returns {string} Escaped text safe for Markdown parsing
+ */
+function escapeMarkdown(text) {
+  if (!text) return '';
+  
+  // Convert to string if not already
+  const str = String(text);
+  
+  // Escape special Markdown characters: _ * [ ] ( ) ~ ` > # + - = | { } . !
+  // Note: We need to be careful with backslashes - escape them first
+  return str
+    .replace(/\\/g, '\\\\')  // Backslash must be escaped first
+    .replace(/_/g, '\\_')     // Underscore
+    .replace(/\*/g, '\\*')    // Asterisk
+    .replace(/\[/g, '\\[')    // Left bracket
+    .replace(/\]/g, '\\]')    // Right bracket
+    .replace(/\(/g, '\\(')    // Left parenthesis
+    .replace(/\)/g, '\\)')    // Right parenthesis
+    .replace(/~/g, '\\~')     // Tilde
+    .replace(/`/g, '\\`')     // Backtick
+    .replace(/>/g, '\\>')     // Greater than
+    .replace(/#/g, '\\#')     // Hash
+    .replace(/\+/g, '\\+')    // Plus
+    .replace(/-/g, '\\-')     // Minus
+    .replace(/=/g, '\\=')     // Equal
+    .replace(/\|/g, '\\|')    // Pipe
+    .replace(/\{/g, '\\{')    // Left brace
+    .replace(/\}/g, '\\}')    // Right brace
+    .replace(/\./g, '\\.')    // Dot
+    .replace(/!/g, '\\!');    // Exclamation mark
+}
+
+/**
  * Check if a chat ID is authorized as admin
  * @param {number|string} chatId - Telegram chat ID
  * @returns {boolean}
@@ -154,6 +189,22 @@ export async function sendTelegramMessage(chatId, message, options = {}) {
     return result;
   } catch (error) {
     console.error(`[Telegram] Failed to send message to ${chatId}:`, error.message);
+    
+    // If parse error, retry without Markdown formatting
+    if (error.message && error.message.includes("can't parse entities")) {
+      console.warn(`[Telegram] Retrying message to ${chatId} without Markdown formatting`);
+      try {
+        // Remove parse_mode from options and retry
+        const { parse_mode, ...optionsWithoutParseMode } = options;
+        const result = await bot.sendMessage(chatId, message, optionsWithoutParseMode);
+        console.log(`[Telegram] Message sent to ${chatId} (plain text)`);
+        return result;
+      } catch (retryError) {
+        console.error(`[Telegram] Failed to send plain text message to ${chatId}:`, retryError.message);
+        return null;
+      }
+    }
+    
     return null;
   }
 }
@@ -206,12 +257,12 @@ export async function sendLoginLogNotification(logData) {
   });
   
   let message = `🔑 *Login Dashboard*\n\n`;
-  message += `*Username:* ${username}\n`;
-  if (role) message += `*Role:* ${role}\n`;
-  if (clientInfo) message += `*${clientInfo.label}:* ${clientInfo.value}\n`;
-  message += `*Tipe:* ${loginType}\n`;
-  message += `*Sumber:* ${loginSource}\n`;
-  message += `*Waktu:* ${time}`;
+  message += `*Username:* ${escapeMarkdown(username)}\n`;
+  if (role) message += `*Role:* ${escapeMarkdown(role)}\n`;
+  if (clientInfo) message += `*${escapeMarkdown(clientInfo.label)}:* ${escapeMarkdown(clientInfo.value)}\n`;
+  message += `*Tipe:* ${escapeMarkdown(loginType)}\n`;
+  message += `*Sumber:* ${escapeMarkdown(loginSource)}\n`;
+  message += `*Waktu:* ${escapeMarkdown(time)}`;
   
   return sendTelegramAdminMessage(message);
 }
@@ -225,15 +276,15 @@ export async function sendUserApprovalRequest(userData) {
   const { dashboard_user_id, username, whatsapp, email, role } = userData;
   
   let message = `📋 *Permintaan Registrasi Dashboard*\n\n`;
-  message += `*User ID:* ${dashboard_user_id}\n`;
-  message += `*Username:* ${username}\n`;
-  if (whatsapp) message += `*WhatsApp:* ${whatsapp}\n`;
-  if (email) message += `*Email:* ${email}\n`;
-  if (role) message += `*Role:* ${role}\n`;
+  message += `*User ID:* ${escapeMarkdown(String(dashboard_user_id))}\n`;
+  message += `*Username:* ${escapeMarkdown(username)}\n`;
+  if (whatsapp) message += `*WhatsApp:* ${escapeMarkdown(whatsapp)}\n`;
+  if (email) message += `*Email:* ${escapeMarkdown(email)}\n`;
+  if (role) message += `*Role:* ${escapeMarkdown(role)}\n`;
   message += `\n_Menunggu persetujuan admin_\n\n`;
   message += `Gunakan tombol di bawah atau ketik:\n`;
-  message += `\`/approvedash ${username}\` untuk menyetujui\n`;
-  message += `\`/denydash ${username}\` untuk menolak`;
+  message += `\`/approvedash ${escapeMarkdown(username)}\` untuk menyetujui\n`;
+  message += `\`/denydash ${escapeMarkdown(username)}\` untuk menolak`;
   
   // Add inline keyboard with approve/deny buttons
   const inlineKeyboard = {
@@ -256,7 +307,7 @@ export async function sendUserApprovalRequest(userData) {
 export async function sendUserApprovalConfirmation(userData) {
   const { username } = userData;
   
-  const message = `✅ *Registrasi Dashboard Disetujui*\n\n*Username:* ${username}`;
+  const message = `✅ *Registrasi Dashboard Disetujui*\n\n*Username:* ${escapeMarkdown(username)}`;
   
   return sendTelegramAdminMessage(message);
 }
@@ -269,7 +320,7 @@ export async function sendUserApprovalConfirmation(userData) {
 export async function sendUserRejectionConfirmation(userData) {
   const { username } = userData;
   
-  const message = `❌ *Registrasi Dashboard Ditolak*\n\n*Username:* ${username}`;
+  const message = `❌ *Registrasi Dashboard Ditolak*\n\n*Username:* ${escapeMarkdown(username)}`;
   
   return sendTelegramAdminMessage(message);
 }
@@ -283,11 +334,11 @@ export async function sendPremiumRequestNotification(requestData) {
   const { request_id, user_id, sender_name, account_number, bank_name } = requestData;
   
   let message = `🔔 *Permintaan Subscription Premium*\n\n`;
-  message += `*User:* ${user_id}\n`;
-  message += `*Nama:* ${sender_name}\n`;
-  message += `*Rekening:* ${account_number}\n`;
-  message += `*Bank:* ${bank_name}\n`;
-  message += `*Request ID:* ${request_id}\n`;
+  message += `*User:* ${escapeMarkdown(String(user_id))}\n`;
+  message += `*Nama:* ${escapeMarkdown(sender_name)}\n`;
+  message += `*Rekening:* ${escapeMarkdown(account_number)}\n`;
+  message += `*Bank:* ${escapeMarkdown(bank_name)}\n`;
+  message += `*Request ID:* ${escapeMarkdown(String(request_id))}\n`;
   
   return sendTelegramAdminMessage(message);
 }
@@ -327,27 +378,28 @@ export async function sendDashboardPremiumRequestNotification(request) {
   
   let message = `📢 *Permintaan Akses Premium*\n\n`;
   message += `*User Dashboard:*\n`;
-  message += `• Username: ${commandUsername}\n`;
-  message += `• WhatsApp: ${request.whatsapp || '-'}\n`;
-  message += `• User ID: ${request.dashboard_user_id || '-'}\n\n`;
+  message += `• Username: ${escapeMarkdown(commandUsername)}\n`;
+  message += `• WhatsApp: ${escapeMarkdown(request.whatsapp || '-')}\n`;
+  message += `• User ID: ${escapeMarkdown(String(request.dashboard_user_id || '-'))}\n\n`;
   
   message += `*Detail Permintaan:*\n`;
-  message += `• Tier: ${request.premium_tier || '-'}\n`;
-  message += `• Client ID: ${request.client_id || '-'}\n`;
-  message += `• Request Token: ${request.request_token || '-'}\n`;
-  message += `• Status Bukti: ${paymentProofStatus}\n\n`;
+  message += `• Tier: ${escapeMarkdown(request.premium_tier || '-')}\n`;
+  message += `• Client ID: ${escapeMarkdown(String(request.client_id || '-'))}\n`;
+  message += `• Request Token: ${escapeMarkdown(request.request_token || '-')}\n`;
+  message += `• Status Bukti: ${escapeMarkdown(paymentProofStatus)}\n\n`;
   
   message += `*Detail Transfer:*\n`;
-  message += `• Bank: ${request.bank_name || '-'}\n`;
-  message += `• Nomor Rekening: ${request.account_number || '-'}\n`;
-  message += `• Nama Pengirim: ${request.sender_name || '-'}\n`;
-  message += `• Jumlah: ${formatCurrencyId(request.transfer_amount)}\n`;
+  message += `• Bank: ${escapeMarkdown(request.bank_name || '-')}\n`;
+  message += `• Nomor Rekening: ${escapeMarkdown(request.account_number || '-')}\n`;
+  message += `• Nama Pengirim: ${escapeMarkdown(request.sender_name || '-')}\n`;
+  message += `• Jumlah: ${escapeMarkdown(formatCurrencyId(request.transfer_amount))}\n`;
   
   if (request.proof_url) {
+    // For URLs in Markdown, we need to escape the URL text but not the URL itself
     message += `• [Lihat Bukti Transfer](${paymentProofLink})\n`;
   }
   
-  message += `\n*Request ID:* ${request.request_id || '-'}`;
+  message += `\n*Request ID:* ${escapeMarkdown(String(request.request_id || '-'))}`;
   
   try {
     const result = await sendTelegramAdminMessage(message);
@@ -402,10 +454,10 @@ export async function sendPasswordResetToken(chatId, resetData) {
   let message = `🔐 *Reset Password Dashboard*\n\n`;
   message += `Silakan buka tautan berikut untuk mengatur ulang password Anda:\n`;
   message += `${url}\n\n`;
-  message += `*Username:* ${username}\n`;
-  message += `*Token:* \`${token}\`\n\n`;
-  message += `Token berlaku selama ${RESET_TOKEN_EXPIRY_MINUTES} menit.\n`;
-  message += `Base URL: ${baseResetPath}`;
+  message += `*Username:* ${escapeMarkdown(username)}\n`;
+  message += `*Token:* \`${escapeMarkdown(token)}\`\n\n`;
+  message += `Token berlaku selama ${RESET_TOKEN_EXPIRY_MINUTES} menit\\.\n`;
+  message += `Base URL: ${escapeMarkdown(baseResetPath)}`;
   
   return sendTelegramMessage(chatId, message);
 }
@@ -520,7 +572,7 @@ function buildConfirmationMessage(baseMessage, user, userNotified, userNotificat
     } else {
       confirmationMessage += `\n⚠️ Notifikasi ke Telegram user gagal dikirim`;
       if (userNotificationError) {
-        confirmationMessage += `\nAlasan: ${userNotificationError}`;
+        confirmationMessage += `\nAlasan: ${escapeMarkdown(userNotificationError)}`;
       }
     }
   } else {
@@ -544,7 +596,7 @@ async function processApproval(chatId, username) {
     if (!user) {
       await bot.sendMessage(
         chatId, 
-        `❌ User dengan username "${username}" tidak ditemukan.`
+        `❌ User dengan username "${escapeMarkdown(username)}" tidak ditemukan\\.`
       );
       return;
     }
@@ -554,7 +606,7 @@ async function processApproval(chatId, username) {
     if (user.status) {
       await bot.sendMessage(
         chatId, 
-        `✅ User "${username}" sudah disetujui sebelumnya.`
+        `✅ User "${escapeMarkdown(username)}" sudah disetujui sebelumnya\\.`
       );
       return;
     }
@@ -565,12 +617,12 @@ async function processApproval(chatId, username) {
     // Send notification to user via Telegram if available
     const { userNotified, userNotificationError } = await sendUserTelegramNotification(
       user,
-      `✅ Registrasi dashboard Anda telah disetujui.\nUsername: ${user.username}`
+      `✅ Registrasi dashboard Anda telah disetujui\\.\nUsername: ${escapeMarkdown(user.username)}`
     );
     
     // Send confirmation to admin via Telegram with notification status
     const confirmationMessage = buildConfirmationMessage(
-      `✅ User "${username}" berhasil disetujui.`,
+      `✅ User "${escapeMarkdown(username)}" berhasil disetujui\\.`,
       user,
       userNotified,
       userNotificationError
@@ -582,7 +634,7 @@ async function processApproval(chatId, username) {
     console.error('[Telegram] Error handling approve command:', err);
     await bot.sendMessage(
       chatId, 
-      `❌ Terjadi kesalahan: ${err.message}`
+      `❌ Terjadi kesalahan: ${escapeMarkdown(err.message)}`
     );
   }
 }
@@ -601,7 +653,7 @@ async function processRejection(chatId, username) {
     if (!user) {
       await bot.sendMessage(
         chatId, 
-        `❌ User dengan username "${username}" tidak ditemukan.`
+        `❌ User dengan username "${escapeMarkdown(username)}" tidak ditemukan\\.`
       );
       return;
     }
@@ -612,7 +664,7 @@ async function processRejection(chatId, username) {
     if (!user.status) {
       await bot.sendMessage(
         chatId, 
-        `✅ User "${username}" sudah ditolak sebelumnya.`
+        `✅ User "${escapeMarkdown(username)}" sudah ditolak sebelumnya\\.`
       );
       return;
     }
@@ -623,12 +675,12 @@ async function processRejection(chatId, username) {
     // Send notification to user via Telegram if available
     const { userNotified, userNotificationError } = await sendUserTelegramNotification(
       user,
-      `❌ Registrasi dashboard Anda ditolak.\nUsername: ${user.username}`
+      `❌ Registrasi dashboard Anda ditolak\\.\nUsername: ${escapeMarkdown(user.username)}`
     );
     
     // Send confirmation to admin via Telegram with notification status
     const confirmationMessage = buildConfirmationMessage(
-      `✅ User "${username}" berhasil ditolak.`,
+      `✅ User "${escapeMarkdown(username)}" berhasil ditolak\\.`,
       user,
       userNotified,
       userNotificationError
@@ -640,7 +692,7 @@ async function processRejection(chatId, username) {
     console.error('[Telegram] Error handling deny command:', err);
     await bot.sendMessage(
       chatId, 
-      `❌ Terjadi kesalahan: ${err.message}`
+      `❌ Terjadi kesalahan: ${escapeMarkdown(err.message)}`
     );
   }
 }
