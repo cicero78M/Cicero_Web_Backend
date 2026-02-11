@@ -5,9 +5,23 @@ import { normalizeUserId, normalizeEmail } from '../utils/utilsHelper.js';
 const OTP_TTL_SEC = 5 * 60;
 const VERIFY_TTL_SEC = 10 * 60;
 const MAX_ATTEMPTS = 3;
+const RATE_LIMIT_SEC = 5 * 60;
 
 function hashOtp(code) {
   return crypto.createHash('sha256').update(String(code)).digest('hex');
+}
+
+export async function checkOtpRateLimit(email) {
+  const em = normalizeEmail(email);
+  const rateLimitKey = `otp_rate_limit:${em}`;
+  const lastRequest = await redis.get(rateLimitKey);
+  return lastRequest === null;
+}
+
+export async function setOtpRateLimit(email) {
+  const em = normalizeEmail(email);
+  const rateLimitKey = `otp_rate_limit:${em}`;
+  await redis.set(rateLimitKey, Date.now().toString(), { EX: RATE_LIMIT_SEC });
 }
 
 export async function generateOtp(nrp, email) {
@@ -16,6 +30,7 @@ export async function generateOtp(nrp, email) {
   const otp = String(Math.floor(100000 + Math.random() * 900000));
   const value = JSON.stringify({ hash: hashOtp(otp), email: em, attempts: 0 });
   await redis.set(`otp:${key}`, value, { EX: OTP_TTL_SEC });
+  await setOtpRateLimit(email);
   return otp;
 }
 

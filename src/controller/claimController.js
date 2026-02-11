@@ -7,6 +7,7 @@ import {
   verifyOtp,
   isVerified,
   refreshVerification,
+  checkOtpRateLimit,
 } from '../service/otpService.js';
 import { normalizeWhatsappNumber, minPhoneDigitLength } from '../utils/waHelper.js';
 import dns from 'dns/promises';
@@ -176,6 +177,13 @@ export async function requestOtp(req, res, next) {
       if (storedEmail !== em) {
         return res.status(400).json({ success: false, message: 'email tidak sesuai' });
       }
+    }
+    const canRequest = await checkOtpRateLimit(em);
+    if (!canRequest) {
+      return res.status(429).json({
+        success: false,
+        message: 'Permintaan OTP terlalu sering. Silakan tunggu 5 menit sebelum meminta OTP kembali.',
+      });
     }
     const otp = await generateOtp(nrp, em);
     try {

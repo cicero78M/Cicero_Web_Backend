@@ -22,6 +22,7 @@ beforeEach(async () => {
     isVerified: jest.fn(),
     refreshVerification: jest.fn(),
     clearVerification: jest.fn(),
+    checkOtpRateLimit: jest.fn(),
   }));
   jest.unstable_mockModule('../src/service/otpQueue.js', () => ({
     enqueueOtp: jest.fn(),

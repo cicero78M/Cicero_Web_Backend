@@ -17,7 +17,8 @@ describe('updateUserData', () => {
       refreshVerification: jest.fn(),
       clearVerification: jest.fn(),
       generateOtp: jest.fn(),
-      verifyOtp: jest.fn()
+      verifyOtp: jest.fn(),
+      checkOtpRateLimit: jest.fn()
     }));
     jest.unstable_mockModule('../src/service/otpQueue.js', () => ({
       enqueueOtp: jest.fn(),
@@ -129,7 +130,8 @@ describe('updateUserData', () => {
       isVerified: jest.fn().mockResolvedValue(false),
       refreshVerification: jest.fn(),
       generateOtp: jest.fn(),
-      verifyOtp: jest.fn().mockResolvedValue(true)
+      verifyOtp: jest.fn().mockResolvedValue(true),
+      checkOtpRateLimit: jest.fn()
     }));
     jest.unstable_mockModule('../src/service/otpQueue.js', () => ({
       enqueueOtp: jest.fn(),
