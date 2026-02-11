@@ -14,12 +14,6 @@ import {
 } from "../../utils/utilsHelper.js";
 import { normalizeHandleValue } from "../../utils/handleNormalizer.js";
 import { absensiLoginWeb } from "../fetchabsensi/dashboard/absensiLoginWeb.js";
-import {
-  getAdminWANumbers,
-  getAdminWAIds,
-  sendWAFile,
-  safeSendMessage,
-} from "../../utils/waHelper.js";
 import * as linkReportModel from "../../model/linkReportModel.js";
 import { saveLinkReportExcel } from "../../service/linkReportExcelService.js";
 import fs from "fs/promises";
@@ -56,6 +50,21 @@ import { clearSession } from "../../utils/sessionsHelper.js";
 import { appendSubmenuBackInstruction } from "./menuPromptHelpers.js";
 
 function ignore(..._args) {}
+
+// WhatsApp stubs - functionality removed (using Telegram for notifications)
+function getAdminWAIds() {
+  return [];
+}
+
+async function safeSendMessage(_client, _chatId, message) {
+  console.log(`[WA-Stub] Message would be sent: ${message.substring(0, 100)}...`);
+  return false;
+}
+
+async function sendWAFile(_client, _buffer, _filename, _recipients, _mimetype) {
+  console.log(`[WA-Stub] File would be sent: ${_filename}`);
+  return false;
+}
 
 const COMPLAINT_RESPONSE_DELAY_MS =
   Number(process.env.COMPLAINT_RESPONSE_DELAY_MS || 3000);

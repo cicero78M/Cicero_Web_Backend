@@ -5,8 +5,7 @@ import {
   findLatestOpenDashboardPremiumRequestByIdentifier,
   markDashboardPremiumRequestNotified,
 } from '../service/dashboardPremiumRequestService.js';
-import waClient from '../service/waService.js';
-import { sendDashboardPremiumRequestNotification } from '../service/waService.js';
+import { sendDashboardPremiumRequestNotification } from '../service/telegramService.js';
 
 function getDashboardUserFromRequest(req) {
   return req.dashboardUser || req.user || null;
@@ -19,7 +18,7 @@ async function broadcastDashboardPremiumRequest(request, source = 'create') {
   }
 
   try {
-    const notified = await sendDashboardPremiumRequestNotification(waClient, request);
+    const notified = await sendDashboardPremiumRequestNotification(request);
     if (notified) {
       const metadataPatch = {
         admin_notification_sent: true,

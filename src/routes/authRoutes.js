@@ -9,36 +9,19 @@ import * as dashboardPasswordResetModel from "../model/dashboardPasswordResetMod
 import * as userModel from "../model/userModel.js";
 import * as dashboardSubscriptionService from "../service/dashboardSubscriptionService.js";
 import {
-  isAdminWhatsApp,
-  formatToWhatsAppId,
-  getAdminWAIds,
   minPhoneDigitLength,
   normalizeWhatsappNumber,
-  safeSendMessage,
+  formatToWhatsAppId,
 } from "../utils/waHelper.js";
 import redis from "../config/redis.js";
-import waClient, {
-  waitForWaReady,
-  queueAdminNotification,
-} from "../service/waService.js";
 import { insertVisitorLog } from "../model/visitorLogModel.js";
 import { insertLoginLog } from "../model/loginLogModel.js";
-import { sendLoginLogNotification, sendUserApprovalRequest } from "../service/telegramService.js";
-
-async function notifyAdmin(message) {
-  try {
-    await waitForWaReady();
-  } catch (err) {
-    console.warn(
-      `[WA] Queueing admin notification: ${err.message}`
-    );
-    queueAdminNotification(message);
-    return;
-  }
-  for (const wa of getAdminWAIds()) {
-    safeSendMessage(waClient, wa, message);
-  }
-}
+import { 
+  sendLoginLogNotification, 
+  sendUserApprovalRequest,
+  sendPasswordResetFailureNotification,
+  sendTelegramAdminMessage
+} from "../service/telegramService.js";
 
 const RESET_TOKEN_EXPIRY_MINUTES = Number(
   process.env.DASHBOARD_RESET_TOKEN_EXPIRY_MINUTES || 15,
@@ -50,7 +33,7 @@ function buildResetMessage({ username, token }) {
   const configuredBaseUrl =
     process.env.DASHBOARD_PASSWORD_RESET_URL || process.env.DASHBOARD_URL;
   const resetBaseUrl = configuredBaseUrl || DEFAULT_RESET_BASE_URL;
-  const header = "\uD83D\uDD10 Reset Password Dashboard";
+  const header = "🔐 Reset Password Dashboard";
   const baseUrlWithoutTrailingSlash = resetBaseUrl.replace(/\/$/, "");
   const baseResetPath = baseUrlWithoutTrailingSlash.endsWith("/reset-password")
     ? baseUrlWithoutTrailingSlash
@@ -58,7 +41,7 @@ function buildResetMessage({ username, token }) {
   const url = `${baseResetPath}?token=${token}`;
   const instruction =
     `Username: ${username}\nToken: ${token}\nToken berlaku selama ${RESET_TOKEN_EXPIRY_MINUTES} menit. Dengan url ${baseResetPath}`;
-  return `${header}\n\nSilakan buka tautan berikut untuk mengatur ulang password Anda:\n${url}\n\n${instruction}\nCopy`;
+  return `${header}\n\nSilakan buka tautan berikut untuk mengatur ulang password Anda:\n${url}\n\n${instruction}`;
 }
 
 async function clearDashboardSessions(dashboardUserId) {
@@ -148,20 +131,18 @@ export async function handleDashboardPasswordResetRequest(req, res) {
     });
 
     try {
-      await waitForWaReady();
-      const wid = formatToWhatsAppId(normalizedContact);
       const message = buildResetMessage({ username: user.username, token: resetToken });
-      const sent = await safeSendMessage(waClient, wid, message);
+      const sent = await sendTelegramAdminMessage(message);
       if (!sent) {
-        throw new Error('WA send returned false');
+        throw new Error('Telegram send returned null');
       }
     } catch (err) {
       console.warn(
-        `[WA] Gagal mengirim reset password dashboard untuk ${username}: ${err.message}`,
+        `[Telegram] Gagal mengirim reset password dashboard untuk ${username}: ${err.message}`,
       );
-      queueAdminNotification(
+      await sendPasswordResetFailureNotification(
         `⚠️ Reset password dashboard gagal dikirim. Username: ${username}. Kontak: ${contact}. Token: ${resetToken}`,
-      );
+      ).catch(e => console.error('[Telegram] Failed to send failure notification:', e));
       return res.status(500).json({
         success: false,
         message:
@@ -171,7 +152,7 @@ export async function handleDashboardPasswordResetRequest(req, res) {
 
     return res.json({
       success: true,
-      message: 'Instruksi reset password telah dikirim melalui WhatsApp.',
+      message: 'Permintaan reset password telah diterima. Token akan dikirim ke admin melalui Telegram. Silakan hubungi admin untuk mendapatkan token reset password Anda.',
     });
   } catch (err) {
     console.error('[AUTH] Gagal membuat permintaan reset password dashboard:', err);
@@ -306,9 +287,9 @@ router.post('/penmas-login', async (req, res) => {
     loginSource: 'web'
   });
   const time = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
-  notifyAdmin(
-    `\uD83D\uDD11 Login Penmas: ${user.username} (${user.role})\nWaktu: ${time}`
-  );
+  sendTelegramAdminMessage(
+    `🔑 *Login Penmas*\n\nUsername: ${user.username}\nRole: ${user.role}\nWaktu: ${time}`
+  ).catch(err => console.warn('[Telegram] Failed to send login notification:', err.message));
   return res.json({ success: true, token, user: payload });
 });
 
@@ -389,7 +370,7 @@ router.post('/dashboard-register', async (req, res) => {
   }
 
   // Send approval request to admin via WhatsApp
-  notifyAdmin(
+  console.log('[AUTH]', 
     `\uD83D\uDCCB Permintaan User Approval dengan data sebagai berikut :\nUsername: ${username}\nID: ${dashboard_user_id}\nRole: ${roleRow?.role_name || '-'}\nWhatsApp: ${whatsapp}\nClient ID: ${
       clientIds.length ? clientIds.join(', ') : '-'
     }\n\nBalas approvedash#${username} untuk menyetujui atau denydash#${username} untuk menolak.`
@@ -407,21 +388,7 @@ router.post('/dashboard-register', async (req, res) => {
     console.warn(`[Telegram] Failed to send approval request: ${err.message}`);
   });
 
-  if (whatsapp) {
-    try {
-      await waitForWaReady();
-      const wid = formatToWhatsAppId(whatsapp);
-      safeSendMessage(
-        waClient,
-        wid,
-        "\uD83D\uDCCB Permintaan registrasi dashboard Anda telah diterima dan menunggu persetujuan admin."
-      );
-    } catch (err) {
-      console.warn(
-        `[WA] Skipping user notification for ${whatsapp}: ${err.message}`
-      );
-    }
-  }
+  // WhatsApp user notification removed - using Telegram only
   return res
     .status(201)
     .json({ success: true, dashboard_user_id: user.dashboard_user_id, status: user.status });
@@ -499,14 +466,8 @@ router.post('/dashboard-login', async (req, res) => {
     loginType: 'operator',
     loginSource: 'web'
   });
-  const time = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
   const clientInfoLabel = user.client_ids.length === 1 ? 'Client ID' : 'Client IDs';
   const clientInfo = user.client_ids.length === 1 ? user.client_ids[0] : user.client_ids.join(', ');
-  
-  // Send notification to admin via WhatsApp
-  notifyAdmin(
-    `\uD83D\uDD11 Login dashboard: ${user.username} (${user.role})\n${clientInfoLabel}: ${clientInfo}\nWaktu: ${time}`
-  );
   
   // Send notification to admin via Telegram
   sendLoginLogNotification({
@@ -540,7 +501,7 @@ router.post("/login", async (req, res) => {
     const time = new Date().toLocaleString("id-ID", {
       timeZone: "Asia/Jakarta",
     });
-    notifyAdmin(
+    console.log('[AUTH]', 
       `❌ Login gagal\nAlasan: ${reason}\nID: ${client_id || "-"}\nOperator: ${
         client_operator || "-"}\nWaktu: ${time}`
     );
@@ -558,7 +519,7 @@ router.post("/login", async (req, res) => {
   if (!client) {
     const reason = "client_id tidak ditemukan";
     const time = new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" });
-    notifyAdmin(
+    console.log('[AUTH]', 
       `❌ Login gagal\nAlasan: ${reason}\nID: ${client_id}\nOperator: ${client_operator}\nWaktu: ${time}`
     );
     return res.status(401).json({
@@ -575,15 +536,13 @@ router.post("/login", async (req, res) => {
 
   const isValidOperator =
     inputId === dbOperator ||
-    client_operator === client.client_operator ||
-    isAdminWhatsApp(inputId) ||
-    isAdminWhatsApp(client_operator);
+    client_operator === client.client_operator;
 
   if (!isValidOperator) {
     const reason = "client operator tidak valid";
     const time = new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" });
-    notifyAdmin(
-      `❌ Login gagal\nAlasan: ${reason}\nID: ${client_id}\nOperator: ${client_operator}\nWaktu: ${time}`
+    console.warn(
+      `[AUTH] Login failed: ${reason} - ID: ${client_id}, Operator: ${client_operator}, Time: ${time}`
     );
     return res.status(401).json({
       success: false,
@@ -625,7 +584,7 @@ router.post("/login", async (req, res) => {
   const time = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
   
   // Send notification to admin via WhatsApp
-  notifyAdmin(
+  console.log('[AUTH]', 
     `\uD83D\uDD11 Login: ${client.nama} (${client.client_id})\nOperator: ${client_operator}\nWaktu: ${time}`
   );
   
@@ -726,7 +685,7 @@ router.post('/user-login', async (req, res) => {
     const time = new Date().toLocaleString('id-ID', {
       timeZone: 'Asia/Jakarta'
     });
-    queueAdminNotification(
+    console.warn('[AUTH]', 
       `\uD83D\uDD11 Login user: ${user.user_id} - ${user.nama}\nWaktu: ${time}`
     );
   }
@@ -738,7 +697,7 @@ router.get('/open', async (req, res) => {
   const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress;
   const ua = req.headers['user-agent'] || '';
   await insertVisitorLog({ ip, userAgent: ua });
-  notifyAdmin(
+  console.log('[AUTH]', 
     `\uD83D\uDD0D Web dibuka\nIP: ${ip}\nUA: ${ua}\nWaktu: ${time}`
   );
   return res.json({ success: true });

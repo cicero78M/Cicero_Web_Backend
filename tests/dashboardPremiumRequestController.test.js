@@ -10,9 +10,7 @@ jest.unstable_mockModule('../src/service/dashboardPremiumRequestService.js', () 
   markDashboardPremiumRequestNotified: jest.fn(),
 }));
 
-jest.unstable_mockModule('../src/service/waService.js', () => ({
-  __esModule: true,
-  default: {},
+jest.unstable_mockModule('../src/service/telegramService.js', () => ({
   sendDashboardPremiumRequestNotification: mockSendDashboardPremiumRequestNotification,
 }));
 

@@ -55,11 +55,7 @@ jest.unstable_mockModule('../src/utils/waHelper.js', () => ({
   sendWAReport: jest.fn(),
 }));
 
-jest.unstable_mockModule('../src/service/waService.js', () => ({
-  default: {},
-  waUserClient: {},
-  waitForWaReady: jest.fn(),
-}));
+// WhatsApp service removed - no mock needed
 
 jest.unstable_mockModule('../src/service/emailService.js', () => ({
   sendComplaintEmail: mockSendComplaintEmail,

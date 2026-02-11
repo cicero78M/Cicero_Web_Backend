@@ -1,12 +1,7 @@
 import { query } from '../repository/db.js';
 import { expireSubscription } from './dashboardSubscriptionService.js';
-import { sendWithClientFallback, formatToWhatsAppId } from '../utils/waHelper.js';
-import waClient from './waService.js';
 
 const DEFAULT_TIMEZONE = 'Asia/Jakarta';
-const waFallbackClients = [
-  { client: waClient, label: 'WA' },
-];
 
 export function selectExpiredSubscriptions(subscriptions = [], now = new Date()) {
   const nowTs = new Date(now).getTime();
@@ -41,32 +36,10 @@ function buildExpiryMessage(subscription) {
   ].join('\n');
 }
 
-function normalizeWhatsapp(rawValue) {
-  if (!rawValue) return null;
-  const digits = String(rawValue).replace(/\D/g, '');
-  if (!digits) return null;
-  try {
-    return formatToWhatsAppId(digits);
-  } catch (err) {
-    return null;
-  }
-}
-
 async function notifyExpiry(subscription) {
-  const chatId = normalizeWhatsapp(subscription.whatsapp);
-  if (!chatId) return false;
-
-  const message = buildExpiryMessage(subscription);
-  return sendWithClientFallback({
-    chatId,
-    message,
-    clients: waFallbackClients,
-    reportClient: waClient,
-    reportContext: {
-      source: 'dashboardSubscriptionExpiry',
-      subscriptionId: subscription.subscription_id,
-    },
-  });
+  // WhatsApp notification removed - subscriptions are managed through admin portal
+  console.log(`[Subscription] Expired: ${subscription.subscription_id} for user ${subscription.dashboard_user_id}`);
+  return true;
 }
 
 export async function fetchActiveSubscriptions() {

@@ -14,16 +14,7 @@ jest.unstable_mockModule('../src/service/dashboardSubscriptionService.js', () =>
   expireSubscription: mockExpireSubscription,
 }));
 
-jest.unstable_mockModule('../src/utils/waHelper.js', () => ({
-  safeSendMessage: mockSafeSendMessage,
-  sendWithClientFallback: mockSendWithClientFallback,
-  formatToWhatsAppId: mockFormatToWhatsAppId,
-}));
-
-jest.unstable_mockModule('../src/service/waService.js', () => ({
-  default: {},
-  waUserClient: {},
-}));
+// WhatsApp utilities and service removed
 
 let selectExpiredSubscriptions;
 let processExpiredSubscriptions;

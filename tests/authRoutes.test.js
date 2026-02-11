@@ -33,15 +33,10 @@ jest.unstable_mockModule('../src/model/loginLogModel.js', () => ({
 
 jest.unstable_mockModule('../src/utils/waHelper.js', () => ({
   ...actualWaHelper,
-  getAdminWAIds: () => ['admin@c.us'],
   formatToWhatsAppId: (nohp) => `${nohp}@c.us`
 }));
 
-jest.unstable_mockModule('../src/service/waService.js', () => ({
-  default: mockWAClient,
-  waitForWaReady: () => Promise.resolve(),
-  queueAdminNotification: mockQueueAdminNotification,
-}));
+// WhatsApp service removed - no mock needed
 
 jest.unstable_mockModule('../src/service/dashboardSubscriptionService.js', () => ({
   getPremiumSnapshot: mockGetPremiumSnapshot,

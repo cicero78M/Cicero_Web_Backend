@@ -275,6 +275,74 @@ export async function sendPremiumRequestNotification(requestData) {
 }
 
 /**
+ * Format currency in Indonesian Rupiah
+ * @param {number} amount - Amount to format
+ * @returns {string}
+ */
+function formatCurrencyId(amount) {
+  if (!amount) return 'Rp 0';
+  try {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  } catch (err) {
+    return `Rp ${amount}`;
+  }
+}
+
+/**
+ * Send dashboard premium request notification to admin via Telegram
+ * @param {object} request - Premium request data
+ * @returns {Promise<boolean>}
+ */
+export async function sendDashboardPremiumRequestNotification(request) {
+  if (!request) return false;
+  
+  const commandUsername = request.username || request.dashboard_user_id || 'unknown';
+  const paymentProofStatus = request.proof_url
+    ? '✅ sudah upload bukti transfer'
+    : '⚠️ belum upload bukti transfer';
+  const paymentProofLink = request.proof_url || 'Belum upload bukti';
+  
+  let message = `📢 *Permintaan Akses Premium*\n\n`;
+  message += `*User Dashboard:*\n`;
+  message += `• Username: ${commandUsername}\n`;
+  message += `• WhatsApp: ${request.whatsapp || '-'}\n`;
+  message += `• User ID: ${request.dashboard_user_id || '-'}\n\n`;
+  
+  message += `*Detail Permintaan:*\n`;
+  message += `• Tier: ${request.premium_tier || '-'}\n`;
+  message += `• Client ID: ${request.client_id || '-'}\n`;
+  message += `• Request Token: ${request.request_token || '-'}\n`;
+  message += `• Status Bukti: ${paymentProofStatus}\n\n`;
+  
+  message += `*Detail Transfer:*\n`;
+  message += `• Bank: ${request.bank_name || '-'}\n`;
+  message += `• Nomor Rekening: ${request.account_number || '-'}\n`;
+  message += `• Nama Pengirim: ${request.sender_name || '-'}\n`;
+  message += `• Jumlah: ${formatCurrencyId(request.transfer_amount)}\n`;
+  
+  if (request.proof_url) {
+    message += `• [Lihat Bukti Transfer](${paymentProofLink})\n`;
+  }
+  
+  message += `\n*Request ID:* ${request.request_id || '-'}`;
+  
+  try {
+    const result = await sendTelegramAdminMessage(message);
+    return result !== null;
+  } catch (err) {
+    console.warn(
+      `[Telegram] Failed to send dashboard premium request ${request.request_id}: ${err?.message || err}`
+    );
+    return false;
+  }
+}
+
+/**
  * Send complaint response notification
  * @param {string} message - Complaint message
  * @param {object} options - Options with chatId
@@ -289,6 +357,48 @@ export async function sendComplaintNotification(message, options = {}) {
   }
   
   return sendTelegramMessage(chatId, message);
+}
+
+/**
+ * Send password reset token to user via Telegram
+ * @param {string|number} chatId - Telegram chat ID
+ * @param {object} resetData - Reset data with username and token
+ * @returns {Promise<object|null>}
+ */
+export async function sendPasswordResetToken(chatId, resetData) {
+  const { username, token, expiryMinutes = 15, resetUrl } = resetData;
+  
+  const RESET_TOKEN_EXPIRY_MINUTES = expiryMinutes;
+  const DEFAULT_RESET_BASE_URL = 'https://papiqo.com';
+  
+  const configuredBaseUrl = resetUrl || process.env.DASHBOARD_PASSWORD_RESET_URL || process.env.DASHBOARD_URL;
+  const resetBaseUrl = configuredBaseUrl || DEFAULT_RESET_BASE_URL;
+  
+  const baseUrlWithoutTrailingSlash = resetBaseUrl.replace(/\/$/, '');
+  const baseResetPath = baseUrlWithoutTrailingSlash.endsWith('/reset-password')
+    ? baseUrlWithoutTrailingSlash
+    : `${baseUrlWithoutTrailingSlash}/reset-password`;
+  
+  const url = `${baseResetPath}?token=${token}`;
+  
+  let message = `🔐 *Reset Password Dashboard*\n\n`;
+  message += `Silakan buka tautan berikut untuk mengatur ulang password Anda:\n`;
+  message += `${url}\n\n`;
+  message += `*Username:* ${username}\n`;
+  message += `*Token:* \`${token}\`\n\n`;
+  message += `Token berlaku selama ${RESET_TOKEN_EXPIRY_MINUTES} menit.\n`;
+  message += `Base URL: ${baseResetPath}`;
+  
+  return sendTelegramMessage(chatId, message);
+}
+
+/**
+ * Queue admin notification for failed password reset
+ * @param {string} message - Notification message
+ * @returns {Promise<object|null>}
+ */
+export async function sendPasswordResetFailureNotification(message) {
+  return sendTelegramAdminMessage(message);
 }
 
 /**
@@ -620,5 +730,8 @@ export default {
   sendUserApprovalConfirmation,
   sendUserRejectionConfirmation,
   sendPremiumRequestNotification,
-  sendComplaintNotification
+  sendDashboardPremiumRequestNotification,
+  sendComplaintNotification,
+  sendPasswordResetToken,
+  sendPasswordResetFailureNotification
 };
