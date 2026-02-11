@@ -31,6 +31,8 @@ const {
   isVerified,
   clearVerification,
   refreshVerification,
+  checkOtpRateLimit,
+  setOtpRateLimit,
 } = await import('../src/service/otpService.js');
 
 describe('otpService', () => {
@@ -80,5 +82,30 @@ describe('otpService', () => {
     }
     const blocked = await verifyOtp('2', 'user2@example.com', otp);
     expect(blocked).toBe(false);
+  });
+
+  test('rate limit allows first request', async () => {
+    const canRequest = await checkOtpRateLimit('user@example.com');
+    expect(canRequest).toBe(true);
+  });
+
+  test('rate limit blocks second request', async () => {
+    await setOtpRateLimit('user3@example.com');
+    const canRequest = await checkOtpRateLimit('user3@example.com');
+    expect(canRequest).toBe(false);
+  });
+
+  test('generateOtp sets rate limit', async () => {
+    const canRequestBefore = await checkOtpRateLimit('user4@example.com');
+    expect(canRequestBefore).toBe(true);
+    await generateOtp('4', 'user4@example.com');
+    const canRequestAfter = await checkOtpRateLimit('user4@example.com');
+    expect(canRequestAfter).toBe(false);
+  });
+
+  test('rate limit normalizes email', async () => {
+    await setOtpRateLimit('User5@Example.COM ');
+    const canRequest = await checkOtpRateLimit('user5@example.com');
+    expect(canRequest).toBe(false);
   });
 });

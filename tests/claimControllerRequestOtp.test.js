@@ -21,6 +21,7 @@ beforeEach(async () => {
     isVerified: jest.fn(),
     refreshVerification: jest.fn(),
     clearVerification: jest.fn(),
+    checkOtpRateLimit: jest.fn().mockReturnValue(true),
   }));
   jest.unstable_mockModule('../src/service/otpQueue.js', () => ({
     enqueueOtp: jest.fn().mockResolvedValue(),
@@ -82,4 +83,18 @@ test('returns 503 when findUserById throws connection error', async () => {
   await requestOtp(req, res, () => {});
   expect(res.status).toHaveBeenCalledWith(503);
   expect(res.json).toHaveBeenCalledWith({ success: false, message: 'Database tidak tersedia' });
+});
+
+test('returns 429 when rate limit exceeded', async () => {
+  userModel.findUserById.mockResolvedValue({ user_id: '1', email: 'user@example.com' });
+  const req = { body: { nrp: '1', email: 'user@example.com' } };
+  const res = createRes();
+  const { checkOtpRateLimit } = await import('../src/service/otpService.js');
+  checkOtpRateLimit.mockReturnValue(false);
+  await requestOtp(req, res, () => {});
+  expect(res.status).toHaveBeenCalledWith(429);
+  expect(res.json).toHaveBeenCalledWith({
+    success: false,
+    message: 'Permintaan OTP terlalu sering. Silakan tunggu 5 menit sebelum meminta OTP kembali.',
+  });
 });
