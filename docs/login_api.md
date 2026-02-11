@@ -280,6 +280,30 @@ Script ini akan:
 Untuk endpoint protected seperti `/api/link-reports`, `/api/link-reports-khusus`, dan `/api/users/:id`, client harus menyimpan token dari `POST /api/auth/user-login` lalu mengirimkannya di setiap request melalui header `Authorization: Bearer <token>`.
 Jika header `Authorization` dikirim tetapi tidak menggunakan format `Bearer <token>`, backend akan merespons `401` dengan pesan `Authorization harus format Bearer token` untuk memudahkan diagnosis integrasi. Jika header/cookie token tidak ada sama sekali, respons tetap `401 Token required`.
 
+
+Respons error dari middleware auth sekarang menyertakan field `reason` agar troubleshooting produksi lebih cepat tanpa mengekspos token sensitif. Field ini juga dicatat sebagai structured log server-side bersama metadata request aman (`method`, `path`, `sourceIp`, `userAgent` ringkas).
+
+#### Auth error matrix (`authRequired`)
+
+| HTTP Status | Message | Reason code | Kapan terjadi |
+| --- | --- | --- | --- |
+| `401` | `Token required` | `missing_token` | Header `Authorization` dan cookie `token` tidak ada. |
+| `401` | `Authorization harus format Bearer token` | `invalid_token` | Header `Authorization` ada tetapi tidak diawali `Bearer `. |
+| `401` | `Invalid token` | `invalid_token` | JWT tidak valid (signature salah, malformed, dsb.). |
+| `401` | `Token expired` | `expired_token` | JWT valid namun sudah melewati waktu kedaluwarsa. |
+| `403` | `Forbidden` | `forbidden_operator_path` | Role `operator` mengakses path di luar allowlist middleware. |
+
+Contoh respons:
+
+```json
+{
+  "success": false,
+  "message": "Token required",
+  "reason": "missing_token"
+}
+```
+
+
 Repository ini menyediakan helper `createProtectedApiClient` di `src/service/protectedApiClient.js` sebagai acuan integrasi client:
 
 ```js
