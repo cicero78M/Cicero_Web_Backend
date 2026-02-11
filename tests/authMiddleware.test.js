@@ -34,6 +34,10 @@ describe('authRequired middleware', () => {
     app.use('/api', authRequired, router);
   });
 
+  beforeEach(() => {
+    delete process.env.JWT_EXPIRED_GRACE_SECONDS;
+    delete process.env.JWT_CLOCK_TOLERANCE_SECONDS;
+  });
 
   test('blocks operator role on claim routes when protected by authRequired', async () => {
     const token = jwt.sign({ user_id: 'o1', role: 'operator' }, process.env.JWT_SECRET);
@@ -235,4 +239,40 @@ describe('authRequired middleware', () => {
     expect(res.body.success).toBe(false);
     expect(res.body.message).toBe('Token required');
   });
+
+  test('allows recently expired token within grace window', async () => {
+    process.env.JWT_EXPIRED_GRACE_SECONDS = '120';
+    process.env.JWT_CLOCK_TOLERANCE_SECONDS = '0';
+    const token = jwt.sign(
+      { user_id: 'u3', role: 'user' },
+      process.env.JWT_SECRET,
+      { expiresIn: -30 }
+    );
+
+    const res = await request(app)
+      .get('/api/other')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
+  test('rejects expired token outside grace window', async () => {
+    process.env.JWT_EXPIRED_GRACE_SECONDS = '60';
+    process.env.JWT_CLOCK_TOLERANCE_SECONDS = '0';
+    const token = jwt.sign(
+      { user_id: 'u4', role: 'user' },
+      process.env.JWT_SECRET,
+      { expiresIn: -120 }
+    );
+
+    const res = await request(app)
+      .get('/api/other')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(401);
+    expect(res.body.success).toBe(false);
+    expect(res.body.reason).toBe('expired_token');
+  });
+
 });

@@ -252,7 +252,7 @@ The token is also delivered as an HTTP-only cookie named `token`.
 3. The token is stored in Redis and returned in the response as well as the cookie.
 4. For later API calls, include the token in the `Authorization: Bearer` header or let the cookie be sent automatically. Jika keduanya ada, backend memprioritaskan token dari header agar cookie lama tidak menimpa sesi terbaru.
 5. Every successful login event is reported to the WhatsApp administrators.
-6. When the token expires or is removed from Redis, a new login is required.
+6. Middleware auth memberi toleransi kecil terhadap drift waktu JWT (`JWT_CLOCK_TOLERANCE_SECONDS`, default `30` detik) dan grace period untuk token yang baru saja expired (`JWT_EXPIRED_GRACE_SECONDS`, default `86400` detik). Setelah melewati grace period atau token tidak ada di Redis, login ulang wajib dilakukan.
 7. Dashboard password resets invalidate existing dashboard login sessions before returning a success response.
 8. Each authenticated dashboard request reloads the dashboard user profile from the database to refresh `client_ids` (and derive `client_id` when only one is available). Requests are rejected when the dashboard user is missing, inactive, or no longer mapped to any clients so the scope always mirrors `dashboard_user_clients`.
 
@@ -290,8 +290,12 @@ Respons error dari middleware auth sekarang menyertakan field `reason` agar trou
 | `401` | `Token required` | `missing_token` | Header `Authorization` dan cookie `token` tidak ada. |
 | `401` | `Authorization harus format Bearer token` | `invalid_token` | Header `Authorization` ada tetapi tidak diawali `Bearer `. |
 | `401` | `Invalid token` | `invalid_token` | JWT tidak valid (signature salah, malformed, dsb.). |
-| `401` | `Token expired` | `expired_token` | JWT valid namun sudah melewati waktu kedaluwarsa. |
+| `401` | `Token expired` | `expired_token` | JWT valid namun sudah melewati waktu kedaluwarsa **dan** melampaui grace period `JWT_EXPIRED_GRACE_SECONDS`. |
 | `403` | `Forbidden` | `forbidden_operator_path` | Role `operator` mengakses path di luar allowlist middleware. |
+
+Konfigurasi tambahan untuk mengurangi false negative karena drift jam server/client:
+- `JWT_CLOCK_TOLERANCE_SECONDS` (default `30`): toleransi validasi `exp/nbf` token pada proses `jwt.verify`.
+- `JWT_EXPIRED_GRACE_SECONDS` (default `86400`): token yang baru expired masih diterima sementara waktu selama belum melewati grace.
 
 Contoh respons:
 

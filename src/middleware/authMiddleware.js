@@ -3,6 +3,8 @@ import jwt from 'jsonwebtoken';
 
 const authLogEvent = 'auth.middleware.denied';
 const maxUserAgentLength = 120;
+const defaultJwtClockToleranceSeconds = 30;
+const defaultExpiredTokenGraceSeconds = 24 * 60 * 60;
 
 const operatorAllowlist = [
   { path: '/clients/profile', type: 'exact' },
@@ -100,6 +102,44 @@ function sendAuthError(res, req, statusCode, message, reason) {
   return res.status(statusCode).json({ success: false, message, reason });
 }
 
+function getNumericEnv(name, fallbackValue) {
+  const rawValue = process.env[name];
+  if (rawValue === undefined || rawValue === null || rawValue === '') {
+    return fallbackValue;
+  }
+  const parsedValue = Number(rawValue);
+  if (Number.isNaN(parsedValue) || parsedValue < 0) {
+    return fallbackValue;
+  }
+  return parsedValue;
+}
+
+function decodeExpiredTokenWithinGrace(token) {
+  const graceSeconds = getNumericEnv(
+    'JWT_EXPIRED_GRACE_SECONDS',
+    defaultExpiredTokenGraceSeconds,
+  );
+
+  if (graceSeconds <= 0) {
+    return null;
+  }
+
+  const decoded = jwt.verify(token, process.env.JWT_SECRET, {
+    ignoreExpiration: true,
+  });
+  const expiredAt = Number(decoded?.exp);
+  if (!Number.isFinite(expiredAt)) {
+    return null;
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (nowSeconds - expiredAt > graceSeconds) {
+    return null;
+  }
+
+  return decoded;
+}
+
 export function authRequired(req, res, next) {
   const authorizationHeader = req.headers.authorization;
   if (authorizationHeader && !authorizationHeader.startsWith('Bearer ')) {
@@ -112,7 +152,12 @@ export function authRequired(req, res, next) {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, {
+      clockTolerance: getNumericEnv(
+        'JWT_CLOCK_TOLERANCE_SECONDS',
+        defaultJwtClockToleranceSeconds,
+      ),
+    });
     req.user = decoded;
     if (decoded.role === 'operator' && !isOperatorAllowedPath(req.method, req.path)) {
       return sendAuthError(res, req, 403, 'Forbidden', 'forbidden_operator_path');
@@ -120,6 +165,25 @@ export function authRequired(req, res, next) {
     next();
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
+      try {
+        const graceDecodedToken = decodeExpiredTokenWithinGrace(token);
+        if (graceDecodedToken) {
+          req.user = graceDecodedToken;
+          if (
+            graceDecodedToken.role === 'operator' &&
+            !isOperatorAllowedPath(req.method, req.path)
+          ) {
+            return sendAuthError(res, req, 403, 'Forbidden', 'forbidden_operator_path');
+          }
+          return next();
+        }
+      } catch (graceError) {
+        console.warn('auth.middleware.grace_decode_failed', {
+          message: graceError?.message || 'Unknown error',
+          method: req.method,
+          path: req.originalUrl || req.path,
+        });
+      }
       return sendAuthError(res, req, 401, 'Token expired', 'expired_token');
     }
     return sendAuthError(res, req, 401, 'Invalid token', 'invalid_token');
