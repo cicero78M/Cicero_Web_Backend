@@ -74,6 +74,93 @@ async function clearDashboardSessions(dashboardUserId) {
   }
 }
 
+async function clearPenmasSessions(userId) {
+  const sessionKey = `penmas_login:${userId}`;
+  try {
+    if (typeof redis.sMembers === "function") {
+      const tokens = await redis.sMembers(sessionKey);
+      if (Array.isArray(tokens) && tokens.length > 0) {
+        await Promise.all(
+          tokens.map((token) =>
+            redis
+              .del(`login_token:${token}`)
+              .catch((err) =>
+                console.error(
+                  `[AUTH] Gagal menghapus token login ${token}: ${err.message}`,
+                ),
+              ),
+          ),
+        );
+      }
+    }
+    if (typeof redis.del === "function") {
+      await redis.del(sessionKey);
+    }
+  } catch (err) {
+    console.error(
+      `[AUTH] Gagal menghapus sesi penmas ${userId}: ${err.message}`,
+    );
+  }
+}
+
+async function clearClientSessions(clientId) {
+  const sessionKey = `login:${clientId}`;
+  try {
+    if (typeof redis.sMembers === "function") {
+      const tokens = await redis.sMembers(sessionKey);
+      if (Array.isArray(tokens) && tokens.length > 0) {
+        await Promise.all(
+          tokens.map((token) =>
+            redis
+              .del(`login_token:${token}`)
+              .catch((err) =>
+                console.error(
+                  `[AUTH] Gagal menghapus token login ${token}: ${err.message}`,
+                ),
+              ),
+          ),
+        );
+      }
+    }
+    if (typeof redis.del === "function") {
+      await redis.del(sessionKey);
+    }
+  } catch (err) {
+    console.error(
+      `[AUTH] Gagal menghapus sesi client ${clientId}: ${err.message}`,
+    );
+  }
+}
+
+async function clearUserSessions(userId) {
+  const sessionKey = `user_login:${userId}`;
+  try {
+    if (typeof redis.sMembers === "function") {
+      const tokens = await redis.sMembers(sessionKey);
+      if (Array.isArray(tokens) && tokens.length > 0) {
+        await Promise.all(
+          tokens.map((token) =>
+            redis
+              .del(`login_token:${token}`)
+              .catch((err) =>
+                console.error(
+                  `[AUTH] Gagal menghapus token login ${token}: ${err.message}`,
+                ),
+              ),
+          ),
+        );
+      }
+    }
+    if (typeof redis.del === "function") {
+      await redis.del(sessionKey);
+    }
+  } catch (err) {
+    console.error(
+      `[AUTH] Gagal menghapus sesi user ${userId}: ${err.message}`,
+    );
+  }
+}
+
 const router = express.Router();
 
 
@@ -286,6 +373,7 @@ router.post('/penmas-login', async (req, res) => {
   const token = jwt.sign(payload, process.env.JWT_SECRET, {
     expiresIn: '2h',
   });
+  await clearPenmasSessions(user.user_id);
   try {
     await redis.sAdd(`penmas_login:${user.user_id}`, token);
     await redis.set(`login_token:${token}`, `penmas:${user.user_id}`, {
@@ -461,6 +549,7 @@ router.post('/dashboard-login', async (req, res) => {
   const token = jwt.sign(payload, process.env.JWT_SECRET, {
     expiresIn: '2h',
   });
+  await clearDashboardSessions(user.dashboard_user_id);
   try {
     await redis.sAdd(`dashboard_login:${user.dashboard_user_id}`, token);
     await redis.set(`login_token:${token}`, `dashboard:${user.dashboard_user_id}`, {
@@ -572,6 +661,7 @@ router.post("/login", async (req, res) => {
   const token = jwt.sign(payload, process.env.JWT_SECRET, {
     expiresIn: "2h",
   });
+  await clearClientSessions(client_id);
   try {
     const setKey = `login:${client_id}`;
     await redis.sAdd(setKey, token);
@@ -666,6 +756,7 @@ router.post('/user-login', async (req, res) => {
   const token = jwt.sign(payload, process.env.JWT_SECRET, {
     expiresIn: '2h'
   });
+  await clearUserSessions(user.user_id);
   try {
     await redis.sAdd(`user_login:${user.user_id}`, token);
     await redis.set(`login_token:${token}`, `user:${user.user_id}`, {
