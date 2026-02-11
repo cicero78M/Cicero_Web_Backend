@@ -455,7 +455,7 @@ export async function sendPasswordResetToken(chatId, resetData) {
   message += `Silakan buka tautan berikut untuk mengatur ulang password Anda:\n`;
   message += `${url}\n\n`;
   message += `*Username:* ${escapeMarkdown(username)}\n`;
-  message += `*Token:* \`${escapeMarkdown(token)}\`\n\n`;
+  message += `*Token:* \`${token}\`\n\n`;
   message += `Token berlaku selama ${RESET_TOKEN_EXPIRY_MINUTES} menit.\n`;
   message += `Base URL: ${escapeMarkdown(baseResetPath)}`;
   
