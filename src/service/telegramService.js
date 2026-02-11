@@ -257,6 +257,41 @@ export async function sendUserRejectionConfirmation(userData) {
 }
 
 /**
+ * Send premium subscription request notification to admin
+ * @param {object} requestData - Premium request data
+ * @returns {Promise<object|null>}
+ */
+export async function sendPremiumRequestNotification(requestData) {
+  const { request_id, user_id, sender_name, account_number, bank_name } = requestData;
+  
+  let message = `🔔 *Permintaan Subscription Premium*\n\n`;
+  message += `*User:* ${user_id}\n`;
+  message += `*Nama:* ${sender_name}\n`;
+  message += `*Rekening:* ${account_number}\n`;
+  message += `*Bank:* ${bank_name}\n`;
+  message += `*Request ID:* ${request_id}\n`;
+  
+  return sendTelegramAdminMessage(message);
+}
+
+/**
+ * Send complaint response notification
+ * @param {string} message - Complaint message
+ * @param {object} options - Options with chatId
+ * @returns {Promise<object|null>}
+ */
+export async function sendComplaintNotification(message, options = {}) {
+  const { chatId } = options;
+  
+  if (!chatId) {
+    console.warn('[Telegram] No chatId provided for complaint notification');
+    return null;
+  }
+  
+  return sendTelegramMessage(chatId, message);
+}
+
+/**
  * Handle /approvedash command
  * @param {object} msg - Telegram message object
  */
@@ -309,35 +344,31 @@ async function handleDenyDashCommand(msg) {
 }
 
 /**
- * Send WhatsApp notification to user and return status
- * @param {object} user - User object with whatsapp field
+ * Send Telegram notification to user and return status
+ * @param {object} user - User object with telegram_chat_id field
  * @param {string} message - Message to send
  * @returns {Promise<object>} - Object with userNotified boolean and userNotificationError string
  */
-async function sendUserWhatsAppNotification(user, message) {
+async function sendUserTelegramNotification(user, message) {
   const result = {
     userNotified: false,
     userNotificationError: null
   };
 
-  if (!user.whatsapp) {
+  if (!user.telegram_chat_id) {
+    result.userNotificationError = 'User does not have telegram_chat_id configured';
     return result;
   }
 
   try {
-    const { formatToWhatsAppId, safeSendMessage } = await import('../utils/waHelper.js');
-    const { default: waClient, waitForWaReady } = await import('./waService.js');
+    const sent = await sendTelegramMessage(user.telegram_chat_id, message);
     
-    await waitForWaReady();
-    const wid = formatToWhatsAppId(user.whatsapp);
-    const sent = await safeSendMessage(waClient, wid, message);
-    
-    result.userNotified = sent === true;
+    result.userNotified = sent !== null;
     if (!result.userNotified) {
-      result.userNotificationError = 'WhatsApp message send returned false or error';
+      result.userNotificationError = 'Telegram message send returned null';
     }
   } catch (err) {
-    console.error(`[Telegram->WA] Failed to notify user ${user.username}:`, err.message);
+    console.error(`[Telegram] Failed to notify user ${user.username}:`, err.message);
     result.userNotificationError = err.message;
   }
 
@@ -347,7 +378,7 @@ async function sendUserWhatsAppNotification(user, message) {
 /**
  * Build confirmation message with notification status
  * @param {string} baseMessage - Base confirmation message
- * @param {object} user - User object with whatsapp field
+ * @param {object} user - User object with telegram_chat_id field
  * @param {boolean} userNotified - Whether user was notified
  * @param {string|null} userNotificationError - Error message if notification failed
  * @returns {string} - Complete confirmation message
@@ -355,17 +386,17 @@ async function sendUserWhatsAppNotification(user, message) {
 function buildConfirmationMessage(baseMessage, user, userNotified, userNotificationError) {
   let confirmationMessage = baseMessage;
   
-  if (user.whatsapp) {
+  if (user.telegram_chat_id) {
     if (userNotified) {
-      confirmationMessage += `\n✅ Notifikasi telah dikirim ke ${user.whatsapp}`;
+      confirmationMessage += `\n✅ Notifikasi telah dikirim ke Telegram user`;
     } else {
-      confirmationMessage += `\n⚠️ Notifikasi ke ${user.whatsapp} gagal dikirim`;
+      confirmationMessage += `\n⚠️ Notifikasi ke Telegram user gagal dikirim`;
       if (userNotificationError) {
         confirmationMessage += `\nAlasan: ${userNotificationError}`;
       }
     }
   } else {
-    confirmationMessage += `\n⚠️ User tidak memiliki nomor WhatsApp terdaftar`;
+    confirmationMessage += `\n⚠️ User tidak memiliki Telegram chat ID terdaftar`;
   }
   
   return confirmationMessage;
@@ -403,8 +434,8 @@ async function processApproval(chatId, username) {
     // Approve user (set status to true)
     await dashboardUserModel.updateStatus(user.dashboard_user_id, true);
     
-    // Send notification to user via WhatsApp if available
-    const { userNotified, userNotificationError } = await sendUserWhatsAppNotification(
+    // Send notification to user via Telegram if available
+    const { userNotified, userNotificationError } = await sendUserTelegramNotification(
       user,
       `✅ Registrasi dashboard Anda telah disetujui.\nUsername: ${user.username}`
     );
@@ -461,8 +492,8 @@ async function processRejection(chatId, username) {
     // Reject user (set status to false)
     await dashboardUserModel.updateStatus(user.dashboard_user_id, false);
     
-    // Send notification to user via WhatsApp if available
-    const { userNotified, userNotificationError } = await sendUserWhatsAppNotification(
+    // Send notification to user via Telegram if available
+    const { userNotified, userNotificationError } = await sendUserTelegramNotification(
       user,
       `❌ Registrasi dashboard Anda ditolak.\nUsername: ${user.username}`
     );
@@ -587,5 +618,7 @@ export default {
   sendLoginLogNotification,
   sendUserApprovalRequest,
   sendUserApprovalConfirmation,
-  sendUserRejectionConfirmation
+  sendUserRejectionConfirmation,
+  sendPremiumRequestNotification,
+  sendComplaintNotification
 };
