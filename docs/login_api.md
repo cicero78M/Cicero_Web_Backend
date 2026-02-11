@@ -250,7 +250,7 @@ The token is also delivered as an HTTP-only cookie named `token`.
 1. The client or user submits credentials to the appropriate endpoint.
 2. The backend verifies the data and generates a JWT valid for two hours.
 3. The token is stored in Redis and returned in the response as well as the cookie.
-4. For later API calls, include the token in the `Authorization: Bearer` header or let the cookie be sent automatically.
+4. For later API calls, include the token in the `Authorization: Bearer` header or let the cookie be sent automatically. Jika keduanya ada, backend memprioritaskan token dari header agar cookie lama tidak menimpa sesi terbaru.
 5. Every successful login event is reported to the WhatsApp administrators.
 6. When the token expires or is removed from Redis, a new login is required.
 7. Dashboard password resets invalidate existing dashboard login sessions before returning a success response.
