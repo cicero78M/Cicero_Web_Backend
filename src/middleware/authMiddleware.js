@@ -106,7 +106,7 @@ export function authRequired(req, res, next) {
     return sendAuthError(res, req, 401, 'Authorization harus format Bearer token', 'invalid_token');
   }
 
-  const token = req.cookies?.token || authorizationHeader?.split(' ')[1];
+  const token = authorizationHeader?.split(' ')[1] || req.cookies?.token;
   if (!token) {
     return sendAuthError(res, req, 401, 'Token required', 'missing_token');
   }
