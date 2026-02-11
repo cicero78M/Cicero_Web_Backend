@@ -131,6 +131,52 @@ describe('telegramService', () => {
         expect(result).toBeNull();
       }
     });
+
+    it('should retry without Markdown when entity parsing fails', async () => {
+      process.env.TELEGRAM_BOT_TOKEN = 'test-token';
+      
+      // First call fails with parse error, second succeeds
+      mockSendMessage
+        .mockRejectedValueOnce(new Error("ETELEGRAM: 400 Bad Request: can't parse entities"))
+        .mockResolvedValueOnce({ message_id: 1 });
+      
+      const result = await sendTelegramMessage('123456', 'Test message with (special) chars');
+      
+      if (isTelegramReady()) {
+        // Should be called twice - once with Markdown, once without
+        expect(mockSendMessage).toHaveBeenCalledTimes(2);
+        
+        // First call with Markdown
+        expect(mockSendMessage).toHaveBeenNthCalledWith(
+          1,
+          '123456',
+          'Test message with (special) chars',
+          expect.objectContaining({ parse_mode: 'Markdown' })
+        );
+        
+        // Second call without parse_mode - verify parse_mode is not in the options
+        const secondCallOptions = mockSendMessage.mock.calls[1][2];
+        expect(secondCallOptions).not.toHaveProperty('parse_mode');
+        
+        expect(result).toEqual({ message_id: 1 });
+      }
+    });
+
+    it('should return null if retry also fails', async () => {
+      process.env.TELEGRAM_BOT_TOKEN = 'test-token';
+      
+      // Both calls fail
+      mockSendMessage
+        .mockRejectedValueOnce(new Error("ETELEGRAM: 400 Bad Request: can't parse entities"))
+        .mockRejectedValueOnce(new Error('Network error'));
+      
+      const result = await sendTelegramMessage('123456', 'Test message');
+      
+      if (isTelegramReady()) {
+        expect(mockSendMessage).toHaveBeenCalledTimes(2);
+        expect(result).toBeNull();
+      }
+    });
   });
 
   describe('sendTelegramAdminMessage', () => {
@@ -214,6 +260,31 @@ describe('telegramService', () => {
         expect(message).toContain('Login Dashboard');
         expect(message).toContain('testuser');
         expect(message).toContain('operator');
+      }
+    });
+
+    it('should escape special characters in login notification', async () => {
+      process.env.TELEGRAM_ADMIN_CHAT_ID = '987654';
+      process.env.TELEGRAM_BOT_TOKEN = 'test-token';
+      mockSendMessage.mockResolvedValue({ message_id: 3 });
+      
+      const logData = {
+        username: 'test_user-2024',
+        role: 'operator',
+        loginType: 'operator',
+        loginSource: 'web',
+        timestamp: new Date(),
+        clientInfo: { label: 'Client (Test)', value: 'test-client_123' }
+      };
+      
+      await sendLoginLogNotification(logData);
+      
+      if (isTelegramReady()) {
+        expect(mockSendMessage).toHaveBeenCalled();
+        const message = mockSendMessage.mock.calls[0][1];
+        // Special characters should be escaped
+        expect(message).toContain('test\\_user\\-2024');
+        expect(message).toContain('Client \\(Test\\)');
       }
     });
   });
