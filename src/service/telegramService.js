@@ -159,20 +159,38 @@ export async function sendTelegramMessage(chatId, message, options = {}) {
 }
 
 /**
- * Send a message to admin chat
+ * Send a message to admin chat(s)
  * @param {string} message - Message text
  * @param {object} options - Additional options
- * @returns {Promise<object|null>}
+ * @returns {Promise<Array<object|null>>} Array of results for each admin chat
  */
 export async function sendTelegramAdminMessage(message, options = {}) {
-  const adminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
+  const adminChatIds = (process.env.TELEGRAM_ADMIN_CHAT_ID || '')
+    .split(',')
+    .map(id => id.trim())
+    .filter(Boolean);
   
-  if (!adminChatId) {
+  if (adminChatIds.length === 0) {
     console.warn('[Telegram] TELEGRAM_ADMIN_CHAT_ID not configured');
     return null;
   }
 
-  return sendTelegramMessage(adminChatId, message, options);
+  // Send message to all admin chat IDs
+  const results = await Promise.allSettled(
+    adminChatIds.map(chatId => sendTelegramMessage(chatId, message, options))
+  );
+  
+  // Log any failures
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      console.error(`[Telegram] Failed to send message to admin ${adminChatIds[index]}:`, result.reason);
+    }
+  });
+  
+  // Return array of successful results
+  return results
+    .filter(r => r.status === 'fulfilled')
+    .map(r => r.value);
 }
 
 /**
