@@ -1,5 +1,5 @@
 # Nginx/Reverse Proxy Configuration
-*Last updated: 2025-06-25*
+*Last updated: 2026-02-11*
 
 This document provides a basic configuration example for running **Cicero_V2** behind `nginx` or another reverse proxy. The setup is optional but helps prevent direct access to the application port.
 
@@ -42,3 +42,33 @@ If using HTTPS, configure a certificate via `certbot` or another provider. Updat
 ## 4. Further Reference
 
 See [docs/server_migration.md](server_migration.md) for a complete guide to preparing a new server.
+
+## 5. CORS + Cookie Header Consistency (Browser Login)
+
+Jika autentikasi web menggunakan cookie token lintas origin, pastikan reverse proxy **tidak menghapus** header CORS dari backend dan tetap konsisten mengirim:
+
+- `Access-Control-Allow-Origin: <origin frontend spesifik>`
+- `Access-Control-Allow-Credentials: true`
+
+Contoh tambahan di `location /` (Nginx) jika CORS perlu ditangani di layer proxy:
+
+```nginx
+location / {
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header Host $host;
+    proxy_pass http://127.0.0.1:3000;
+
+    add_header Access-Control-Allow-Origin https://frontend.example.com always;
+    add_header Access-Control-Allow-Credentials true always;
+    add_header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS" always;
+    add_header Access-Control-Allow-Headers "Content-Type, Authorization" always;
+
+    if ($request_method = OPTIONS) {
+        return 204;
+    }
+}
+```
+
+> Gunakan origin eksplisit dan jangan gunakan `*` saat `Access-Control-Allow-Credentials: true`.
+

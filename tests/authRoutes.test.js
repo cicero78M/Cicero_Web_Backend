@@ -99,6 +99,10 @@ describe('POST /login', () => {
       loginType: 'operator',
       loginSource: 'mobile'
     });
+    const setCookie = res.headers['set-cookie']?.[0] || '';
+    expect(setCookie).toContain('token=');
+    expect(setCookie).toContain('HttpOnly');
+    expect(setCookie).toContain('SameSite=Lax');
   });
 
   test('sets role to client_id for direktorat client', async () => {
