@@ -134,18 +134,19 @@ describe('telegramService', () => {
   });
 
   describe('sendTelegramAdminMessage', () => {
-    it('should skip when admin chat ID is not configured', async () => {
+    it('should return empty array when admin chat ID is not configured', async () => {
       delete process.env.TELEGRAM_ADMIN_CHAT_ID;
       const result = await sendTelegramAdminMessage('Admin message');
-      expect(result).toBeNull();
+      expect(Array.isArray(result)).toBe(true);
+      expect(result.length).toBe(0);
     });
 
-    it('should send message to admin chat', async () => {
+    it('should send message to single admin chat', async () => {
       process.env.TELEGRAM_ADMIN_CHAT_ID = '987654';
       process.env.TELEGRAM_BOT_TOKEN = 'test-token';
       mockSendMessage.mockResolvedValue({ message_id: 2 });
       
-      await sendTelegramAdminMessage('Admin message');
+      const result = await sendTelegramAdminMessage('Admin message');
       
       if (isTelegramReady()) {
         expect(mockSendMessage).toHaveBeenCalledWith(
@@ -153,6 +154,39 @@ describe('telegramService', () => {
           'Admin message',
           expect.any(Object)
         );
+        expect(Array.isArray(result)).toBe(true);
+        expect(result.length).toBe(1);
+      }
+    });
+
+    it('should send message to multiple admin chats', async () => {
+      process.env.TELEGRAM_ADMIN_CHAT_ID = '987654,123456,789012';
+      process.env.TELEGRAM_BOT_TOKEN = 'test-token';
+      mockSendMessage.mockResolvedValue({ message_id: 2 });
+      
+      const result = await sendTelegramAdminMessage('Admin message');
+      
+      if (isTelegramReady()) {
+        expect(mockSendMessage).toHaveBeenCalledTimes(3);
+        expect(mockSendMessage).toHaveBeenCalledWith('987654', 'Admin message', expect.any(Object));
+        expect(mockSendMessage).toHaveBeenCalledWith('123456', 'Admin message', expect.any(Object));
+        expect(mockSendMessage).toHaveBeenCalledWith('789012', 'Admin message', expect.any(Object));
+        expect(Array.isArray(result)).toBe(true);
+        expect(result.length).toBe(3);
+      }
+    });
+
+    it('should handle whitespace in chat IDs', async () => {
+      process.env.TELEGRAM_ADMIN_CHAT_ID = ' 987654 , 123456 ';
+      process.env.TELEGRAM_BOT_TOKEN = 'test-token';
+      mockSendMessage.mockResolvedValue({ message_id: 2 });
+      
+      const result = await sendTelegramAdminMessage('Admin message');
+      
+      if (isTelegramReady()) {
+        expect(mockSendMessage).toHaveBeenCalledTimes(2);
+        expect(mockSendMessage).toHaveBeenCalledWith('987654', 'Admin message', expect.any(Object));
+        expect(mockSendMessage).toHaveBeenCalledWith('123456', 'Admin message', expect.any(Object));
       }
     });
   });
