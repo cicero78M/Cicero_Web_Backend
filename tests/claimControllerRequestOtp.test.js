@@ -90,7 +90,7 @@ test('returns 429 when rate limit exceeded', async () => {
   const req = { body: { nrp: '1', email: 'user@example.com' } };
   const res = createRes();
   const { checkOtpRateLimit } = await import('../src/service/otpService.js');
-  checkOtpRateLimit.mockReturnValue(false);
+  checkOtpRateLimit.mockResolvedValue(false);
   await requestOtp(req, res, () => {});
   expect(res.status).toHaveBeenCalledWith(429);
   expect(res.json).toHaveBeenCalledWith({
