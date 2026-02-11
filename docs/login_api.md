@@ -242,6 +242,32 @@ Script ini akan:
 - Memverifikasi `client_id` di tabel `clients`.
 - Menambahkan relasi baru ke `dashboard_user_clients` dan menampilkan daftar terbaru `client_ids`.
 
+
+### Client integration for protected endpoints
+
+Untuk endpoint protected seperti `/api/link-reports`, `/api/link-reports-khusus`, dan `/api/users/:id`, client harus menyimpan token dari `POST /api/auth/user-login` lalu mengirimkannya di setiap request melalui header `Authorization: Bearer <token>`.
+
+Repository ini menyediakan helper `createProtectedApiClient` di `src/service/protectedApiClient.js` sebagai acuan integrasi client:
+
+```js
+import { createProtectedApiClient } from './src/service/protectedApiClient.js';
+
+const apiClient = createProtectedApiClient({
+  baseURL: 'http://localhost:3000',
+  logger: console
+});
+
+await apiClient.userLogin({ nrp: '123456', whatsapp: '628123456789' });
+await apiClient.getUserById('123456');
+await apiClient.createLinkReport({ shortcode: 'abc123' });
+await apiClient.createLinkReportKhusus({ shortcode: 'xyz789' });
+```
+
+Catatan penting:
+- Helper mengaktifkan `withCredentials: true` untuk mendukung flow berbasis cookie.
+- Request interceptor menambahkan `Authorization` otomatis ketika token tersedia.
+- Sebelum request dikirim, helper melakukan logging `authorizationAttached` agar integrasi client mudah diverifikasi saat debugging.
+
 ## 4. Operator Access Allowlist
 
 Role `operator` hanya diperbolehkan mengakses endpoint tertentu di bawah `/api`. Permintaan ke endpoint lain akan tetap diblokir dengan status `403` untuk menjaga keamanan.
