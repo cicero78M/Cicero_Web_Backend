@@ -4,8 +4,7 @@ import { fetchInstagramInfo } from "./instaRapidService.js";
 import { fetchTiktokProfile } from "./tiktokRapidService.js";
 import { hasUserLikedBetween } from "../model/instaLikeModel.js";
 import { hasUserCommentedBetween } from "../model/tiktokCommentModel.js";
-import { normalizeUserWhatsAppId, safeSendMessage } from "../utils/waHelper.js";
-import waClient, { waitForWaReady } from "./waService.js";
+import { normalizeUserWhatsAppId } from "../utils/waHelper.js";
 
 const numberFormatter = new Intl.NumberFormat("id-ID");
 export const UPDATE_DATA_LINK = "https://papiqo.com/claim";
@@ -1091,24 +1090,11 @@ export async function sendComplaintWhatsappResponse({
     return { personnel, dashboardUser };
   }
 
-  try {
-    await waitForWaReady();
-  } catch (err) {
-    const reason = `wa_not_ready: ${err?.message || "unknown_error"}`;
-    targets.forEach((entry) => {
-      entry.status = "failed";
-      entry.reason = reason;
-    });
-    return { personnel, dashboardUser };
-  }
-
-  for (const entry of targets) {
-    const sent = await safeSendMessage(waClient, entry.target, message);
-    entry.status = sent ? "sent" : "failed";
-    if (!sent) {
-      entry.reason = "send_failed";
-    }
-  }
+  // WhatsApp messaging removed - complaints handled through dashboard
+  targets.forEach((entry) => {
+    entry.status = "skipped";
+    entry.reason = "whatsapp_disabled";
+  });
 
   return { personnel, dashboardUser };
 }

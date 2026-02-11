@@ -1,6 +1,5 @@
 // src/middleware/debugHandler.js
-
-import waClient, { waitForWaReady } from "../service/waService.js";
+// Debug handler - WhatsApp functionality removed
 
 // Helper: stringifier aman untuk circular object
 function safeStringify(obj) {
@@ -23,16 +22,8 @@ function safeStringify(obj) {
   }
 }
 
-function parseAdminWA() {
-  return (process.env.ADMIN_WHATSAPP || "")
-    .split(",")
-    .map((n) => n.trim())
-    .filter(Boolean)
-    .map((n) => (n.endsWith("@c.us") ? n : n.replace(/\D/g, "") + "@c.us"));
-}
-
 /**
- * Kirim debug ke admin WhatsApp & console.
+ * Kirim debug ke console (WhatsApp debug removed)
  * @param {string} tag - Tag kategori pesan (misal: CRON TIKTOK)
  * @param {string|object} msg - Pesan yang akan dikirim/log.
  * @param {string} [client_id] - Opsional, client_id untuk prefix (jika ada)
@@ -41,35 +32,11 @@ function parseAdminWA() {
 export function sendDebug({ tag = "DEBUG", msg, client_id = "", clientName = "" } = {}) {
   let safeMsg = typeof msg === "string" ? msg : safeStringify(msg);
 
-  const adminWA = parseAdminWA();
   let prefix = `[${tag}]`;
   if (client_id) prefix += `[${client_id}]`;
   if (clientName) prefix += `[${clientName}]`;
 
   const fullMsg = `${prefix} ${safeMsg}`;
-
-  const isStartOrEnd = /\b(mulai|start|selesai|end)\b/i.test(safeMsg);
-  const isError = /error/i.test(safeMsg);
-
-  if (isStartOrEnd || isError) {
-    waitForWaReady()
-      .then(() => {
-        let waMsg = fullMsg;
-        if (isError) {
-          // kirim hanya potongan pendek agar tidak mengandung raw data
-          waMsg = `${prefix} ${safeMsg.toString().substring(0, 200)}`;
-        }
-        for (const wa of adminWA) {
-          waClient.sendMessage(wa, waMsg).catch(() => {});
-        }
-      })
-      .catch(() => {
-        console.warn(
-          '[WA] Skipping debug WhatsApp send: WhatsApp client not ready'
-        );
-      });
-  }
-
   console.log(fullMsg);
 }
 

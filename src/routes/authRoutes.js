@@ -387,21 +387,7 @@ router.post('/dashboard-register', async (req, res) => {
     console.warn(`[Telegram] Failed to send approval request: ${err.message}`);
   });
 
-  if (whatsapp) {
-    try {
-      await waitForWaReady();
-      const wid = formatToWhatsAppId(whatsapp);
-      safeSendMessage(
-        waClient,
-        wid,
-        "\uD83D\uDCCB Permintaan registrasi dashboard Anda telah diterima dan menunggu persetujuan admin."
-      );
-    } catch (err) {
-      console.warn(
-        `[WA] Skipping user notification for ${whatsapp}: ${err.message}`
-      );
-    }
-  }
+  // WhatsApp user notification removed - using Telegram only
   return res
     .status(201)
     .json({ success: true, dashboard_user_id: user.dashboard_user_id, status: user.status });
@@ -555,15 +541,13 @@ router.post("/login", async (req, res) => {
 
   const isValidOperator =
     inputId === dbOperator ||
-    client_operator === client.client_operator ||
-    isAdminWhatsApp(inputId) ||
-    isAdminWhatsApp(client_operator);
+    client_operator === client.client_operator;
 
   if (!isValidOperator) {
     const reason = "client operator tidak valid";
     const time = new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" });
-    notifyAdmin(
-      `❌ Login gagal\nAlasan: ${reason}\nID: ${client_id}\nOperator: ${client_operator}\nWaktu: ${time}`
+    console.warn(
+      `[AUTH] Login failed: ${reason} - ID: ${client_id}, Operator: ${client_operator}, Time: ${time}`
     );
     return res.status(401).json({
       success: false,
