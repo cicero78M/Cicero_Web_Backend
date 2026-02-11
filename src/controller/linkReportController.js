@@ -1,14 +1,7 @@
 import * as linkReportModel from '../model/linkReportModel.js';
 import { sendSuccess } from '../utils/response.js';
-import {
-  extractFirstUrl,
-  getGreeting,
-  formatNama,
-} from '../utils/utilsHelper.js';
+import { extractFirstUrl } from '../utils/utilsHelper.js';
 import { generateLinkReportExcelBuffer } from '../service/amplifyExportService.js';
-import waClient, { waitForWaReady } from '../service/waService.js';
-import { findUserById } from '../model/userModel.js';
-import { formatToWhatsAppId, safeSendMessage } from '../utils/waHelper.js';
 
 export async function getAllLinkReports(req, res, next) {
   try {
@@ -87,39 +80,8 @@ export async function createLinkReport(req, res) {
     });
     const report = await linkReportModel.createLinkReport(data);
 
-    if (data.user_id) {
-      try {
-        await waitForWaReady();
-        const user = await findUserById(data.user_id);
-        if (user?.whatsapp) {
-          const wid = formatToWhatsAppId(user.whatsapp);
-          const greeting = getGreeting();
-          const fullName = formatNama(user);
-          const links = [
-            report.facebook_link || 'Facebook Nihil',
-            report.instagram_link || 'Instagram Nihil',
-            report.twitter_link || 'Twitter Nihil',
-            report.tiktok_link || 'Tiktok Nihil',
-            report.youtube_link || 'Youtube Nihil',
-          ]
-            .map((l) => `- ${l}`)
-            .join('\n');
-          const msg =
-            `${greeting},\n\n` +
-            `Terimakasih, ${fullName}.\n` +
-            `Anda sudah melaksanakan Tugas Amplifikasi Konten:\n` +
-            `- https://www.instagram.com/p/${data.shortcode}\n\n` +
-            `Link Amplifikasi Anda :\n` +
-            `Jangan lupa simpan nomor WA Bot ini agar tetap menerima notifikasi tugas berikutnya.\n` +
-            links;
-          await safeSendMessage(waClient, wid, msg);
-        }
-      } catch (err) {
-        console.warn(
-          `[WA] Skipping link report notification: ${err.message}`
-        );
-      }
-    }
+    // Note: User notification for amplification link submission has been removed
+    // as per requirement to remove user message sending in amplification mechanisms
 
     sendSuccess(res, report, 201);
   } catch (err) {
