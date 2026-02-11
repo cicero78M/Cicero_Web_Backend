@@ -2,22 +2,19 @@ import { jest } from '@jest/globals';
 
 const mockFindById = jest.fn();
 const mockUpdateStatus = jest.fn();
-const mockSafeSendMessage = jest.fn();
+const mockSendTelegramMessage = jest.fn();
+const mockSendUserApprovalConfirmation = jest.fn();
+const mockSendUserRejectionConfirmation = jest.fn();
 
 jest.unstable_mockModule('../src/model/dashboardUserModel.js', () => ({
   findById: mockFindById,
   updateStatus: mockUpdateStatus
 }));
 
-jest.unstable_mockModule('../src/utils/waHelper.js', () => ({
-  formatToWhatsAppId: (num) => num,
-  safeSendMessage: mockSafeSendMessage
-}));
-
-const mockWaClient = {};
-jest.unstable_mockModule('../src/service/waService.js', () => ({
-  default: mockWaClient,
-  waitForWaReady: () => Promise.resolve()
+jest.unstable_mockModule('../src/service/telegramService.js', () => ({
+  sendTelegramMessage: mockSendTelegramMessage,
+  sendUserApprovalConfirmation: mockSendUserApprovalConfirmation,
+  sendUserRejectionConfirmation: mockSendUserRejectionConfirmation
 }));
 
 let controller;
@@ -29,12 +26,16 @@ beforeAll(async () => {
 beforeEach(() => {
   mockFindById.mockReset();
   mockUpdateStatus.mockReset();
-  mockSafeSendMessage.mockReset();
+  mockSendTelegramMessage.mockReset();
+  mockSendUserApprovalConfirmation.mockReset();
+  mockSendUserRejectionConfirmation.mockReset();
 });
 
 test('approveDashboardUser sends approval message', async () => {
-  mockFindById.mockResolvedValue({ dashboard_user_id: '1', username: 'user', whatsapp: '0812' });
+  mockFindById.mockResolvedValue({ dashboard_user_id: '1', username: 'user', telegram_chat_id: '123456' });
   mockUpdateStatus.mockResolvedValue({ dashboard_user_id: '1', status: true });
+  mockSendTelegramMessage.mockResolvedValue({ ok: true });
+  mockSendUserApprovalConfirmation.mockResolvedValue({ ok: true });
 
   const req = { dashboardUser: { role: 'admin' }, params: { id: '1' } };
   const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
@@ -43,9 +44,8 @@ test('approveDashboardUser sends approval message', async () => {
   await controller.approveDashboardUser(req, res, next);
 
   expect(mockUpdateStatus).toHaveBeenCalledWith('1', true);
-  expect(mockSafeSendMessage).toHaveBeenCalledWith(
-    mockWaClient,
-    '0812',
+  expect(mockSendTelegramMessage).toHaveBeenCalledWith(
+    '123456',
     expect.stringContaining('disetujui')
   );
   expect(res.status).toHaveBeenCalledWith(200);
@@ -53,8 +53,10 @@ test('approveDashboardUser sends approval message', async () => {
 });
 
 test('rejectDashboardUser sends rejection message', async () => {
-  mockFindById.mockResolvedValue({ dashboard_user_id: '1', username: 'user', whatsapp: '0812' });
+  mockFindById.mockResolvedValue({ dashboard_user_id: '1', username: 'user', telegram_chat_id: '123456' });
   mockUpdateStatus.mockResolvedValue({ dashboard_user_id: '1', status: false });
+  mockSendTelegramMessage.mockResolvedValue({ ok: true });
+  mockSendUserRejectionConfirmation.mockResolvedValue({ ok: true });
 
   const req = { dashboardUser: { role: 'admin' }, params: { id: '1' } };
   const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
@@ -63,9 +65,8 @@ test('rejectDashboardUser sends rejection message', async () => {
   await controller.rejectDashboardUser(req, res, next);
 
   expect(mockUpdateStatus).toHaveBeenCalledWith('1', false);
-  expect(mockSafeSendMessage).toHaveBeenCalledWith(
-    mockWaClient,
-    '0812',
+  expect(mockSendTelegramMessage).toHaveBeenCalledWith(
+    '123456',
     expect.stringContaining('ditolak')
   );
   expect(res.status).toHaveBeenCalledWith(200);
