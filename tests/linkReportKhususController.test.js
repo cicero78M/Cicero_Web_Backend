@@ -38,12 +38,50 @@ beforeEach(() => {
 });
 
 describe('createLinkReport', () => {
-  test('rejects when client_id is missing', async () => {
+  test('uses req.user.client_id when body client_id is missing', async () => {
+    const instagramUrl = 'https://www.instagram.com/p/ABC123/';
+    mockFetchSinglePostKhusus.mockResolvedValueOnce({
+      shortcode: 'ABC123',
+      caption: 'Test caption'
+    });
+    mockCreateLinkReport.mockResolvedValueOnce({
+      shortcode: 'ABC123',
+      instagram_link: instagramUrl
+    });
+
+    const req = {
+      body: {
+        instagram_link: instagramUrl,
+        user_id: '1'
+      },
+      user: {
+        client_id: 'POLRES'
+      }
+    };
+    const next = jest.fn();
+    const res = {
+      json: jest.fn(),
+      status: jest.fn().mockReturnThis()
+    };
+
+    await createLinkReport(req, res, next);
+
+    expect(mockFetchSinglePostKhusus).toHaveBeenCalledWith(instagramUrl, 'POLRES');
+    expect(mockCreateLinkReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        client_id: 'POLRES'
+      })
+    );
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('rejects when both payload and token client_id are missing', async () => {
     const req = {
       body: {
         instagram_link: 'https://www.instagram.com/p/ABC123/',
         user_id: '1'
-      }
+      },
+      query: {}
     };
     const next = jest.fn();
     const res = {};
@@ -54,6 +92,33 @@ describe('createLinkReport', () => {
       expect.objectContaining({
         message: 'client_id is required',
         statusCode: 400
+      })
+    );
+    expect(mockFetchSinglePostKhusus).not.toHaveBeenCalled();
+    expect(mockCreateLinkReport).not.toHaveBeenCalled();
+  });
+
+  test('rejects when requested client_id is outside req.user.client_ids', async () => {
+    const req = {
+      body: {
+        instagram_link: 'https://www.instagram.com/p/ABC123/',
+        user_id: '1',
+        client_id: 'POLRES_B'
+      },
+      user: {
+        client_id: 'POLRES_A',
+        client_ids: ['POLRES_A']
+      }
+    };
+    const next = jest.fn();
+    const res = {};
+
+    await createLinkReport(req, res, next);
+
+    expect(next).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'client_id tidak diizinkan',
+        statusCode: 403
       })
     );
     expect(mockFetchSinglePostKhusus).not.toHaveBeenCalled();

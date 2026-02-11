@@ -1,5 +1,5 @@
 # Link Reports API
-*Last updated: 2025-09-27*
+*Last updated: 2026-02-11*
 
 Dokumen ini menjelaskan endpoint untuk mengambil data link report.
 
@@ -84,3 +84,22 @@ GET /api/link-reports-khusus?user_id=84110583&post_id=DSl7lfmgd14
   ]
 }
 ```
+
+## POST /api/link-reports-khusus
+Membuat link report khusus (hanya `instagram_link`).
+
+### Resolusi `client_id`
+Untuk endpoint ini, backend meresolusi `client_id` secara berurutan:
+1. `req.body.client_id`
+2. `req.query.client_id`
+3. `req.user.client_id` (dari token `authRequired`)
+
+Jika ketiganya kosong, API akan mengembalikan `400 client_id is required`.
+
+### Guard multi-client token
+Jika token memiliki `client_ids`, maka `client_id` hasil resolusi harus termasuk dalam daftar tersebut.
+Jika tidak termasuk, API akan mengembalikan `403 client_id tidak diizinkan`.
+
+### Catatan payload
+- `instagram_link` wajib diisi dan harus URL post/reel Instagram yang valid.
+- Link platform lain (`facebook_link`, `twitter_link`, `tiktok_link`, `youtube_link`) tidak diizinkan untuk endpoint khusus ini.
