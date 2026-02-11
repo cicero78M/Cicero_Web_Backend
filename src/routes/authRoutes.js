@@ -152,7 +152,7 @@ export async function handleDashboardPasswordResetRequest(req, res) {
 
     return res.json({
       success: true,
-      message: 'Instruksi reset password telah dikirim ke admin melalui Telegram.',
+      message: 'Permintaan reset password telah diterima. Token akan dikirim ke admin melalui Telegram. Silakan hubungi admin untuk mendapatkan token reset password Anda.',
     });
   } catch (err) {
     console.error('[AUTH] Gagal membuat permintaan reset password dashboard:', err);
@@ -287,9 +287,9 @@ router.post('/penmas-login', async (req, res) => {
     loginSource: 'web'
   });
   const time = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
-  console.log('[AUTH]', 
-    `\uD83D\uDD11 Login Penmas: ${user.username} (${user.role})\nWaktu: ${time}`
-  );
+  sendTelegramAdminMessage(
+    `🔑 *Login Penmas*\n\nUsername: ${user.username}\nRole: ${user.role}\nWaktu: ${time}`
+  ).catch(err => console.warn('[Telegram] Failed to send login notification:', err.message));
   return res.json({ success: true, token, user: payload });
 });
 
@@ -466,14 +466,8 @@ router.post('/dashboard-login', async (req, res) => {
     loginType: 'operator',
     loginSource: 'web'
   });
-  const time = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
   const clientInfoLabel = user.client_ids.length === 1 ? 'Client ID' : 'Client IDs';
   const clientInfo = user.client_ids.length === 1 ? user.client_ids[0] : user.client_ids.join(', ');
-  
-  // Send notification to admin via WhatsApp
-  console.log('[AUTH]', 
-    `\uD83D\uDD11 Login dashboard: ${user.username} (${user.role})\n${clientInfoLabel}: ${clientInfo}\nWaktu: ${time}`
-  );
   
   // Send notification to admin via Telegram
   sendLoginLogNotification({
