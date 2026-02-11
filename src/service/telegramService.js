@@ -589,10 +589,10 @@ function buildConfirmationMessage(baseMessage, user, userNotified, userNotificat
  */
 async function processApproval(chatId, username) {
   try {
-    const { default: dashboardUserModel } = await import('../model/dashboardUserModel.js');
+    const { findByUsername, updateStatus } = await import('../model/dashboardUserModel.js');
     
     // Find user by username
-    const user = await dashboardUserModel.findByUsername(username);
+    const user = await findByUsername(username);
     if (!user) {
       await bot.sendMessage(
         chatId, 
@@ -612,7 +612,7 @@ async function processApproval(chatId, username) {
     }
     
     // Approve user (set status to true)
-    await dashboardUserModel.updateStatus(user.dashboard_user_id, true);
+    await updateStatus(user.dashboard_user_id, true);
     
     // Send notification to user via Telegram if available
     const { userNotified, userNotificationError } = await sendUserTelegramNotification(
@@ -646,10 +646,10 @@ async function processApproval(chatId, username) {
  */
 async function processRejection(chatId, username) {
   try {
-    const { default: dashboardUserModel } = await import('../model/dashboardUserModel.js');
+    const { findByUsername, updateStatus } = await import('../model/dashboardUserModel.js');
     
     // Find user by username
-    const user = await dashboardUserModel.findByUsername(username);
+    const user = await findByUsername(username);
     if (!user) {
       await bot.sendMessage(
         chatId, 
@@ -670,7 +670,7 @@ async function processRejection(chatId, username) {
     }
     
     // Reject user (set status to false)
-    await dashboardUserModel.updateStatus(user.dashboard_user_id, false);
+    await updateStatus(user.dashboard_user_id, false);
     
     // Send notification to user via Telegram if available
     const { userNotified, userNotificationError } = await sendUserTelegramNotification(
