@@ -404,13 +404,15 @@ router.post('/dashboard-register', async (req, res) => {
   // Fetch client names for the approval message
   let clientNames = [];
   if (clientIds.length > 0) {
-    const clientPromises = clientIds.map(clientId => clientModel.findById(clientId));
-    const clients = await Promise.all(clientPromises);
-    clientNames = clients.map((client, index) => {
+    const clientPromises = clientIds.map(clientId => 
+      clientModel.findById(clientId).then(client => ({ clientId, client }))
+    );
+    const clientResults = await Promise.all(clientPromises);
+    clientNames = clientResults.map(({ clientId, client }) => {
       if (client && client.nama) {
-        return `${client.nama} (${clientIds[index]})`;
+        return `${client.nama} (${clientId})`;
       }
-      return clientIds[index];
+      return clientId;
     });
   }
 
