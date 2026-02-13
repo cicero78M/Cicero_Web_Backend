@@ -402,13 +402,13 @@ router.post('/dashboard-register', async (req, res) => {
   }
 
   // Fetch client names for the approval message
-  let clientNames = [];
+  let clientNamesList = [];
   if (clientIds.length > 0) {
     const clientPromises = clientIds.map(clientId => 
       clientModel.findById(clientId).then(client => ({ clientId, client }))
     );
     const clientResults = await Promise.all(clientPromises);
-    clientNames = clientResults.map(({ clientId, client }) => {
+    clientNamesList = clientResults.map(({ clientId, client }) => {
       if (client && client.nama) {
         return `${client.nama} (${clientId})`;
       }
@@ -431,7 +431,7 @@ router.post('/dashboard-register', async (req, res) => {
     email,
     role: roleRow?.role_name,
     clientIds: clientIds.length ? clientIds.join(', ') : '-',
-    clientNames: clientNames.length ? clientNames.join(', ') : '-'
+    clientNames: clientNamesList.length ? clientNamesList.join(', ') : '-'
   }).catch((err) => {
     console.warn(`[Telegram] Failed to send approval request: ${err.message}`);
   });
