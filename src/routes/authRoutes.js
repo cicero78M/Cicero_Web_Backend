@@ -404,14 +404,14 @@ router.post('/dashboard-register', async (req, res) => {
   // Fetch client names for the approval message
   let clientNames = [];
   if (clientIds.length > 0) {
-    for (const clientId of clientIds) {
-      const client = await clientModel.findById(clientId);
+    const clientPromises = clientIds.map(clientId => clientModel.findById(clientId));
+    const clients = await Promise.all(clientPromises);
+    clientNames = clients.map((client, index) => {
       if (client && client.nama) {
-        clientNames.push(`${client.nama} (${clientId})`);
-      } else {
-        clientNames.push(clientId);
+        return `${client.nama} (${clientIds[index]})`;
       }
-    }
+      return clientIds[index];
+    });
   }
 
   // Send approval request to admin via WhatsApp
