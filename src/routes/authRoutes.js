@@ -412,7 +412,8 @@ router.post('/dashboard-register', async (req, res) => {
       if (client && client.nama) {
         return `${client.nama} (${clientId})`;
       }
-      return clientId;
+      // Return with indicator when client data is missing or incomplete
+      return `${clientId} (Unknown)`;
     });
   }
 
