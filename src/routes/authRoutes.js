@@ -8,6 +8,7 @@ import * as penmasUserModel from "../model/penmasUserModel.js";
 import * as dashboardUserModel from "../model/dashboardUserModel.js";
 import * as dashboardPasswordResetModel from "../model/dashboardPasswordResetModel.js";
 import * as userModel from "../model/userModel.js";
+import * as clientModel from "../model/clientModel.js";
 import * as dashboardSubscriptionService from "../service/dashboardSubscriptionService.js";
 import {
   minPhoneDigitLength,
@@ -400,6 +401,19 @@ router.post('/dashboard-register', async (req, res) => {
     await dashboardUserModel.addClients(dashboard_user_id, clientIds);
   }
 
+  // Fetch client names for the approval message
+  let clientNames = [];
+  if (clientIds.length > 0) {
+    for (const clientId of clientIds) {
+      const client = await clientModel.findById(clientId);
+      if (client && client.nama) {
+        clientNames.push(`${client.nama} (${clientId})`);
+      } else {
+        clientNames.push(clientId);
+      }
+    }
+  }
+
   // Send approval request to admin via WhatsApp
   console.log('[AUTH]', 
     `\uD83D\uDCCB Permintaan User Approval dengan data sebagai berikut :\nUsername: ${username}\nID: ${dashboard_user_id}\nRole: ${roleRow?.role_name || '-'}\nWhatsApp: ${whatsapp}\nClient ID: ${
@@ -414,7 +428,8 @@ router.post('/dashboard-register', async (req, res) => {
     whatsapp,
     email,
     role: roleRow?.role_name,
-    clientIds: clientIds.length ? clientIds.join(', ') : '-'
+    clientIds: clientIds.length ? clientIds.join(', ') : '-',
+    clientNames: clientNames.length ? clientNames.join(', ') : '-'
   }).catch((err) => {
     console.warn(`[Telegram] Failed to send approval request: ${err.message}`);
   });

@@ -273,7 +273,7 @@ export async function sendLoginLogNotification(logData) {
  * @returns {Promise<object|null>}
  */
 export async function sendUserApprovalRequest(userData) {
-  const { dashboard_user_id, username, whatsapp, email, role } = userData;
+  const { dashboard_user_id, username, whatsapp, email, role, clientNames } = userData;
   
   let message = `📋 *Permintaan Registrasi Dashboard*\n\n`;
   message += `*User ID:* ${escapeMarkdown(String(dashboard_user_id))}\n`;
@@ -281,6 +281,7 @@ export async function sendUserApprovalRequest(userData) {
   if (whatsapp) message += `*WhatsApp:* ${escapeMarkdown(whatsapp)}\n`;
   if (email) message += `*Email:* ${escapeMarkdown(email)}\n`;
   if (role) message += `*Role:* ${escapeMarkdown(role)}\n`;
+  if (clientNames) message += `*Satker/Polres:* ${escapeMarkdown(clientNames)}\n`;
   message += `\n_Menunggu persetujuan admin_\n\n`;
   message += `Gunakan tombol di bawah atau ketik:\n`;
   message += `\`/approvedash ${escapeMarkdown(username)}\` untuk menyetujui\n`;
