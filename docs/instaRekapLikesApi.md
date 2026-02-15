@@ -134,10 +134,8 @@ When `role` and `scope` are provided, the endpoint follows these rules:
 
 ### `scope=direktorat`
 
-- **Data tugas (post)** dipilih dengan **role filter** (`insta_post_roles.role_name = role`) sebagai selector utama.
-- `client_id` request tidak lagi menjadi hard-lock untuk post ketika mode direktorat aktif.
-- **Data personil** tetap direkap berdasarkan **role yang sama** (`role`) lintas client.
-- Jika `regional_id` dikirim, roster personil dan himpunan post tetap dibatasi regional tersebut.
+- **Data tugas (post)** diambil berdasarkan `client_id`.
+- **Data personil** direkap berdasarkan **role yang sama** (`role`), lintas client.
 
 ### `scope=org`
 

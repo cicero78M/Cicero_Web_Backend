@@ -373,8 +373,10 @@ export async function getRekapLikesByClient(
 
     if (shouldIncludeRoleFilter && resolvedPostRoleName) {
       const roleIdx = sharedRoleIdx ?? addParamFn(resolvedPostRoleName);
-      postRoleJoin = 'JOIN insta_post_roles pr ON pr.shortcode = p.shortcode';
-      postRoleFilter = `AND LOWER(pr.role_name) = LOWER($${roleIdx})`;
+      const roleFilterCondition =
+        `LOWER(p.client_id) = LOWER($${roleIdx}) OR LOWER(pr.role_name) = LOWER($${roleIdx})`;
+      postRoleJoin = 'LEFT JOIN insta_post_roles pr ON pr.shortcode = p.shortcode';
+      postRoleFilter = `AND (${roleFilterCondition})`;
     }
 
     if (normalizedRegionalId) {
