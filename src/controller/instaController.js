@@ -30,8 +30,24 @@ function normalizeInstagramUsername(value) {
   return normalizedHandle ? normalizedHandle.replace(/^@/, "") : "";
 }
 
+function normalizeClientId(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const trimmed = String(value).trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeClientIdLower(value) {
+  const normalized = normalizeClientId(value);
+  return normalized ? normalized.toLowerCase() : null;
+}
+
 export async function getInstaRekapLikes(req, res) {
-  let client_id = req.query.client_id;
+  let client_id =
+    req.query.client_id ||
+    req.user?.client_id ||
+    req.headers["x-client-id"];
   const periode = req.query.periode || "harian";
   const tanggal = req.query.tanggal;
   const startDate =
@@ -52,6 +68,7 @@ export async function getInstaRekapLikes(req, res) {
     scopeLower === "org" && roleLower === "operator";
   const directorateRoles = [
     "ditbinmas",
+    "ditintelkam",
     "ditlantas",
     "bidhumas",
     "ditsamapta",
@@ -61,36 +78,41 @@ export async function getInstaRekapLikes(req, res) {
   if (!usesStandardPayload && roleLower === "ditbinmas") {
     client_id = "ditbinmas";
   }
-  if (isOrgOperatorScope && req.user?.client_id && !client_id) {
+  if (isOrgOperatorScope && req.user?.client_id) {
     client_id = req.user.client_id;
   }
 
-  if (!client_id) {
+  const normalizedClientId = normalizeClientId(client_id);
+  if (!normalizedClientId) {
     return res
       .status(400)
       .json({ success: false, message: "client_id wajib diisi" });
   }
+  client_id = normalizedClientId;
 
-  const normalizedClientId = String(client_id).toLowerCase();
+  const normalizedClientIdLower = normalizeClientIdLower(client_id);
+
   const userClientIds = req.user?.client_ids
     ? Array.isArray(req.user.client_ids)
       ? req.user.client_ids
       : [req.user.client_ids]
     : [];
-  const idsLower = userClientIds.map((c) => String(c).toLowerCase());
+  const idsLower = userClientIds
+    .map((clientId) => normalizeClientIdLower(clientId))
+    .filter(Boolean);
   const matchesTokenClient =
     req.user?.client_id &&
-    req.user.client_id.toLowerCase() === normalizedClientId;
+    normalizeClientIdLower(req.user.client_id) === normalizedClientIdLower;
   const hasClientIdsAccess =
-    idsLower.includes(normalizedClientId) ||
+    idsLower.includes(normalizedClientIdLower) ||
     matchesTokenClient ||
-    roleLower === normalizedClientId;
+    roleLower === normalizedClientIdLower;
 
   if (req.user?.client_ids) {
     if (
-      !idsLower.includes(normalizedClientId) &&
+      !idsLower.includes(normalizedClientIdLower) &&
       !matchesTokenClient &&
-      roleLower !== normalizedClientId
+      roleLower !== normalizedClientIdLower
     ) {
       return res
         .status(403)
@@ -99,8 +121,8 @@ export async function getInstaRekapLikes(req, res) {
   }
   if (
     req.user?.client_id &&
-    req.user.client_id.toLowerCase() !== normalizedClientId &&
-    roleLower !== normalizedClientId &&
+    normalizeClientIdLower(req.user.client_id) !== normalizedClientIdLower &&
+    roleLower !== normalizedClientIdLower &&
     !hasClientIdsAccess
   ) {
     return res
@@ -146,11 +168,11 @@ export async function getInstaRekapLikes(req, res) {
               message: "client_id pengguna tidak ditemukan",
             });
           }
-          postClientId = client_id;
-          userClientId = client_id;
+          postClientId = tokenClientId;
+          userClientId = tokenClientId;
           userRoleFilter = "operator";
           if (officialOnlyFlag) {
-            const tokenClient = await clientModel.findById(client_id);
+            const tokenClient = await clientModel.findById(tokenClientId);
             officialAccountsOnly =
               tokenClient?.client_type?.toLowerCase() === "org";
           }
@@ -174,7 +196,7 @@ export async function getInstaRekapLikes(req, res) {
       roleForQuery = resolvedRole;
     }
 
-    sendConsoleDebug({ tag: "INSTA", msg: `getInstaRekapLikes ${client_id} ${periode} ${tanggal || ''} ${startDate || ''} ${endDate || ''} ${roleLower || ''} ${scopeLower || ''}` });
+    sendConsoleDebug({ tag: "INSTA", msg: `getInstaRekapLikes ${client_id} ${periode} ${tanggal || ''} ${startDate || ''} ${endDate || ''} ${roleLower || ''} ${scopeLower || ''} ${regionalId || ''}` });
     const { rows, totalKonten } = await getRekapLikesByClient(
       client_id,
       periode,
