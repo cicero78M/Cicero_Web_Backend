@@ -139,19 +139,19 @@ When `role` and `scope` are provided, the endpoint follows these rules:
 
 ### `scope=org`
 
-- Jika `role` adalah direktorat (`ditbinmas`, `ditlantas`, `bidhumas`, `ditsamapta`):
+- Jika `role` adalah direktorat (`ditbinmas`, `ditintelkam`, `ditlantas`, `bidhumas`, `ditsamapta`):
   - **Data tugas** diambil berdasarkan `client_id` direktorat (nilai `role`).
   - **Data personil** mengikuti `client_id` pengguna yang sedang login (token) dan dibatasi pada role direktorat yang sama.
   - **Perhitungan like** tetap mengikuti shortcode tugas direktorat, meskipun `client_id` personil berbeda.
 - Jika `role` adalah `operator`:
-  - **Data tugas** diambil berdasarkan `client_id` yang dipilih pada query (atau default ke `client_id` token bila tidak ada query).
-  - Jika `client_id` berbeda dari token, server akan mengecek hak akses (mis. `client_ids`) sebelum melanjutkan.
+  - **Data tugas** selalu dikunci ke `client_id` pada token login (`req.user.client_id`) agar konsisten dengan standar endpoint TikTok.
+  - Bila token tidak memiliki `client_id`, request ditolak dengan `400 client_id pengguna tidak ditemukan`.
   - Untuk client bertipe **ORG**, daftar tugas **hanya** dibatasi ke konten Instagram dari akun official
     yang tersimpan di `satbinmas_official_accounts` (platform `instagram`, `is_active = true`)
     melalui relasi `satbinmas_official_media`, **jika** `official_only=true`.
   - Default `official_only=false` sehingga rekap menghitung semua `insta_post` milik client pada periode yang diminta.
   - **Data personil** dibatasi pada role `operator`.
-  - **Otorisasi** memverifikasi `client_id` yang dipilih sesuai akses pengguna (token atau daftar `client_ids`).
+  - **Otorisasi** tetap memverifikasi akses `client_id` query terhadap token/`client_ids` sebelum eksekusi. Setelah lolos otorisasi, sumber data operator ORG tetap memakai `client_id` token.
 - Selain kondisi di atas:
   - **Data tugas** dan **personil** mengikuti `client_id` yang diminta.
 
