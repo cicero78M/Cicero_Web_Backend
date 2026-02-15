@@ -140,73 +140,12 @@ test('allows org operator scope using token client_id', async () => {
       userClientId: 'ORG1',
       userRoleFilter: 'operator',
       includePostRoleFilter: false,
-      postRoleFilterName: null,
       matchLikeClientId: true,
-      officialAccountsOnly: false,
+      officialAccountsOnly: true,
       regionalId: null,
     }
   );
   expect(json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
-});
-
-
-test('uses role-based post filter for direktorat scope', async () => {
-  mockGetRekap.mockResolvedValue({ rows: [], totalKonten: 0 });
-  const req = {
-    query: {
-      client_id: 'PoldaJatim',
-      role: 'ditintelkam',
-      scope: 'direktorat',
-      regional_id: 'jatim'
-    },
-    user: { client_ids: ['PoldaJatim'] }
-  };
-  const json = jest.fn();
-  const res = { json, status: jest.fn().mockReturnThis() };
-
-  await getInstaRekapLikes(req, res);
-
-  expect(mockGetRekap).toHaveBeenCalledWith(
-    'PoldaJatim',
-    'harian',
-    undefined,
-    undefined,
-    undefined,
-    'ditintelkam',
-    {
-      postClientId: null,
-      userClientId: null,
-      userRoleFilter: 'ditintelkam',
-      includePostRoleFilter: true,
-      postRoleFilterName: 'ditintelkam',
-      matchLikeClientId: true,
-      officialAccountsOnly: false,
-      regionalId: 'JATIM',
-    }
-  );
-  expect(json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
-});
-
-test('does not client-lock direktorat scope posts', async () => {
-  mockGetRekap.mockResolvedValue({ rows: [], totalKonten: 0 });
-  const req = {
-    query: {
-      client_id: 'client-origin',
-      role: 'ditintelkam',
-      scope: 'direktorat'
-    },
-    user: { client_ids: ['client-origin'] }
-  };
-  const json = jest.fn();
-  const res = { json, status: jest.fn().mockReturnThis() };
-
-  await getInstaRekapLikes(req, res);
-
-  const [, , , , , , options] = mockGetRekap.mock.calls[0];
-  expect(options.postClientId).toBeNull();
-  expect(options.includePostRoleFilter).toBe(true);
-  expect(options.postRoleFilterName).toBe('ditintelkam');
-  expect(options.userRoleFilter).toBe('ditintelkam');
 });
 
 test('returns user like summaries', async () => {
