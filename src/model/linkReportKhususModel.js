@@ -283,7 +283,7 @@ export async function getRekapLinkByClient(
        OR (SELECT client_type FROM cli) = 'direktorat' AND EXISTS (
          SELECT 1 FROM user_roles ur
           JOIN roles r ON ur.role_id = r.role_id
-          WHERE ur.user_id = u.user_id AND r.role_name = $1
+          WHERE ur.user_id = u.user_id AND LOWER(r.role_name) = LOWER($1)
         )
       )
       ${operatorRoleFilter}
