@@ -7,6 +7,7 @@ const mockCreateLinkReport = jest.fn();
 const mockUpdateLinkReport = jest.fn();
 const mockDeleteLinkReport = jest.fn();
 const mockFetchSinglePostKhusus = jest.fn();
+const mockFindClientIdByUserId = jest.fn();
 
 jest.unstable_mockModule('../src/model/linkReportKhususModel.js', () => ({
   getLinkReports: mockGetLinkReports,
@@ -18,6 +19,10 @@ jest.unstable_mockModule('../src/model/linkReportKhususModel.js', () => ({
 
 jest.unstable_mockModule('../src/handler/fetchpost/instaFetchPost.js', () => ({
   fetchSinglePostKhusus: mockFetchSinglePostKhusus,
+}));
+
+jest.unstable_mockModule('../src/model/userModel.js', () => ({
+  findClientIdByUserId: mockFindClientIdByUserId,
 }));
 
 let createLinkReport, updateLinkReport;
@@ -35,6 +40,8 @@ beforeEach(() => {
   mockUpdateLinkReport.mockReset();
   mockDeleteLinkReport.mockReset();
   mockFetchSinglePostKhusus.mockReset();
+  mockFindClientIdByUserId.mockReset();
+  mockFindClientIdByUserId.mockResolvedValue('POLRES');
 });
 
 describe('createLinkReport', () => {
@@ -55,6 +62,8 @@ describe('createLinkReport', () => {
         user_id: '1'
       },
       user: {
+        role: 'user',
+        user_id: '1',
         client_id: 'POLRES'
       }
     };
@@ -125,9 +134,14 @@ describe('createLinkReport', () => {
     expect(mockCreateLinkReport).not.toHaveBeenCalled();
   });
 
-  test('rejects when instagram_link is missing', async () => {
+  test('rejects when all social media links are missing', async () => {
     const req = {
-      body: { user_id: '1', client_id: 'POLRES' }
+      body: { user_id: '1', client_id: 'POLRES', shortcode: 'ABC123' },
+      user: {
+        role: 'user',
+        user_id: '1',
+        client_id: 'POLRES'
+      }
     };
     const next = jest.fn();
     const res = {};
@@ -136,8 +150,9 @@ describe('createLinkReport', () => {
 
     expect(next).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: 'instagram_link is required',
-        statusCode: 400
+        message: 'Minimal satu link laporan yang valid harus dikirim',
+        statusCode: 400,
+        reasonCode: 'VALIDATION_AT_LEAST_ONE_VALID_LINK_REQUIRED'
       })
     );
     expect(mockFetchSinglePostKhusus).not.toHaveBeenCalled();
@@ -148,6 +163,11 @@ describe('createLinkReport', () => {
     const req = {
       body: {
         instagram_link: 'https://facebook.com/post/123',
+        user_id: '1',
+        client_id: 'POLRES'
+      },
+      user: {
+        role: 'user',
         user_id: '1',
         client_id: 'POLRES'
       }
@@ -167,27 +187,74 @@ describe('createLinkReport', () => {
     expect(mockCreateLinkReport).not.toHaveBeenCalled();
   });
 
-  test('rejects when other social media links are provided', async () => {
+  test('accepts non-instagram links when shortcode is provided', async () => {
+    mockCreateLinkReport.mockResolvedValueOnce({
+      shortcode: 'ABC123',
+      instagram_link: null,
+      facebook_link: 'https://facebook.com/post/123'
+    });
+
     const req = {
       body: {
-        instagram_link: 'https://www.instagram.com/p/ABC123/',
-        facebook_link: 'https://facebook.com/post/123',
+        facebook_link: ' https://facebook.com/post/123 ',
+        twitter_link: 'not-a-url',
+        user_id: '1',
+        client_id: 'POLRES',
+        shortcode: 'ABC123'
+      },
+      user: {
+        role: 'user',
         user_id: '1',
         client_id: 'POLRES'
       }
     };
     const next = jest.fn();
-    const res = {};
+    const res = {
+      json: jest.fn(),
+      status: jest.fn().mockReturnThis()
+    };
 
     await createLinkReport(req, res, next);
 
-    expect(next).toHaveBeenCalledWith(
+    expect(mockFetchSinglePostKhusus).not.toHaveBeenCalled();
+    expect(mockCreateLinkReport).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: 'Only instagram_link is allowed for special assignment uploads',
-        statusCode: 400
+        shortcode: 'ABC123',
+        instagram_link: null,
+        facebook_link: 'https://facebook.com/post/123',
+        twitter_link: null,
+        tiktok_link: null,
+        youtube_link: null,
       })
     );
-    expect(mockFetchSinglePostKhusus).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('rejects non-instagram-only payload when shortcode is missing', async () => {
+    const req = {
+      body: {
+        facebook_link: 'https://facebook.com/post/123',
+        user_id: '1',
+        client_id: 'POLRES'
+      },
+      user: {
+        role: 'user',
+        user_id: '1',
+        client_id: 'POLRES'
+      }
+    };
+    const next = jest.fn();
+
+    await createLinkReport(req, {}, next);
+
+    expect(next).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'shortcode is required when instagram_link is not provided',
+        statusCode: 400,
+        reasonCode: 'VALIDATION_SHORTCODE_REQUIRED_WITHOUT_INSTAGRAM_LINK'
+      })
+    );
     expect(mockCreateLinkReport).not.toHaveBeenCalled();
   });
 
@@ -208,6 +275,11 @@ describe('createLinkReport', () => {
         instagram_link: instagramUrl,
         user_id: '1',
         client_id: 'POLRES'
+      },
+      user: {
+        role: 'user',
+        user_id: '1',
+        client_id: 'POLRES'
       }
     };
     const res = {
@@ -223,10 +295,6 @@ describe('createLinkReport', () => {
       expect.objectContaining({
         instagram_link: instagramUrl,
         shortcode: expectedShortcode,
-        facebook_link: null,
-        twitter_link: null,
-        tiktok_link: null,
-        youtube_link: null,
         user_id: '1',
         client_id: 'POLRES'
       })
@@ -249,6 +317,11 @@ describe('createLinkReport', () => {
     const req = {
       body: {
         instagram_link: instagramUrl,
+        user_id: '1',
+        client_id: 'POLRES'
+      },
+      user: {
+        role: 'user',
         user_id: '1',
         client_id: 'POLRES'
       }
@@ -276,6 +349,11 @@ describe('createLinkReport', () => {
         instagram_link: instagramUrl,
         user_id: '1',
         client_id: 'POLRES'
+      },
+      user: {
+        role: 'user',
+        user_id: '1',
+        client_id: 'POLRES'
       }
     };
     const res = {};
@@ -284,7 +362,13 @@ describe('createLinkReport', () => {
     await createLinkReport(req, res, next);
 
     expect(mockFetchSinglePostKhusus).toHaveBeenCalledWith(instagramUrl, 'POLRES');
-    expect(next).toHaveBeenCalledWith(error);
+    expect(next).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Gagal mengambil data Instagram post',
+        statusCode: 503,
+        reasonCode: 'FETCH_IG_UNKNOWN'
+      })
+    );
     expect(mockCreateLinkReport).not.toHaveBeenCalled();
   });
 });
