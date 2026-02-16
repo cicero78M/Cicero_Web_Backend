@@ -1,5 +1,5 @@
 # Link Reports API
-*Last updated: 2026-02-16 (update user_id derivation, target_user_id untuk non-user, dan error mapping fetch IG)*
+*Last updated: 2026-02-16 (update validasi minimal satu link valid multi-platform untuk link report khusus)*
 
 Dokumen ini menjelaskan endpoint untuk mengambil data link report.
 
@@ -200,11 +200,7 @@ Backend juga menulis logging terstruktur dengan `reason_code` pada titik gagal u
 ```
 {
   "success": false,
-  "message": "Invalid request",
-  "errors": [
-    "instagram_link harus URL post Instagram yang valid",
-    "facebook_link tidak diizinkan untuk mode khusus"
-  ]
+  "message": "Minimal satu link laporan yang valid harus dikirim"
 }
 ```
 

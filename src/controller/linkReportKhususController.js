@@ -128,6 +128,13 @@ export async function getLinkReportByShortcode(req, res, next) {
 export async function createLinkReport(req, res, next) {
   try {
     const data = { ...req.body };
+    const linkFields = [
+      'instagram_link',
+      'facebook_link',
+      'twitter_link',
+      'tiktok_link',
+      'youtube_link',
+    ];
     const resolvedClientId = await resolveClientIdForLinkReportKhusus({
       bodyClientId: data.client_id,
       queryClientId: req.query?.client_id,
