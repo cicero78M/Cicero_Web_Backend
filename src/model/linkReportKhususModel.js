@@ -5,27 +5,76 @@ const OPERATOR_ROLE_NAME = 'operator';
 const LINK_REPORT_KHUSUS_INTERVAL = '2 days';
 
 export async function createLinkReport(data) {
-  const res = await query(
+  const assignmentId = data.assignment_id || null;
+
+  if (data.shortcode) {
+    const res = await query(
+      `INSERT INTO link_report_khusus (
+          shortcode, assignment_id, user_id, instagram_link, facebook_link,
+          twitter_link, tiktok_link, youtube_link, created_at
+       )
+       SELECT p.shortcode, $2, $3, $4, $5, $6, $7, $8, p.created_at
+       FROM insta_post_khusus p
+       WHERE p.shortcode = $1
+         AND p.created_at >= (NOW() AT TIME ZONE 'Asia/Jakarta') - INTERVAL '${LINK_REPORT_KHUSUS_INTERVAL}'
+       ON CONFLICT (shortcode, user_id) DO UPDATE
+       SET assignment_id = EXCLUDED.assignment_id,
+           instagram_link = EXCLUDED.instagram_link,
+           facebook_link = EXCLUDED.facebook_link,
+           twitter_link = EXCLUDED.twitter_link,
+           tiktok_link = EXCLUDED.tiktok_link,
+           youtube_link = EXCLUDED.youtube_link,
+           created_at = EXCLUDED.created_at
+       RETURNING *`,
+      [
+        data.shortcode,
+        assignmentId,
+        data.user_id || null,
+        data.instagram_link || null,
+        data.facebook_link || null,
+        data.twitter_link || null,
+        data.tiktok_link || null,
+        data.youtube_link || null
+      ]
+    );
+
+    if (res.rows.length === 0) {
+      const postCheck = await query(
+        `SELECT 1
+         FROM insta_post_khusus
+         WHERE shortcode = $1
+         LIMIT 1`,
+        [data.shortcode]
+      );
+
+      const err = new Error(
+        postCheck.rows.length === 0
+          ? 'shortcode not found'
+          : `laporan ditolak: konten di luar periode pelaporan (${LINK_REPORT_KHUSUS_INTERVAL})`
+      );
+      err.statusCode = 400;
+      throw err;
+    }
+
+    return res.rows[0];
+  }
+
+  const nonInstagramRes = await query(
     `INSERT INTO link_report_khusus (
-        shortcode, user_id, instagram_link, facebook_link,
+        shortcode, assignment_id, user_id, instagram_link, facebook_link,
         twitter_link, tiktok_link, youtube_link, created_at
      )
-     SELECT p.shortcode, $2, $3, $4, $5, $6, $7, p.created_at
-     FROM insta_post_khusus p
-     WHERE p.shortcode = $1
-       AND p.created_at >= (NOW() AT TIME ZONE 'Asia/Jakarta') - INTERVAL '${LINK_REPORT_KHUSUS_INTERVAL}'
-     ON CONFLICT (shortcode, user_id) DO UPDATE
-     SET instagram_link = EXCLUDED.instagram_link,
-         facebook_link = EXCLUDED.facebook_link,
+     VALUES (NULL, $1, $2, NULL, $3, $4, $5, $6, NOW() AT TIME ZONE 'Asia/Jakarta')
+     ON CONFLICT (assignment_id, user_id) DO UPDATE
+     SET facebook_link = EXCLUDED.facebook_link,
          twitter_link = EXCLUDED.twitter_link,
          tiktok_link = EXCLUDED.tiktok_link,
          youtube_link = EXCLUDED.youtube_link,
          created_at = EXCLUDED.created_at
      RETURNING *`,
     [
-      data.shortcode,
+      assignmentId,
       data.user_id || null,
-      data.instagram_link || null,
       data.facebook_link || null,
       data.twitter_link || null,
       data.tiktok_link || null,
@@ -33,25 +82,7 @@ export async function createLinkReport(data) {
     ]
   );
 
-  if (res.rows.length === 0) {
-    const postCheck = await query(
-      `SELECT 1
-       FROM insta_post_khusus
-       WHERE shortcode = $1
-       LIMIT 1`,
-      [data.shortcode]
-    );
-
-    const err = new Error(
-      postCheck.rows.length === 0
-        ? 'shortcode not found'
-        : `laporan ditolak: konten di luar periode pelaporan (${LINK_REPORT_KHUSUS_INTERVAL})`
-    );
-    err.statusCode = 400;
-    throw err;
-  }
-
-  return res.rows[0];
+  return nonInstagramRes.rows[0];
 }
 
 export async function getLinkReports({ userId, postId } = {}) {

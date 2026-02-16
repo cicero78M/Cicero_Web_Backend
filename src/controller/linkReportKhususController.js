@@ -145,37 +145,30 @@ export async function createLinkReport(req, res, next) {
     data.user_id = await resolveUserIdForCreateLinkReport(data, req, resolvedClientId);
     delete data.target_user_id;
 
-    let validLinkCount = 0;
-    linkFields.forEach((field) => {
-      const normalizedValue = normalizeOptionalField(data[field]);
-      if (!normalizedValue) {
-        data[field] = null;
-        return;
-      }
+    const socialFields = [
+      'instagram_link',
+      'facebook_link',
+      'twitter_link',
+      'tiktok_link',
+      'youtube_link',
+    ];
 
-      const extractedUrl = extractFirstUrl(normalizedValue);
-      if (!extractedUrl) {
-        data[field] = null;
-        return;
-      }
-
-      data[field] = extractedUrl;
-      validLinkCount += 1;
-    });
-
-    if (validLinkCount === 0) {
-      throw createHttpError(
-        'Minimal satu link laporan yang valid harus dikirim',
-        400,
-        'VALIDATION_AT_LEAST_ONE_VALID_LINK_REQUIRED'
-      );
+    for (const field of socialFields) {
+      data[field] = normalizeOptionalField(data[field]);
     }
 
-    const instagramLink = data.instagram_link;
-    let shortcode = normalizeOptionalField(data.shortcode);
+    const hasAnyLink = socialFields.some((field) => data[field]);
+    if (!hasAnyLink) {
+      throw createHttpError('At least one social media link is required', 400, 'VALIDATION_ALL_LINKS_EMPTY');
+    }
+
+    const instagramLink = data.instagram_link ? extractFirstUrl(data.instagram_link) : null;
+    if (data.instagram_link && !instagramLink) {
+      throw createHttpError('instagram_link must be a valid URL', 400, 'VALIDATION_INSTAGRAM_LINK_INVALID_URL');
+    }
 
     if (instagramLink) {
-      shortcode = extractInstagramShortcode(instagramLink);
+      const shortcode = extractInstagramShortcode(instagramLink);
       if (!shortcode) {
         throw createHttpError(
           'instagram_link must be a valid Instagram post URL',
@@ -183,19 +176,7 @@ export async function createLinkReport(req, res, next) {
           'VALIDATION_INSTAGRAM_LINK_INVALID_POST'
         );
       }
-    }
 
-    if (!shortcode) {
-      throw createHttpError(
-        'shortcode is required when instagram_link is not provided',
-        400,
-        'VALIDATION_SHORTCODE_REQUIRED_WITHOUT_INSTAGRAM_LINK'
-      );
-    }
-    
-    // Fetch and store Instagram post metadata via RapidAPI
-    // The stored data will be referenced by createLinkReport using the shortcode
-    if (instagramLink) {
       try {
         await fetchSinglePostKhusus(instagramLink, data.client_id);
       } catch (fetchErr) {
@@ -207,11 +188,21 @@ export async function createLinkReport(req, res, next) {
         };
         throw mappedError;
       }
+
+      data.instagram_link = instagramLink;
+      data.shortcode = shortcode;
+    } else {
+      data.assignment_id = normalizeOptionalField(data.assignment_id);
+      if (!data.assignment_id) {
+        throw createHttpError(
+          'assignment_id is required for non-Instagram reports',
+          400,
+          'VALIDATION_ASSIGNMENT_ID_REQUIRED'
+        );
+      }
+      data.shortcode = null;
     }
-    
-    // Create link report with validated social links
-    data.shortcode = shortcode;
-    
+
     const report = await linkReportModel.createLinkReport(data);
     sendSuccess(res, report, 201);
   } catch (err) {
