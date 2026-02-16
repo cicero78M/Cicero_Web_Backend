@@ -120,6 +120,7 @@ export async function getTiktokRekapKomentar(req, res) {
     'ditlantas',
     'bidhumas',
     'ditsamapta',
+    'ditintelkam',
   ];
   const usesStandardPayload = Boolean(requestedScope || req.query.role);
 

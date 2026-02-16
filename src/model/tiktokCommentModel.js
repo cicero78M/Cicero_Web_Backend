@@ -410,6 +410,7 @@ export async function getRekapKomentarByClient(
     'ditlantas',
     'bidhumas',
     'ditsamapta',
+    'ditintelkam',
     'operator',
   ];
 
