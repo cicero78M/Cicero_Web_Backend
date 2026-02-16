@@ -6,7 +6,6 @@ import { sendDebug } from "../../middleware/debugHandler.js";
 import { fetchInstagramPosts, fetchInstagramPostInfo } from "../../service/instagramApi.js";
 import { savePostWithMedia } from "../../model/instaPostExtendedModel.js";
 import { upsertInstaPost as upsertInstaPostKhusus } from "../../model/instaPostKhususModel.js";
-import { upsertInstaPost } from "../../model/instaPostModel.js";
 import { extractInstagramShortcode } from "../../utils/utilsHelper.js";
 
 const ADMIN_WHATSAPP = (process.env.ADMIN_WHATSAPP || "")
@@ -382,7 +381,6 @@ export async function fetchSinglePostKhusus(linkOrCode, clientId) {
     created_at: info.taken_at ? new Date(info.taken_at * 1000).toISOString() : null
   }; 
   await upsertInstaPostKhusus(data);
-  await upsertInstaPost(data);
   try {
     await savePostWithMedia(info);
   } catch (e) {

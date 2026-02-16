@@ -1,5 +1,5 @@
 # Link Reports API
-*Last updated: 2026-02-16 (update validasi minimal satu link valid multi-platform untuk link report khusus)*
+*Last updated: 2026-02-16 (pemurnian konteks tugas khusus: fetch post khusus tidak lagi mirror ke insta_post)*
 
 Dokumen ini menjelaskan endpoint untuk mengambil data link report.
 
@@ -155,6 +155,7 @@ Jika nantinya business rule berubah menjadi berbasis assignment harian, enforcem
 - `instagram_link` wajib ada, harus URL valid, dan harus bisa diekstrak menjadi shortcode Instagram post/reel.
 - Backend **tidak** menjalankan mekanisme upload/fetch tugas khusus pada endpoint ini.
 - Endpoint ini hanya menyimpan laporan link pelaksanaan tugas ke `link_report_khusus` dengan identitas utama `(shortcode, user_id)`.
+- Sumber referensi laporan khusus murni dari `insta_post_khusus`. Proses input/fetch post khusus tidak melakukan mirror/upsert ke tabel `insta_post` agar konteks tugas rutin dan tugas khusus tetap terpisah.
 - Jika seluruh field link kosong, backend mengembalikan `400` (`At least one social media link is required`).
 - Jika `instagram_link` tidak dikirim, backend mengembalikan `400` (`instagram_link wajib diisi sebagai referensi tugas khusus`).
 

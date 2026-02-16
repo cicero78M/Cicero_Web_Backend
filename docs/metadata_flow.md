@@ -1,5 +1,5 @@
 # Cicero Flow Metadata
-*Last updated: 2025-11-06*
+*Last updated: 2026-02-16*
 
 This document outlines the flow of data and the main database tables used by the Cicero_V2 system. It provides an overview from the initial onboarding steps through to reporting and notifications.
 
@@ -34,6 +34,8 @@ Key tables defined in [`sql/schema.sql`](../sql/schema.sql):
 | `saved_contact`             | Google contact references used for WhatsApp messaging. |
 
 These tables are updated regularly by scheduled jobs and form the basis for analytics and attendance calculations.
+
+> Catatan pemisahan konteks: ingest post **tugas khusus** hanya disimpan ke `insta_post_khusus` (tanpa mirror ke `insta_post`) agar alur laporan rutin (`link_report`) dan khusus (`link_report_khusus`) tidak saling tercampur.
 
 ## 3. Process Flow
 
