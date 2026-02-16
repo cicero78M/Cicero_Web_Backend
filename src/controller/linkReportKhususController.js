@@ -152,7 +152,6 @@ export async function createLinkReport(req, res, next) {
 
     data.instagram_link = instagramLink;
     data.shortcode = shortcode;
-    data.assignment_id = null;
 
     const report = await linkReportModel.createLinkReport(data);
     sendSuccess(res, report, 201);
