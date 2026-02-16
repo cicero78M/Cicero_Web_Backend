@@ -1,7 +1,6 @@
 import { jest } from '@jest/globals';
 
 const mockCreateLinkReport = jest.fn();
-const mockFetchSinglePostKhusus = jest.fn();
 const mockResolveClientIdForLinkReportKhusus = jest.fn();
 const mockFindClientIdByUserId = jest.fn();
 
@@ -9,9 +8,6 @@ jest.unstable_mockModule('../src/model/linkReportKhususModel.js', () => ({
   createLinkReport: mockCreateLinkReport,
 }));
 
-jest.unstable_mockModule('../src/handler/fetchpost/instaFetchPost.js', () => ({
-  fetchSinglePostKhusus: mockFetchSinglePostKhusus,
-}));
 
 jest.unstable_mockModule('../src/service/userClientService.js', () => ({
   resolveClientIdForLinkReportKhusus: mockResolveClientIdForLinkReportKhusus,
@@ -33,7 +29,6 @@ beforeAll(async () => {
 
 beforeEach(() => {
   mockCreateLinkReport.mockReset();
-  mockFetchSinglePostKhusus.mockReset();
   mockResolveClientIdForLinkReportKhusus.mockReset();
   mockFindClientIdByUserId.mockReset();
 
@@ -41,7 +36,7 @@ beforeEach(() => {
 });
 
 describe('createLinkReport branching', () => {
-  test('IG-only sukses: jalankan shortcode extraction + fetchSinglePostKhusus', async () => {
+  test('IG-only sukses: ekstrak shortcode dan simpan laporan', async () => {
     const instagramUrl = 'https://www.instagram.com/p/ABC123/';
     mockCreateLinkReport.mockResolvedValueOnce({ shortcode: 'ABC123', instagram_link: instagramUrl });
 
@@ -57,7 +52,6 @@ describe('createLinkReport branching', () => {
 
     await createLinkReport(req, res, next);
 
-    expect(mockFetchSinglePostKhusus).toHaveBeenCalledWith(instagramUrl, 'POLRES');
     expect(mockCreateLinkReport).toHaveBeenCalledWith(
       expect.objectContaining({
         shortcode: 'ABC123',
@@ -70,16 +64,9 @@ describe('createLinkReport branching', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  test('non-IG-only sukses: skip extract shortcode + skip fetchSinglePostKhusus', async () => {
-    mockCreateLinkReport.mockResolvedValueOnce({
-      assignment_id: 'task-001',
-      user_id: 'u-1',
-      facebook_link: 'https://facebook.com/post/123',
-    });
-
+  test('non-IG ditolak: instagram_link wajib', async () => {
     const req = {
       body: {
-        assignment_id: 'task-001',
         facebook_link: 'https://facebook.com/post/123',
       },
       user: { role: 'user', user_id: 'u-1' },
@@ -92,17 +79,13 @@ describe('createLinkReport branching', () => {
 
     await createLinkReport(req, res, next);
 
-    expect(mockFetchSinglePostKhusus).not.toHaveBeenCalled();
-    expect(mockCreateLinkReport).toHaveBeenCalledWith(
+    expect(mockCreateLinkReport).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledWith(
       expect.objectContaining({
-        assignment_id: 'task-001',
-        shortcode: null,
-        facebook_link: 'https://facebook.com/post/123',
-        user_id: 'u-1',
+        statusCode: 400,
+        message: 'instagram_link wajib diisi sebagai referensi tugas khusus',
       })
     );
-    expect(res.status).toHaveBeenCalledWith(201);
-    expect(next).not.toHaveBeenCalled();
   });
 
   test('semua link kosong gagal 400', async () => {
@@ -124,7 +107,6 @@ describe('createLinkReport branching', () => {
         message: 'At least one social media link is required',
       })
     );
-    expect(mockFetchSinglePostKhusus).not.toHaveBeenCalled();
     expect(mockCreateLinkReport).not.toHaveBeenCalled();
   });
 });

@@ -1,7 +1,6 @@
 import * as linkReportModel from '../model/linkReportKhususModel.js';
 import { sendSuccess } from '../utils/response.js';
 import { extractFirstUrl, extractInstagramShortcode } from '../utils/utilsHelper.js';
-import { fetchSinglePostKhusus } from '../handler/fetchpost/instaFetchPost.js';
 import { resolveClientIdForLinkReportKhusus } from '../service/userClientService.js';
 import { findClientIdByUserId } from '../model/userModel.js';
 import { sendDebug } from '../middleware/debugHandler.js';
@@ -77,31 +76,6 @@ async function resolveUserIdForCreateLinkReport(data, req, resolvedClientId) {
   return targetUserId;
 }
 
-function mapFetchSinglePostError(err) {
-  const message = String(err?.message || '').toLowerCase();
-  const upstreamStatus = err?.response?.status;
-  const upstreamCode = String(err?.code || '').toUpperCase();
-
-  if (message.includes('post not found') || upstreamStatus === 404) {
-    return createHttpError('Invalid post: Instagram post tidak ditemukan', 422, 'FETCH_IG_POST_NOT_FOUND');
-  }
-
-  const isTimeout =
-    upstreamCode === 'ECONNABORTED' ||
-    upstreamCode === 'ETIMEDOUT' ||
-    message.includes('timeout') ||
-    message.includes('timed out');
-  if (isTimeout) {
-    return createHttpError('Layanan Instagram sedang tidak tersedia (timeout)', 503, 'FETCH_IG_TIMEOUT');
-  }
-
-  if (upstreamStatus && upstreamStatus >= 500) {
-    return createHttpError('Layanan Instagram sedang tidak tersedia', 503, 'FETCH_IG_UPSTREAM_5XX');
-  }
-
-  return createHttpError('Gagal mengambil data Instagram post', 503, 'FETCH_IG_UNKNOWN');
-}
-
 export async function getAllLinkReports(req, res, next) {
   try {
     const userId = req.query.user_id;
@@ -128,13 +102,6 @@ export async function getLinkReportByShortcode(req, res, next) {
 export async function createLinkReport(req, res, next) {
   try {
     const data = { ...req.body };
-    const linkFields = [
-      'instagram_link',
-      'facebook_link',
-      'twitter_link',
-      'tiktok_link',
-      'youtube_link',
-    ];
     const resolvedClientId = await resolveClientIdForLinkReportKhusus({
       bodyClientId: data.client_id,
       queryClientId: req.query?.client_id,
@@ -167,41 +134,26 @@ export async function createLinkReport(req, res, next) {
       throw createHttpError('instagram_link must be a valid URL', 400, 'VALIDATION_INSTAGRAM_LINK_INVALID_URL');
     }
 
-    if (instagramLink) {
-      const shortcode = extractInstagramShortcode(instagramLink);
-      if (!shortcode) {
-        throw createHttpError(
-          'instagram_link must be a valid Instagram post URL',
-          400,
-          'VALIDATION_INSTAGRAM_LINK_INVALID_POST'
-        );
-      }
-
-      try {
-        await fetchSinglePostKhusus(instagramLink, data.client_id);
-      } catch (fetchErr) {
-        const mappedError = mapFetchSinglePostError(fetchErr);
-        mappedError.logContext = {
-          upstream_status: fetchErr?.response?.status || null,
-          upstream_code: fetchErr?.code || null,
-          upstream_message: fetchErr?.message || null,
-        };
-        throw mappedError;
-      }
-
-      data.instagram_link = instagramLink;
-      data.shortcode = shortcode;
-    } else {
-      data.assignment_id = normalizeOptionalField(data.assignment_id);
-      if (!data.assignment_id) {
-        throw createHttpError(
-          'assignment_id is required for non-Instagram reports',
-          400,
-          'VALIDATION_ASSIGNMENT_ID_REQUIRED'
-        );
-      }
-      data.shortcode = null;
+    if (!instagramLink) {
+      throw createHttpError(
+        'instagram_link wajib diisi sebagai referensi tugas khusus',
+        400,
+        'VALIDATION_INSTAGRAM_LINK_REQUIRED'
+      );
     }
+
+    const shortcode = extractInstagramShortcode(instagramLink);
+    if (!shortcode) {
+      throw createHttpError(
+        'instagram_link must be a valid Instagram post URL',
+        400,
+        'VALIDATION_INSTAGRAM_LINK_INVALID_POST'
+      );
+    }
+
+    data.instagram_link = instagramLink;
+    data.shortcode = shortcode;
+    data.assignment_id = null;
 
     const report = await linkReportModel.createLinkReport(data);
     sendSuccess(res, report, 201);
