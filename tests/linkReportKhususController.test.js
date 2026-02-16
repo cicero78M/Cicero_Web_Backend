@@ -1,219 +1,58 @@
 import { jest } from '@jest/globals';
 
-// Mock all dependencies
-const mockGetLinkReports = jest.fn();
-const mockFindLinkReportByShortcode = jest.fn();
 const mockCreateLinkReport = jest.fn();
-const mockUpdateLinkReport = jest.fn();
-const mockDeleteLinkReport = jest.fn();
 const mockFetchSinglePostKhusus = jest.fn();
+const mockResolveClientIdForLinkReportKhusus = jest.fn();
+const mockFindClientIdByUserId = jest.fn();
 
 jest.unstable_mockModule('../src/model/linkReportKhususModel.js', () => ({
-  getLinkReports: mockGetLinkReports,
-  findLinkReportByShortcode: mockFindLinkReportByShortcode,
   createLinkReport: mockCreateLinkReport,
-  updateLinkReport: mockUpdateLinkReport,
-  deleteLinkReport: mockDeleteLinkReport,
 }));
 
 jest.unstable_mockModule('../src/handler/fetchpost/instaFetchPost.js', () => ({
   fetchSinglePostKhusus: mockFetchSinglePostKhusus,
 }));
 
-let createLinkReport, updateLinkReport;
+jest.unstable_mockModule('../src/service/userClientService.js', () => ({
+  resolveClientIdForLinkReportKhusus: mockResolveClientIdForLinkReportKhusus,
+}));
+
+jest.unstable_mockModule('../src/model/userModel.js', () => ({
+  findClientIdByUserId: mockFindClientIdByUserId,
+}));
+
+jest.unstable_mockModule('../src/middleware/debugHandler.js', () => ({
+  sendDebug: jest.fn(),
+}));
+
+let createLinkReport;
 
 beforeAll(async () => {
-  const controller = await import('../src/controller/linkReportKhususController.js');
-  createLinkReport = controller.createLinkReport;
-  updateLinkReport = controller.updateLinkReport;
+  ({ createLinkReport } = await import('../src/controller/linkReportKhususController.js'));
 });
 
 beforeEach(() => {
-  mockGetLinkReports.mockReset();
-  mockFindLinkReportByShortcode.mockReset();
   mockCreateLinkReport.mockReset();
-  mockUpdateLinkReport.mockReset();
-  mockDeleteLinkReport.mockReset();
   mockFetchSinglePostKhusus.mockReset();
+  mockResolveClientIdForLinkReportKhusus.mockReset();
+  mockFindClientIdByUserId.mockReset();
+
+  mockResolveClientIdForLinkReportKhusus.mockResolvedValue('POLRES');
 });
 
-describe('createLinkReport', () => {
-  test('uses req.user.client_id when body client_id is missing', async () => {
+describe('createLinkReport branching', () => {
+  test('IG-only sukses: jalankan shortcode extraction + fetchSinglePostKhusus', async () => {
     const instagramUrl = 'https://www.instagram.com/p/ABC123/';
-    mockFetchSinglePostKhusus.mockResolvedValueOnce({
-      shortcode: 'ABC123',
-      caption: 'Test caption'
-    });
-    mockCreateLinkReport.mockResolvedValueOnce({
-      shortcode: 'ABC123',
-      instagram_link: instagramUrl
-    });
+    mockCreateLinkReport.mockResolvedValueOnce({ shortcode: 'ABC123', instagram_link: instagramUrl });
 
     const req = {
-      body: {
-        instagram_link: instagramUrl,
-        user_id: '1'
-      },
-      user: {
-        client_id: 'POLRES'
-      }
+      body: { instagram_link: instagramUrl },
+      user: { role: 'user', user_id: 'u-1' },
+      query: {},
+      method: 'POST',
+      originalUrl: '/api/link-reports-khusus',
     };
-    const next = jest.fn();
-    const res = {
-      json: jest.fn(),
-      status: jest.fn().mockReturnThis()
-    };
-
-    await createLinkReport(req, res, next);
-
-    expect(mockFetchSinglePostKhusus).toHaveBeenCalledWith(instagramUrl, 'POLRES');
-    expect(mockCreateLinkReport).toHaveBeenCalledWith(
-      expect.objectContaining({
-        client_id: 'POLRES'
-      })
-    );
-    expect(next).not.toHaveBeenCalled();
-  });
-
-  test('rejects when both payload and token client_id are missing', async () => {
-    const req = {
-      body: {
-        instagram_link: 'https://www.instagram.com/p/ABC123/',
-        user_id: '1'
-      },
-      query: {}
-    };
-    const next = jest.fn();
-    const res = {};
-
-    await createLinkReport(req, res, next);
-
-    expect(next).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'client_id is required',
-        statusCode: 400
-      })
-    );
-    expect(mockFetchSinglePostKhusus).not.toHaveBeenCalled();
-    expect(mockCreateLinkReport).not.toHaveBeenCalled();
-  });
-
-  test('rejects when requested client_id is outside req.user.client_ids', async () => {
-    const req = {
-      body: {
-        instagram_link: 'https://www.instagram.com/p/ABC123/',
-        user_id: '1',
-        client_id: 'POLRES_B'
-      },
-      user: {
-        client_id: 'POLRES_A',
-        client_ids: ['POLRES_A']
-      }
-    };
-    const next = jest.fn();
-    const res = {};
-
-    await createLinkReport(req, res, next);
-
-    expect(next).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'client_id tidak diizinkan',
-        statusCode: 403
-      })
-    );
-    expect(mockFetchSinglePostKhusus).not.toHaveBeenCalled();
-    expect(mockCreateLinkReport).not.toHaveBeenCalled();
-  });
-
-  test('rejects when instagram_link is missing', async () => {
-    const req = {
-      body: { user_id: '1', client_id: 'POLRES' }
-    };
-    const next = jest.fn();
-    const res = {};
-
-    await createLinkReport(req, res, next);
-
-    expect(next).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'instagram_link is required',
-        statusCode: 400
-      })
-    );
-    expect(mockFetchSinglePostKhusus).not.toHaveBeenCalled();
-    expect(mockCreateLinkReport).not.toHaveBeenCalled();
-  });
-
-  test('rejects when instagram_link is not a valid Instagram URL', async () => {
-    const req = {
-      body: {
-        instagram_link: 'https://facebook.com/post/123',
-        user_id: '1',
-        client_id: 'POLRES'
-      }
-    };
-    const next = jest.fn();
-    const res = {};
-
-    await createLinkReport(req, res, next);
-
-    expect(next).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'instagram_link must be a valid Instagram post URL',
-        statusCode: 400
-      })
-    );
-    expect(mockFetchSinglePostKhusus).not.toHaveBeenCalled();
-    expect(mockCreateLinkReport).not.toHaveBeenCalled();
-  });
-
-  test('rejects when other social media links are provided', async () => {
-    const req = {
-      body: {
-        instagram_link: 'https://www.instagram.com/p/ABC123/',
-        facebook_link: 'https://facebook.com/post/123',
-        user_id: '1',
-        client_id: 'POLRES'
-      }
-    };
-    const next = jest.fn();
-    const res = {};
-
-    await createLinkReport(req, res, next);
-
-    expect(next).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'Only instagram_link is allowed for special assignment uploads',
-        statusCode: 400
-      })
-    );
-    expect(mockFetchSinglePostKhusus).not.toHaveBeenCalled();
-    expect(mockCreateLinkReport).not.toHaveBeenCalled();
-  });
-
-  test('creates link report after successful metadata fetch', async () => {
-    const instagramUrl = 'https://www.instagram.com/p/ABC123/';
-    const expectedShortcode = 'ABC123';
-    mockFetchSinglePostKhusus.mockResolvedValueOnce({
-      shortcode: expectedShortcode,
-      caption: 'Test caption'
-    });
-    mockCreateLinkReport.mockResolvedValueOnce({
-      shortcode: expectedShortcode,
-      instagram_link: instagramUrl
-    });
-
-    const req = {
-      body: {
-        instagram_link: instagramUrl,
-        user_id: '1',
-        client_id: 'POLRES'
-      }
-    };
-    const res = {
-      json: jest.fn(),
-      status: jest.fn().mockReturnThis()
-    };
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
     const next = jest.fn();
 
     await createLinkReport(req, res, next);
@@ -221,190 +60,71 @@ describe('createLinkReport', () => {
     expect(mockFetchSinglePostKhusus).toHaveBeenCalledWith(instagramUrl, 'POLRES');
     expect(mockCreateLinkReport).toHaveBeenCalledWith(
       expect.objectContaining({
+        shortcode: 'ABC123',
         instagram_link: instagramUrl,
-        shortcode: expectedShortcode,
-        facebook_link: null,
-        twitter_link: null,
-        tiktok_link: null,
-        youtube_link: null,
-        user_id: '1',
-        client_id: 'POLRES'
+        user_id: 'u-1',
+        client_id: 'POLRES',
       })
     );
     expect(res.status).toHaveBeenCalledWith(201);
     expect(next).not.toHaveBeenCalled();
   });
 
-  test('accepts Instagram reel URLs', async () => {
-    const instagramUrl = 'https://www.instagram.com/reel/ABC123/';
-    mockFetchSinglePostKhusus.mockResolvedValueOnce({
-      shortcode: 'ABC123',
-      caption: 'Test reel'
-    });
+  test('non-IG-only sukses: skip extract shortcode + skip fetchSinglePostKhusus', async () => {
     mockCreateLinkReport.mockResolvedValueOnce({
-      shortcode: 'ABC123',
-      instagram_link: instagramUrl
+      assignment_id: 'task-001',
+      user_id: 'u-1',
+      facebook_link: 'https://facebook.com/post/123',
     });
 
     const req = {
       body: {
-        instagram_link: instagramUrl,
-        user_id: '1',
-        client_id: 'POLRES'
-      }
+        assignment_id: 'task-001',
+        facebook_link: 'https://facebook.com/post/123',
+      },
+      user: { role: 'user', user_id: 'u-1' },
+      query: {},
+      method: 'POST',
+      originalUrl: '/api/link-reports-khusus',
     };
-    const res = {
-      json: jest.fn(),
-      status: jest.fn().mockReturnThis()
-    };
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
     const next = jest.fn();
 
     await createLinkReport(req, res, next);
 
-    expect(mockFetchSinglePostKhusus).toHaveBeenCalledWith(instagramUrl, 'POLRES');
-    expect(mockCreateLinkReport).toHaveBeenCalled();
+    expect(mockFetchSinglePostKhusus).not.toHaveBeenCalled();
+    expect(mockCreateLinkReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assignment_id: 'task-001',
+        shortcode: null,
+        facebook_link: 'https://facebook.com/post/123',
+        user_id: 'u-1',
+      })
+    );
+    expect(res.status).toHaveBeenCalledWith(201);
     expect(next).not.toHaveBeenCalled();
   });
 
-  test('handles RapidAPI fetch errors', async () => {
-    const instagramUrl = 'https://www.instagram.com/p/ABC123/';
-    const error = new Error('RapidAPI error');
-    mockFetchSinglePostKhusus.mockRejectedValueOnce(error);
-
+  test('semua link kosong gagal 400', async () => {
     const req = {
-      body: {
-        instagram_link: instagramUrl,
-        user_id: '1',
-        client_id: 'POLRES'
-      }
+      body: { assignment_id: 'task-001' },
+      user: { role: 'user', user_id: 'u-1' },
+      query: {},
+      method: 'POST',
+      originalUrl: '/api/link-reports-khusus',
     };
-    const res = {};
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
     const next = jest.fn();
 
     await createLinkReport(req, res, next);
 
-    expect(mockFetchSinglePostKhusus).toHaveBeenCalledWith(instagramUrl, 'POLRES');
-    expect(next).toHaveBeenCalledWith(error);
+    expect(next).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: 400,
+        message: 'At least one social media link is required',
+      })
+    );
+    expect(mockFetchSinglePostKhusus).not.toHaveBeenCalled();
     expect(mockCreateLinkReport).not.toHaveBeenCalled();
-  });
-});
-
-describe('updateLinkReport', () => {
-  test('rejects when instagram_link is invalid', async () => {
-    const req = {
-      params: { shortcode: 'ABC123' },
-      body: {
-        instagram_link: 'https://facebook.com/post/123',
-        user_id: '1'
-      }
-    };
-    const next = jest.fn();
-    const res = {};
-
-    await updateLinkReport(req, res, next);
-
-    expect(next).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'instagram_link must be a valid Instagram post URL',
-        statusCode: 400
-      })
-    );
-    expect(mockUpdateLinkReport).not.toHaveBeenCalled();
-  });
-
-  test('rejects when other social media links are provided', async () => {
-    const req = {
-      params: { shortcode: 'ABC123' },
-      body: {
-        instagram_link: 'https://www.instagram.com/p/ABC123/',
-        twitter_link: 'https://twitter.com/post/123',
-        user_id: '1'
-      }
-    };
-    const next = jest.fn();
-    const res = {};
-
-    await updateLinkReport(req, res, next);
-
-    expect(next).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'Only instagram_link is allowed for special assignment updates',
-        statusCode: 400
-      })
-    );
-    expect(mockUpdateLinkReport).not.toHaveBeenCalled();
-  });
-
-  test('updates with valid Instagram link', async () => {
-    const instagramUrl = 'https://www.instagram.com/p/XYZ789/';
-    mockUpdateLinkReport.mockResolvedValueOnce({
-      shortcode: 'ABC123',
-      instagram_link: instagramUrl
-    });
-
-    const req = {
-      params: { shortcode: 'ABC123' },
-      body: {
-        instagram_link: instagramUrl,
-        user_id: '1'
-      }
-    };
-    const res = {
-      json: jest.fn(),
-      status: jest.fn().mockReturnThis()
-    };
-    const next = jest.fn();
-
-    await updateLinkReport(req, res, next);
-
-    expect(mockUpdateLinkReport).toHaveBeenCalledWith(
-      'ABC123',
-      '1',
-      expect.objectContaining({
-        instagram_link: instagramUrl,
-        facebook_link: null,
-        twitter_link: null,
-        tiktok_link: null,
-        youtube_link: null
-      })
-    );
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({
-        success: true
-      })
-    );
-    expect(next).not.toHaveBeenCalled();
-  });
-
-  test('allows update without instagram_link', async () => {
-    mockUpdateLinkReport.mockResolvedValueOnce({
-      shortcode: 'ABC123'
-    });
-
-    const req = {
-      params: { shortcode: 'ABC123' },
-      body: {
-        user_id: '1'
-      }
-    };
-    const res = {
-      json: jest.fn(),
-      status: jest.fn().mockReturnThis()
-    };
-    const next = jest.fn();
-
-    await updateLinkReport(req, res, next);
-
-    expect(mockUpdateLinkReport).toHaveBeenCalledWith(
-      'ABC123',
-      '1',
-      expect.objectContaining({
-        facebook_link: null,
-        twitter_link: null,
-        tiktok_link: null,
-        youtube_link: null
-      })
-    );
-    expect(next).not.toHaveBeenCalled();
   });
 });

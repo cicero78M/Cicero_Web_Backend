@@ -289,9 +289,13 @@ Stores social media links submitted from the mobile app.
 - Rows cascade when the related `insta_post` is removed
 
 ### `link_report_khusus`
-Khusus equivalent of `link_report`, referencing `insta_post_khusus`.
-- `shortcode` – foreign key to `insta_post_khusus`
+Khusus equivalent of `link_report`, with dual identity for Instagram and non-Instagram reports.
+- `report_id` – primary key
+- `shortcode` – nullable foreign key to `insta_post_khusus` (used for Instagram reports)
+- `assignment_id` – nullable assignment/task identifier (used for non-Instagram reports)
 - `user_id` – foreign key to `user`
+- Unique key `(shortcode, user_id)` for Instagram flow
+- Unique key `(assignment_id, user_id)` for non-Instagram flow
 - Social link columns and `created_at` mirror the regular table
 
 ### `premium_request`

@@ -86,13 +86,16 @@ GET /api/link-reports-khusus?user_id=84110583&post_id=DSl7lfmgd14
 ```
 
 ## POST /api/link-reports-khusus
-Membuat link report khusus (hanya `instagram_link`).
+Membuat link report khusus untuk Instagram **atau** non-Instagram (berbasis assignment).
 
 ### Autentikasi
 Endpoint ini **wajib** menggunakan Bearer token (`Authorization: Bearer <token>`).
 
 ### Field Request
-- `instagram_link` (**wajib**): URL post/reel Instagram yang valid.
+- `instagram_link` (opsional): URL post/reel Instagram yang valid. Jika diisi, backend akan ekstrak shortcode dan fetch metadata post Instagram.
+- `facebook_link`, `twitter_link`, `tiktok_link`, `youtube_link` (opsional): digunakan untuk laporan non-Instagram.
+- `assignment_id` (kondisional): **wajib** jika `instagram_link` tidak diisi, sebagai identitas laporan non-Instagram.
+- Minimal satu link sosial harus terisi (instagram/facebook/twitter/tiktok/youtube).
 - `client_id` (opsional untuk token role `user`): jika tidak dikirim, backend akan resolve otomatis dari profil user di DB berdasarkan `req.user.user_id`.
 - `user_id` (**tidak digunakan**): untuk role `user`, backend selalu mengambil `user_id` dari token (`req.user.user_id`) dan mengabaikan `user_id` dari request body.
 - `target_user_id` (kondisional, wajib untuk role non-`user` seperti dashboard/operator): user tujuan pelaporan. Backend akan validasi bahwa user tujuan berada pada `client_id` yang diizinkan oleh token.
@@ -135,14 +138,10 @@ Kondisi yang diterapkan:
 
 Jika nantinya business rule berubah menjadi berbasis assignment harian, enforcement disarankan dilakukan berdasarkan entitas tugas (mis. `assignment_date`) alih-alih tanggal konten Instagram.
 
-### Field yang Dilarang untuk Mode Khusus
-Field berikut tidak boleh dikirim untuk endpoint khusus ini:
-- `facebook_link`
-- `twitter_link`
-- `tiktok_link`
-- `youtube_link`
-
-Jika salah satu field tersebut dikirim, request dianggap invalid dan API dapat mengembalikan `400`.
+### Branching Validasi Link
+- Jika payload mengandung `instagram_link`, backend memvalidasi URL Instagram, mengekstrak shortcode, lalu menjalankan `fetchSinglePostKhusus` sebelum menyimpan laporan.
+- Jika payload hanya berisi link non-Instagram, backend **melewati** ekstraksi shortcode Instagram dan **tidak** memanggil `fetchSinglePostKhusus`.
+- Jika seluruh field link kosong, backend mengembalikan `400` (`At least one social media link is required`).
 
 ### Contoh Request Sukses (201)
 ```

@@ -469,7 +469,9 @@ CREATE TABLE IF NOT EXISTS link_report (
 );
 
 CREATE TABLE IF NOT EXISTS link_report_khusus (
+    report_id BIGSERIAL PRIMARY KEY,
     shortcode VARCHAR REFERENCES insta_post_khusus(shortcode),
+    assignment_id VARCHAR,
     user_id VARCHAR REFERENCES "user"(user_id),
     instagram_link TEXT,
     facebook_link TEXT,
@@ -477,7 +479,8 @@ CREATE TABLE IF NOT EXISTS link_report_khusus (
     tiktok_link TEXT,
     youtube_link TEXT,
     created_at TIMESTAMP DEFAULT NOW(),
-    PRIMARY KEY (shortcode, user_id)
+    UNIQUE (shortcode, user_id),
+    UNIQUE (assignment_id, user_id)
 );
 
 

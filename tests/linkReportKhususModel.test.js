@@ -33,19 +33,37 @@ const PRIORITY_UPPER = PRIORITY_USER_NAMES.map(name => name.toUpperCase());
 
 test('createLinkReport inserts row', async () => {
   mockQuery.mockResolvedValueOnce({ rows: [{ shortcode: 'abc' }] });
-  const data = { shortcode: 'abc', user_id: '1', instagram_link: 'a' };
+  const data = { shortcode: 'abc', user_id: '1', instagram_link: 'a', assignment_id: null };
   const res = await createLinkReport(data);
   expect(res).toEqual({ shortcode: 'abc' });
   expect(mockQuery).toHaveBeenCalledWith(
     expect.stringContaining('FROM insta_post_khusus p'),
-    ['abc', '1', 'a', null, null, null, null]
+    ['abc', null, '1', 'a', null, null, null, null]
+  );
+});
+
+
+test('createLinkReport upserts non-Instagram report by assignment_id', async () => {
+  mockQuery.mockResolvedValueOnce({ rows: [{ assignment_id: 'task-1', user_id: '1' }] });
+  const data = {
+    assignment_id: 'task-1',
+    user_id: '1',
+    facebook_link: 'https://facebook.com/p/1'
+  };
+  const res = await createLinkReport(data);
+  expect(res).toEqual({ assignment_id: 'task-1', user_id: '1' });
+  expect(mockQuery).toHaveBeenCalledWith(
+    expect.stringContaining('ON CONFLICT (assignment_id, user_id) DO UPDATE'),
+    ['task-1', '1', 'https://facebook.com/p/1', null, null, null]
   );
 });
 
 test('createLinkReport throws when shortcode missing or not today', async () => {
-  mockQuery.mockResolvedValueOnce({ rows: [] });
+  mockQuery
+    .mockResolvedValueOnce({ rows: [] })
+    .mockResolvedValueOnce({ rows: [] });
   await expect(createLinkReport({ shortcode: 'xyz' })).rejects.toThrow(
-    'shortcode not found or not from today'
+    'shortcode not found'
   );
   expect(mockQuery).toHaveBeenCalled();
 });
