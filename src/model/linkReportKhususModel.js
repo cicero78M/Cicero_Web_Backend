@@ -18,7 +18,7 @@ export async function createLinkReport(data) {
      )
      SELECT p.shortcode, $2, $3, $4, $5, $6, $7, p.created_at
      FROM insta_post_khusus p
-     WHERE p.shortcode = $1
+     WHERE LOWER(p.shortcode) = LOWER($1)
        AND p.created_at >= (NOW() AT TIME ZONE 'Asia/Jakarta') - INTERVAL '${LINK_REPORT_KHUSUS_INTERVAL}'
      ON CONFLICT (shortcode, user_id) DO UPDATE
      SET instagram_link = EXCLUDED.instagram_link,
@@ -43,7 +43,7 @@ export async function createLinkReport(data) {
     const postCheck = await query(
       `SELECT 1
        FROM insta_post_khusus
-       WHERE shortcode = $1
+       WHERE LOWER(shortcode) = LOWER($1)
        LIMIT 1`,
       [data.shortcode]
     );
