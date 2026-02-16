@@ -148,16 +148,17 @@ Validasi periode untuk `POST /api/link-reports-khusus` menggunakan umur konten (
 Kondisi yang diterapkan:
 - Post dengan `shortcode` harus ada di `insta_post_khusus`.
 - `insta_post_khusus.created_at >= (NOW() AT TIME ZONE 'Asia/Jakarta') - INTERVAL '2 days'`.
+- `shortcode` dapat berasal dari ekstraksi `instagram_link`, atau langsung dari payload ketika `instagram_link` tidak dikirim.
 
 Jika nantinya business rule berubah menjadi berbasis assignment harian, enforcement disarankan dilakukan berdasarkan entitas tugas (mis. `assignment_date`) alih-alih tanggal konten Instagram.
 
 ### Validasi Link
-- `instagram_link` wajib ada, harus URL valid, dan harus bisa diekstrak menjadi shortcode Instagram post/reel.
+- Minimal satu link sosial (`instagram_link`/`facebook_link`/`twitter_link`/`tiktok_link`/`youtube_link`) wajib terisi.
 - Backend **tidak** menjalankan mekanisme upload/fetch tugas khusus pada endpoint ini.
 - Endpoint ini hanya menyimpan laporan link pelaksanaan tugas ke `link_report_khusus` dengan identitas utama `(shortcode, user_id)`.
 - Sumber referensi laporan khusus murni dari `insta_post_khusus`. Proses input/fetch post khusus tidak melakukan mirror/upsert ke tabel `insta_post` agar konteks tugas rutin dan tugas khusus tetap terpisah.
 - Jika seluruh field link kosong, backend mengembalikan `400` (`At least one social media link is required`).
-- Jika `instagram_link` tidak dikirim, backend mengembalikan `400` (`instagram_link wajib diisi sebagai referensi tugas khusus`).
+- Jika `instagram_link` tidak dikirim, backend tetap menerima request selama `shortcode` dikirim dan valid.
 
 ### Contoh Request Sukses (201)
 ```
@@ -214,11 +215,11 @@ Content-Type: application/json
 }
 ```
 
-### Contoh Error instagram_link wajib (400)
+### Contoh Error shortcode wajib saat instagram_link kosong (400)
 ```
 {
   "success": false,
-  "message": "instagram_link wajib diisi sebagai referensi tugas khusus"
+  "message": "shortcode is required when instagram_link is empty"
 }
 ```
 
@@ -240,5 +241,5 @@ Content-Type: application/json
 ```
 
 ### Kompatibilitas untuk Frontend
-- **Breaking change** untuk frontend yang sebelumnya mengirim payload tanpa `instagram_link`.
-- Frontend wajib selalu mengirim `instagram_link` valid sebagai referensi tugas khusus.
+- Tidak ada lagi kewajiban mengirim `instagram_link` pada endpoint khusus.
+- Jika tidak mengirim `instagram_link`, frontend wajib mengirim `shortcode` yang valid dari `insta_post_khusus`.

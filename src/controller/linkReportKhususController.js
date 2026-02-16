@@ -134,21 +134,20 @@ export async function createLinkReport(req, res, next) {
       throw createHttpError('instagram_link must be a valid URL', 400, 'VALIDATION_INSTAGRAM_LINK_INVALID_URL');
     }
 
-    if (!instagramLink) {
-      throw createHttpError(
-        'instagram_link wajib diisi sebagai referensi tugas khusus',
-        400,
-        'VALIDATION_INSTAGRAM_LINK_REQUIRED'
-      );
-    }
+    const shortcode = instagramLink
+      ? extractInstagramShortcode(instagramLink)
+      : normalizeOptionalField(data.shortcode);
 
-    const shortcode = extractInstagramShortcode(instagramLink);
-    if (!shortcode) {
+    if (instagramLink && !shortcode) {
       throw createHttpError(
         'instagram_link must be a valid Instagram post URL',
         400,
         'VALIDATION_INSTAGRAM_LINK_INVALID_POST'
       );
+    }
+
+    if (!shortcode) {
+      throw createHttpError('shortcode is required when instagram_link is empty', 400, 'VALIDATION_SHORTCODE_REQUIRED');
     }
 
     data.instagram_link = instagramLink;
@@ -177,11 +176,13 @@ export async function createLinkReport(req, res, next) {
 export async function updateLinkReport(req, res, next) {
   try {
     const bodyData = { ...req.body };
-    
-    // Extract Instagram link from payload
+
+    ['facebook_link', 'twitter_link', 'tiktok_link', 'youtube_link'].forEach((field) => {
+      if (bodyData[field]) bodyData[field] = extractFirstUrl(bodyData[field]);
+    });
+
     const instagramLink = bodyData.instagram_link ? extractFirstUrl(bodyData.instagram_link) : null;
-    
-    // Validate that the link is a valid Instagram post link if provided
+
     if (instagramLink) {
       const shortcode = extractInstagramShortcode(instagramLink);
       if (!shortcode) {
@@ -190,23 +191,12 @@ export async function updateLinkReport(req, res, next) {
         throw error;
       }
       bodyData.instagram_link = instagramLink;
-    }
-    
-    // Ensure no other social media links are provided for special assignments
-    const otherLinks = ['facebook_link', 'twitter_link', 'tiktok_link', 'youtube_link'];
-    const hasOtherLinks = otherLinks.some(field => bodyData[field]);
-    if (hasOtherLinks) {
-      const error = new Error('Only instagram_link is allowed for special assignment updates');
+    } else if (bodyData.instagram_link) {
+      const error = new Error('instagram_link must be a valid URL');
       error.statusCode = 400;
       throw error;
     }
-    
-    // Set other social media links to null
-    bodyData.facebook_link = null;
-    bodyData.twitter_link = null;
-    bodyData.tiktok_link = null;
-    bodyData.youtube_link = null;
-    
+
     const report = await linkReportModel.updateLinkReport(
       req.params.shortcode,
       bodyData.user_id,
