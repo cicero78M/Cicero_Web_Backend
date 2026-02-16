@@ -1,5 +1,5 @@
 # Link Reports API
-*Last updated: 2026-02-16 (update resolusi `client_id` endpoint `POST /api/link-reports-khusus`)*
+*Last updated: 2026-02-16 (update policy periode `POST /api/link-reports-khusus`)*
 
 Dokumen ini menjelaskan endpoint untuk mengambil data link report.
 
@@ -112,6 +112,16 @@ Jika hasil resolusi tetap kosong (khusus role non-user), API mengembalikan `400 
 Jika token memiliki `client_ids` (umumnya dashboard/operator), maka `client_id` hasil resolusi harus termasuk dalam daftar tersebut.
 Jika tidak termasuk, API akan mengembalikan `403 client_id tidak diizinkan`.
 
+
+### Policy Periode Pelaporan (Mode Khusus)
+Validasi periode untuk `POST /api/link-reports-khusus` menggunakan umur konten (`insta_post_khusus.created_at`) dalam jendela waktu rolling **2 hari terakhir**, bukan lagi strict tanggal hari ini.
+
+Kondisi yang diterapkan:
+- Post dengan `shortcode` harus ada di `insta_post_khusus`.
+- `insta_post_khusus.created_at >= (NOW() AT TIME ZONE 'Asia/Jakarta') - INTERVAL '2 days'`.
+
+Jika nantinya business rule berubah menjadi berbasis assignment harian, enforcement disarankan dilakukan berdasarkan entitas tugas (mis. `assignment_date`) alih-alih tanggal konten Instagram.
+
 ### Field yang Dilarang untuk Mode Khusus
 Field berikut tidak boleh dikirim untuk endpoint khusus ini:
 - `facebook_link`
@@ -158,5 +168,22 @@ Content-Type: application/json
     "instagram_link harus URL post Instagram yang valid",
     "facebook_link tidak diizinkan untuk mode khusus"
   ]
+}
+```
+
+
+### Contoh Error Policy Periode (400)
+```
+{
+  "success": false,
+  "message": "laporan ditolak: konten di luar periode pelaporan (2 days)"
+}
+```
+
+### Contoh Error Shortcode Tidak Ditemukan (400)
+```
+{
+  "success": false,
+  "message": "shortcode not found"
 }
 ```
