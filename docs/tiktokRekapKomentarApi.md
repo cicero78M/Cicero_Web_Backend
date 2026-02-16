@@ -152,7 +152,7 @@ Ketika `role` dan `scope` dikirim, filter mengikuti aturan berikut:
 
 ### `scope=org`
 
-- Jika `role` adalah direktorat (`ditbinmas`, `ditlantas`, `bidhumas`, `ditsamapta`):
+- Jika `role` adalah direktorat (`ditbinmas`, `ditlantas`, `bidhumas`, `ditsamapta`, `ditintelkam`):
   - **Data tugas** diambil berdasarkan `client_id` direktorat (nilai `role`).
   - **Data personil** mengikuti `client_id` pengguna (token) jika tersedia, fallback ke `client_id` yang diminta, dan dibatasi pada `role` direktorat tersebut.
 - Jika `role` adalah `operator`:
@@ -175,7 +175,7 @@ disaring dengan aturan yang konsisten dengan dashboard stats:
   - Personil diambil jika **`user.client_id = client_id`** **atau**
     **punya role `role_name = client_id`** (fallback untuk user lintas client).
   - Jika `role` dikirim dan termasuk allowlist
-    (`ditbinmas`, `ditlantas`, `bidhumas`, `ditsamapta`, `operator`), maka role
+    (`ditbinmas`, `ditlantas`, `bidhumas`, `ditsamapta`, `ditintelkam`, `operator`), maka role
     tersebut diterapkan **sebagai filter tambahan** di atas klausa dasar.
 - **Filter `regional_id`** (jika dikirim) diterapkan **setelah** aturan di atas
   untuk membatasi personil ke client dengan regional tertentu.
