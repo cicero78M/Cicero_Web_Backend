@@ -251,6 +251,19 @@ export async function getUsersByClientAndRole(client_id, roleFilter = null) {
   return res.rows;
 }
 
+export async function findClientIdByUserId(userId) {
+  const uid = normalizeUserId(userId);
+  const { rows } = await query(
+    `SELECT client_id
+     FROM "user"
+     WHERE user_id = $1
+     LIMIT 1`,
+    [uid]
+  );
+
+  return rows[0]?.client_id || null;
+}
+
 export async function getOperatorsByClient(client_id) {
   const { clause, params } = await buildClientFilter(client_id, 'u', 1);
   const res = await query(

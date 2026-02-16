@@ -2,6 +2,7 @@ import * as linkReportModel from '../model/linkReportKhususModel.js';
 import { sendSuccess } from '../utils/response.js';
 import { extractFirstUrl, extractInstagramShortcode } from '../utils/utilsHelper.js';
 import { fetchSinglePostKhusus } from '../handler/fetchpost/instaFetchPost.js';
+import { resolveClientIdForLinkReportKhusus } from '../service/userClientService.js';
 
 export async function getAllLinkReports(req, res, next) {
   try {
@@ -29,38 +30,11 @@ export async function getLinkReportByShortcode(req, res, next) {
 export async function createLinkReport(req, res, next) {
   try {
     const data = { ...req.body };
-    const resolvedClientId =
-      data.client_id ||
-      req.query?.client_id ||
-      req.user?.client_id;
-
-    const normalizedResolvedClientId = resolvedClientId
-      ? String(resolvedClientId).toLowerCase()
-      : null;
-    const userClientIds = req.user?.client_ids
-      ? Array.isArray(req.user.client_ids)
-        ? req.user.client_ids
-        : [req.user.client_ids]
-      : [];
-    const normalizedUserClientIds = userClientIds.map((clientId) =>
-      String(clientId).toLowerCase()
-    );
-    
-    // Validate required fields first (fail fast)
-    if (!resolvedClientId) {
-      const error = new Error('client_id is required');
-      error.statusCode = 400;
-      throw error;
-    }
-
-    if (
-      req.user?.client_ids &&
-      !normalizedUserClientIds.includes(normalizedResolvedClientId)
-    ) {
-      const error = new Error('client_id tidak diizinkan');
-      error.statusCode = 403;
-      throw error;
-    }
+    const resolvedClientId = await resolveClientIdForLinkReportKhusus({
+      bodyClientId: data.client_id,
+      queryClientId: req.query?.client_id,
+      authUser: req.user,
+    });
 
     data.client_id = resolvedClientId;
     
