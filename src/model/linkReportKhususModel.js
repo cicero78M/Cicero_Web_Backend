@@ -2,6 +2,7 @@ import { query } from '../repository/db.js';
 import { buildPriorityOrderClause } from '../utils/sqlPriority.js';
 
 const OPERATOR_ROLE_NAME = 'operator';
+const LINK_REPORT_KHUSUS_INTERVAL = '2 days';
 
 export async function createLinkReport(data) {
   const res = await query(
@@ -12,7 +13,7 @@ export async function createLinkReport(data) {
      SELECT p.shortcode, $2, $3, $4, $5, $6, $7, p.created_at
      FROM insta_post_khusus p
      WHERE p.shortcode = $1
-       AND p.created_at::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date
+       AND p.created_at >= (NOW() AT TIME ZONE 'Asia/Jakarta') - INTERVAL '${LINK_REPORT_KHUSUS_INTERVAL}'
      ON CONFLICT (shortcode, user_id) DO UPDATE
      SET instagram_link = EXCLUDED.instagram_link,
          facebook_link = EXCLUDED.facebook_link,
@@ -33,7 +34,19 @@ export async function createLinkReport(data) {
   );
 
   if (res.rows.length === 0) {
-    const err = new Error('shortcode not found or not from today');
+    const postCheck = await query(
+      `SELECT 1
+       FROM insta_post_khusus
+       WHERE shortcode = $1
+       LIMIT 1`,
+      [data.shortcode]
+    );
+
+    const err = new Error(
+      postCheck.rows.length === 0
+        ? 'shortcode not found'
+        : `laporan ditolak: konten di luar periode pelaporan (${LINK_REPORT_KHUSUS_INTERVAL})`
+    );
     err.statusCode = 400;
     throw err;
   }
