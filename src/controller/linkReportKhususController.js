@@ -128,6 +128,13 @@ export async function getLinkReportByShortcode(req, res, next) {
 export async function createLinkReport(req, res, next) {
   try {
     const data = { ...req.body };
+    const linkFields = [
+      'instagram_link',
+      'facebook_link',
+      'twitter_link',
+      'tiktok_link',
+      'youtube_link',
+    ];
     const resolvedClientId = await resolveClientIdForLinkReportKhusus({
       bodyClientId: data.client_id,
       queryClientId: req.query?.client_id,
@@ -137,63 +144,73 @@ export async function createLinkReport(req, res, next) {
     data.client_id = resolvedClientId;
     data.user_id = await resolveUserIdForCreateLinkReport(data, req, resolvedClientId);
     delete data.target_user_id;
-    
-    // Validate that Instagram link is provided
-    if (!data.instagram_link) {
-      const error = createHttpError('instagram_link is required', 400, 'VALIDATION_INSTAGRAM_LINK_REQUIRED');
-      throw error;
+
+    let validLinkCount = 0;
+    linkFields.forEach((field) => {
+      const normalizedValue = normalizeOptionalField(data[field]);
+      if (!normalizedValue) {
+        data[field] = null;
+        return;
+      }
+
+      const extractedUrl = extractFirstUrl(normalizedValue);
+      if (!extractedUrl) {
+        data[field] = null;
+        return;
+      }
+
+      data[field] = extractedUrl;
+      validLinkCount += 1;
+    });
+
+    if (validLinkCount === 0) {
+      throw createHttpError(
+        'Minimal satu link laporan yang valid harus dikirim',
+        400,
+        'VALIDATION_AT_LEAST_ONE_VALID_LINK_REQUIRED'
+      );
     }
-    
-    // Extract and validate Instagram link format
-    const instagramLink = extractFirstUrl(data.instagram_link);
-    if (!instagramLink) {
-      const error = createHttpError('instagram_link must be a valid URL', 400, 'VALIDATION_INSTAGRAM_LINK_INVALID_URL');
-      throw error;
+
+    const instagramLink = data.instagram_link;
+    let shortcode = normalizeOptionalField(data.shortcode);
+
+    if (instagramLink) {
+      shortcode = extractInstagramShortcode(instagramLink);
+      if (!shortcode) {
+        throw createHttpError(
+          'instagram_link must be a valid Instagram post URL',
+          400,
+          'VALIDATION_INSTAGRAM_LINK_INVALID_POST'
+        );
+      }
     }
-    
-    const shortcode = extractInstagramShortcode(instagramLink);
+
     if (!shortcode) {
-      const error = createHttpError(
-        'instagram_link must be a valid Instagram post URL',
+      throw createHttpError(
+        'shortcode is required when instagram_link is not provided',
         400,
-        'VALIDATION_INSTAGRAM_LINK_INVALID_POST'
+        'VALIDATION_SHORTCODE_REQUIRED_WITHOUT_INSTAGRAM_LINK'
       );
-      throw error;
-    }
-    
-    // Ensure no other social media links are provided
-    const otherLinks = ['facebook_link', 'twitter_link', 'tiktok_link', 'youtube_link'];
-    const hasOtherLinks = otherLinks.some(field => data[field]);
-    if (hasOtherLinks) {
-      const error = createHttpError(
-        'Only instagram_link is allowed for special assignment uploads',
-        400,
-        'VALIDATION_NON_INSTAGRAM_LINK_NOT_ALLOWED'
-      );
-      throw error;
     }
     
     // Fetch and store Instagram post metadata via RapidAPI
     // The stored data will be referenced by createLinkReport using the shortcode
-    try {
-      await fetchSinglePostKhusus(instagramLink, data.client_id);
-    } catch (fetchErr) {
-      const mappedError = mapFetchSinglePostError(fetchErr);
-      mappedError.logContext = {
-        upstream_status: fetchErr?.response?.status || null,
-        upstream_code: fetchErr?.code || null,
-        upstream_message: fetchErr?.message || null,
-      };
-      throw mappedError;
+    if (instagramLink) {
+      try {
+        await fetchSinglePostKhusus(instagramLink, data.client_id);
+      } catch (fetchErr) {
+        const mappedError = mapFetchSinglePostError(fetchErr);
+        mappedError.logContext = {
+          upstream_status: fetchErr?.response?.status || null,
+          upstream_code: fetchErr?.code || null,
+          upstream_message: fetchErr?.message || null,
+        };
+        throw mappedError;
+      }
     }
     
-    // Create link report with validated Instagram link
-    data.instagram_link = instagramLink;
+    // Create link report with validated social links
     data.shortcode = shortcode;
-    data.facebook_link = null;
-    data.twitter_link = null;
-    data.tiktok_link = null;
-    data.youtube_link = null;
     
     const report = await linkReportModel.createLinkReport(data);
     sendSuccess(res, report, 201);
