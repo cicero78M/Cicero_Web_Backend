@@ -252,12 +252,28 @@ export async function getRekapLikesByClient(
   options = {}
 ) {
   const roleLower = role ? role.toLowerCase() : null;
+  const hasCustomPostClientId = Object.prototype.hasOwnProperty.call(
+    options,
+    "postClientId"
+  );
+  const hasCustomUserClientId = Object.prototype.hasOwnProperty.call(
+    options,
+    "userClientId"
+  );
+  const hasCustomPostRoleName = Object.prototype.hasOwnProperty.call(
+    options,
+    "postRoleFilterName"
+  );
+  const hasCustomUserRoleFilter = Object.prototype.hasOwnProperty.call(
+    options,
+    "userRoleFilter"
+  );
   const {
-    postClientId: postClientIdOverride = null,
-    userClientId: userClientIdOverride = null,
+    postClientId: postClientIdOverride,
+    userClientId: userClientIdOverride,
     userRoleFilter = null,
     includePostRoleFilter = null,
-    postRoleFilterName = null,
+    postRoleFilterName,
     matchLikeClientId = true,
     officialAccountsOnly = false,
     regionalId = null,
@@ -279,13 +295,29 @@ export async function getRekapLikesByClient(
   const shouldIncludeRoleFilter =
     includePostRoleFilter !== null ? includePostRoleFilter : roleLower === 'ditbinmas';
   const resolvedPostRoleName =
-    postRoleFilterName ?? (roleLower === 'ditbinmas' ? roleLower : null);
+    hasCustomPostRoleName
+      ? postRoleFilterName
+      : roleLower === 'ditbinmas'
+        ? roleLower
+        : null;
   const resolvedPostClientId =
-    postClientIdOverride ?? (roleLower === 'ditbinmas' ? null : client_id);
+    hasCustomPostClientId
+      ? postClientIdOverride
+      : roleLower === 'ditbinmas'
+        ? null
+        : client_id;
   const resolvedUserClientId =
-    userClientIdOverride ?? (roleLower === 'ditbinmas' ? null : client_id);
+    hasCustomUserClientId
+      ? userClientIdOverride
+      : roleLower === 'ditbinmas'
+        ? null
+        : client_id;
   const resolvedUserRole =
-    userRoleFilter ?? (roleLower === 'ditbinmas' ? roleLower : null);
+    hasCustomUserRoleFilter
+      ? userRoleFilter
+      : roleLower === 'ditbinmas'
+        ? roleLower
+        : null;
 
   let userClientParamIdx = null;
   if (resolvedUserClientId) {

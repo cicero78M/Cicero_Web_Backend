@@ -136,6 +136,7 @@ When `role` and `scope` are provided, the endpoint follows these rules:
 
 - **Data tugas (post)** diambil berdasarkan `client_id`.
 - **Data personil** direkap berdasarkan **role yang sama** (`role`), lintas client.
+- Implementasi model kini menghormati override `userClientId=null` dari controller, sehingga rekap direktorat tidak lagi terbatasi ke `client_id` requester ketika memakai payload standar `role` + `scope`.
 
 ### `scope=org`
 
