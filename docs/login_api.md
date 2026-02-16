@@ -283,6 +283,7 @@ Khusus `POST /api/link-reports-khusus`:
 - Untuk token mobile role `user`, `client_id` **tidak wajib** dikirim manual di body/query karena backend akan resolve dari profil user (`req.user.user_id` -> tabel `"user"`).
 - Jika client tetap mengirim `client_id`, nilainya harus sama dengan profil user; jika tidak sama, backend mengembalikan `403 client_id tidak sesuai dengan profil user`.
 - Untuk role dashboard/operator, guard multi-client tetap berlaku: `client_id` hasil resolusi harus termasuk dalam `client_ids` token.
+- `instagram_link` tidak wajib; jika tidak dikirim maka payload harus menyertakan `shortcode` yang valid.
 
 Jika header `Authorization` dikirim tetapi tidak menggunakan format `Bearer <token>`, backend akan merespons `401` dengan pesan `Authorization harus format Bearer token` untuk memudahkan diagnosis integrasi. Jika header/cookie token tidak ada sama sekali, respons tetap `401 Token required`.
 
