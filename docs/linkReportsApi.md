@@ -156,6 +156,7 @@ Jika nantinya business rule berubah menjadi berbasis assignment harian, enforcem
 - Minimal satu link sosial (`instagram_link`/`facebook_link`/`twitter_link`/`tiktok_link`/`youtube_link`) wajib terisi.
 - Backend **tidak** menjalankan mekanisme upload/fetch tugas khusus pada endpoint ini.
 - Endpoint ini hanya menyimpan laporan link pelaksanaan tugas ke `link_report_khusus` dengan identitas utama `(shortcode, user_id)`.
+- Implementasi create/update tidak lagi melakukan write ke kolom `assignment_id` agar kompatibel dengan deployment yang belum memiliki kolom legacy tersebut.
 - Sumber referensi laporan khusus murni dari `insta_post_khusus`. Proses input/fetch post khusus tidak melakukan mirror/upsert ke tabel `insta_post` agar konteks tugas rutin dan tugas khusus tetap terpisah.
 - Jika seluruh field link kosong, backend mengembalikan `400` (`At least one social media link is required`).
 - Jika `instagram_link` tidak dikirim, backend tetap menerima request selama `shortcode` dikirim dan valid.
@@ -199,7 +200,6 @@ Content-Type: application/json
     "instagram_link": "https://www.instagram.com/p/DSl7lfmgd14/",
     "facebook_link": "https://www.facebook.com/share/p/1A2B3C4D5E/",
     "tiktok_link": "https://www.tiktok.com/@akun/video/7499999999999999999",
-    "assignment_id": null,
     "client_id": "cicero-client-01",
     "user_id": "84110583",
     "created_at": "2026-02-11T09:10:00.000Z"

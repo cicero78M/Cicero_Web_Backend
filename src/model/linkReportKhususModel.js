@@ -13,16 +13,15 @@ export async function createLinkReport(data) {
 
   const res = await query(
     `INSERT INTO link_report_khusus (
-        shortcode, assignment_id, user_id, instagram_link, facebook_link,
+        shortcode, user_id, instagram_link, facebook_link,
         twitter_link, tiktok_link, youtube_link, created_at
      )
-     SELECT p.shortcode, NULL, $2, $3, $4, $5, $6, $7, p.created_at
+     SELECT p.shortcode, $2, $3, $4, $5, $6, $7, p.created_at
      FROM insta_post_khusus p
      WHERE p.shortcode = $1
        AND p.created_at >= (NOW() AT TIME ZONE 'Asia/Jakarta') - INTERVAL '${LINK_REPORT_KHUSUS_INTERVAL}'
      ON CONFLICT (shortcode, user_id) DO UPDATE
-     SET assignment_id = EXCLUDED.assignment_id,
-         instagram_link = EXCLUDED.instagram_link,
+     SET instagram_link = EXCLUDED.instagram_link,
          facebook_link = EXCLUDED.facebook_link,
          twitter_link = EXCLUDED.twitter_link,
          tiktok_link = EXCLUDED.tiktok_link,

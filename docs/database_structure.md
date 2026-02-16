@@ -292,7 +292,7 @@ Stores social media links submitted from the mobile app.
 Khusus equivalent of `link_report` for laporan pelaksanaan tugas khusus.
 - `report_id` – primary key
 - `shortcode` – foreign key ke `insta_post_khusus` sebagai referensi konten tugas
-- `assignment_id` – nullable (legacy), tidak dipakai pada alur endpoint `POST /api/link-reports-khusus`
+- `assignment_id` – nullable (legacy). Beberapa deployment lama tidak memiliki kolom ini; alur endpoint `POST /api/link-reports-khusus` tidak bergantung pada kolom tersebut.
 - `user_id` – foreign key ke `user`
 - Unique key `(shortcode, user_id)` menjadi identitas utama laporan khusus
 - Social link columns dan `created_at` mirror tabel regular
