@@ -147,6 +147,7 @@ Validasi periode untuk `POST /api/link-reports-khusus` menggunakan umur konten (
 
 Kondisi yang diterapkan:
 - Post dengan `shortcode` harus ada di `insta_post_khusus`.
+- Pencocokan `shortcode` bersifat **case-insensitive** (`dSl7...` dan `DSl7...` dianggap sama) untuk menghindari false negative ketika client mengirim variasi huruf besar/kecil dari URL Instagram.
 - `insta_post_khusus.created_at >= (NOW() AT TIME ZONE 'Asia/Jakarta') - INTERVAL '2 days'`.
 - `shortcode` dapat berasal dari ekstraksi `instagram_link`, atau langsung dari payload ketika `instagram_link` tidak dikirim.
 
