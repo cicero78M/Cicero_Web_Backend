@@ -86,15 +86,14 @@ GET /api/link-reports-khusus?user_id=84110583&post_id=DSl7lfmgd14
 ```
 
 ## POST /api/link-reports-khusus
-Membuat link report khusus multi-platform (Instagram **atau** non-Instagram berbasis assignment).
+Membuat laporan link pelaksanaan tugas khusus berbasis post Instagram.
 
 ### Autentikasi
 Endpoint ini **wajib** menggunakan Bearer token (`Authorization: Bearer <token>`).
 
 ### Field Request
-- `instagram_link` (opsional): URL post/reel Instagram yang valid. Jika diisi, backend akan ekstrak shortcode dan fetch metadata post Instagram.
+- `instagram_link` (wajib): URL post/reel Instagram yang valid. Backend akan ekstrak shortcode sebagai referensi tugas.
 - `facebook_link`, `twitter_link`, `tiktok_link`, `youtube_link` (opsional): URL platform non-Instagram.
-- `assignment_id` (kondisional): **wajib** jika `instagram_link` tidak diisi, sebagai identitas laporan non-Instagram.
 - Minimal satu link sosial harus terisi (`instagram_link`/`facebook_link`/`twitter_link`/`tiktok_link`/`youtube_link`).
 - `client_id` (opsional untuk token role `user`): jika tidak dikirim, backend akan resolve otomatis dari profil user di DB berdasarkan `req.user.user_id`.
 - `user_id` (**tidak digunakan**): untuk role `user`, backend selalu mengambil `user_id` dari token (`req.user.user_id`) dan mengabaikan `user_id` dari request body.
@@ -103,12 +102,11 @@ Endpoint ini **wajib** menggunakan Bearer token (`Authorization: Bearer <token>`
 ### Tabel Rule Validasi Ringkas
 | Field | Required | Rule |
 | --- | --- | --- |
-| `instagram_link` | Opsional | Jika ada, harus URL Instagram post/reel valid; backend ekstrak `shortcode` dan fetch metadata. |
+| `instagram_link` | Wajib | Harus URL Instagram post/reel valid; backend ekstrak `shortcode`. |
 | `facebook_link` | Opsional | Diperbolehkan sebagai link non-Instagram. |
 | `twitter_link` | Opsional | Diperbolehkan sebagai link non-Instagram. |
 | `tiktok_link` | Opsional | Diperbolehkan sebagai link non-Instagram. |
 | `youtube_link` | Opsional | Diperbolehkan sebagai link non-Instagram. |
-| `assignment_id` | Kondisional | Wajib jika `instagram_link` kosong/tidak dikirim. |
 | `target_user_id` | Kondisional | Wajib untuk role non-`user` (dashboard/operator). |
 
 Aturan one-of link:
@@ -153,10 +151,12 @@ Kondisi yang diterapkan:
 
 Jika nantinya business rule berubah menjadi berbasis assignment harian, enforcement disarankan dilakukan berdasarkan entitas tugas (mis. `assignment_date`) alih-alih tanggal konten Instagram.
 
-### Branching Validasi Link
-- Jika payload mengandung `instagram_link`, backend memvalidasi URL Instagram, mengekstrak shortcode, lalu menjalankan `fetchSinglePostKhusus` sebelum menyimpan laporan.
-- Jika payload hanya berisi link non-Instagram, backend **melewati** ekstraksi shortcode Instagram dan **tidak** memanggil `fetchSinglePostKhusus`. Pada cabang ini `assignment_id` wajib.
+### Validasi Link
+- `instagram_link` wajib ada, harus URL valid, dan harus bisa diekstrak menjadi shortcode Instagram post/reel.
+- Backend **tidak** menjalankan mekanisme upload/fetch tugas khusus pada endpoint ini.
+- Endpoint ini hanya menyimpan laporan link pelaksanaan tugas ke `link_report_khusus` dengan identitas utama `(shortcode, user_id)`.
 - Jika seluruh field link kosong, backend mengembalikan `400` (`At least one social media link is required`).
+- Jika `instagram_link` tidak dikirim, backend mengembalikan `400` (`instagram_link wajib diisi sebagai referensi tugas khusus`).
 
 ### Contoh Request Sukses (201)
 ```
@@ -165,9 +165,9 @@ Authorization: Bearer <token>
 Content-Type: application/json
 
 {
+  "instagram_link": "https://www.instagram.com/p/DSl7lfmgd14/",
   "facebook_link": "https://www.facebook.com/share/p/1A2B3C4D5E/",
   "tiktok_link": "https://www.tiktok.com/@akun/video/7499999999999999999",
-  "assignment_id": "ASSIGN-2026-02-11-001",
   "client_id": "cicero-client-01"
 }
 ```
@@ -180,8 +180,8 @@ Authorization: Bearer <token-dashboard/operator>
 Content-Type: application/json
 
 {
+  "instagram_link": "https://www.instagram.com/p/DSl7lfmgd14/",
   "facebook_link": "https://www.facebook.com/share/p/1A2B3C4D5E/",
-  "assignment_id": "ASSIGN-2026-02-11-002",
   "client_id": "cicero-client-01",
   "target_user_id": "84110583"
 }
@@ -193,29 +193,17 @@ Content-Type: application/json
   "success": true,
   "message": "Link report khusus berhasil dibuat",
   "data": {
-    "shortcode": null,
-    "instagram_link": null,
+    "shortcode": "DSl7lfmgd14",
+    "instagram_link": "https://www.instagram.com/p/DSl7lfmgd14/",
     "facebook_link": "https://www.facebook.com/share/p/1A2B3C4D5E/",
     "tiktok_link": "https://www.tiktok.com/@akun/video/7499999999999999999",
-    "assignment_id": "ASSIGN-2026-02-11-001",
+    "assignment_id": null,
     "client_id": "cicero-client-01",
     "user_id": "84110583",
     "created_at": "2026-02-11T09:10:00.000Z"
   }
 }
 ```
-
-
-### Error Mapping Fetch Instagram Post
-Agar stabil untuk frontend, kegagalan fetch metadata Instagram dipetakan ke response berikut:
-- `422 Invalid post`: post tidak ditemukan di upstream (`post not found` / HTTP 404 dari upstream).
-- `503 Upstream unavailable`: timeout upstream (`ECONNABORTED`, `ETIMEDOUT`, atau indikasi timeout lain).
-- `503 Upstream unavailable`: kegagalan upstream lain (termasuk 5xx).
-
-Backend juga menulis logging terstruktur dengan `reason_code` pada titik gagal untuk membedakan kategori:
-- gagal auth/otorisasi (`AUTH_*`),
-- gagal validasi (`VALIDATION_*`),
-- gagal fetch IG (`FETCH_IG_*`).
 
 ### Contoh Error Input Invalid (400)
 ```
@@ -225,11 +213,11 @@ Backend juga menulis logging terstruktur dengan `reason_code` pada titik gagal u
 }
 ```
 
-### Contoh Error Validasi Non-Instagram tanpa assignment_id (400)
+### Contoh Error instagram_link wajib (400)
 ```
 {
   "success": false,
-  "message": "assignment_id is required for non-Instagram reports"
+  "message": "instagram_link wajib diisi sebagai referensi tugas khusus"
 }
 ```
 
@@ -251,6 +239,5 @@ Backend juga menulis logging terstruktur dengan `reason_code` pada titik gagal u
 ```
 
 ### Kompatibilitas untuk Frontend
-- **Non-breaking** untuk frontend yang sudah mengirim `instagram_link`, karena alur Instagram tetap didukung.
-- **Non-breaking** untuk frontend multi-platform, karena link non-Instagram (`facebook_link`/`twitter_link`/`tiktok_link`/`youtube_link`) tetap valid selama memenuhi rule minimal satu link.
-- **Potential breaking** jika frontend mengirim payload non-Instagram tanpa `assignment_id`; request sekarang akan ditolak `400`.
+- **Breaking change** untuk frontend yang sebelumnya mengirim payload tanpa `instagram_link`.
+- Frontend wajib selalu mengirim `instagram_link` valid sebagai referensi tugas khusus.

@@ -38,24 +38,14 @@ test('createLinkReport inserts row', async () => {
   expect(res).toEqual({ shortcode: 'abc' });
   expect(mockQuery).toHaveBeenCalledWith(
     expect.stringContaining('FROM insta_post_khusus p'),
-    ['abc', null, '1', 'a', null, null, null, null]
+    ['abc', '1', 'a', null, null, null, null]
   );
 });
 
 
-test('createLinkReport upserts non-Instagram report by assignment_id', async () => {
-  mockQuery.mockResolvedValueOnce({ rows: [{ assignment_id: 'task-1', user_id: '1' }] });
-  const data = {
-    assignment_id: 'task-1',
-    user_id: '1',
-    facebook_link: 'https://facebook.com/p/1'
-  };
-  const res = await createLinkReport(data);
-  expect(res).toEqual({ assignment_id: 'task-1', user_id: '1' });
-  expect(mockQuery).toHaveBeenCalledWith(
-    expect.stringContaining('ON CONFLICT (assignment_id, user_id) DO UPDATE'),
-    ['task-1', '1', 'https://facebook.com/p/1', null, null, null]
-  );
+test('createLinkReport rejects when shortcode missing', async () => {
+  await expect(createLinkReport({ user_id: '1' })).rejects.toThrow('shortcode is required');
+  expect(mockQuery).not.toHaveBeenCalled();
 });
 
 test('createLinkReport throws when shortcode missing or not today', async () => {
