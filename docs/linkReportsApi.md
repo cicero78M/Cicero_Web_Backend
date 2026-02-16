@@ -1,5 +1,5 @@
 # Link Reports API
-*Last updated: 2026-02-11 (update endpoint `POST /api/link-reports-khusus`)*
+*Last updated: 2026-02-16 (update resolusi `client_id` endpoint `POST /api/link-reports-khusus`)*
 
 Dokumen ini menjelaskan endpoint untuk mengambil data link report.
 
@@ -93,19 +93,23 @@ Endpoint ini **wajib** menggunakan Bearer token (`Authorization: Bearer <token>`
 
 ### Field Request
 - `instagram_link` (**wajib**): URL post/reel Instagram yang valid.
-- `client_id` (**wajib**): dapat dikirim dari payload request, atau fallback dari token jika implementasi issue #1 sudah diterapkan.
+- `client_id` (opsional untuk token role `user`): jika tidak dikirim, backend akan resolve otomatis dari profil user di DB berdasarkan `req.user.user_id`.
 - `user_id` (kondisional): kirim jika proses insert link report khusus masih membutuhkan `user_id` eksplisit dari request.
 
 ### Resolusi `client_id`
-Untuk endpoint ini, backend meresolusi `client_id` secara berurutan:
-1. `req.body.client_id`
-2. `req.query.client_id`
-3. `req.user.client_id` (dari token `authRequired`)
+Backend meresolusi `client_id` dengan prioritas berikut:
+1. `req.body.client_id` (jika ada, divalidasi)
+2. lookup `client_id` dari tabel `"user"` berdasarkan `req.user.user_id`
+3. `req.query.client_id` hanya untuk backward compatibility (dipakai untuk role non-user atau validasi kecocokan)
 
-Jika ketiganya kosong, API akan mengembalikan `400 client_id is required`.
+Kebijakan source of truth:
+- **Role `user`**: source of truth adalah `client_id` milik user di DB. Jika `req.body.client_id`/`req.query.client_id` dikirim dan tidak sama dengan profil user, request ditolak (`403`).
+- **Role dashboard/operator**: tetap mengikuti resolusi umum dengan guard `client_ids`.
+
+Jika hasil resolusi tetap kosong (khusus role non-user), API mengembalikan `400 client_id is required`.
 
 ### Guard multi-client token
-Jika token memiliki `client_ids`, maka `client_id` hasil resolusi harus termasuk dalam daftar tersebut.
+Jika token memiliki `client_ids` (umumnya dashboard/operator), maka `client_id` hasil resolusi harus termasuk dalam daftar tersebut.
 Jika tidak termasuk, API akan mengembalikan `403 client_id tidak diizinkan`.
 
 ### Field yang Dilarang untuk Mode Khusus
