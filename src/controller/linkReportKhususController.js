@@ -3,6 +3,104 @@ import { sendSuccess } from '../utils/response.js';
 import { extractFirstUrl, extractInstagramShortcode } from '../utils/utilsHelper.js';
 import { fetchSinglePostKhusus } from '../handler/fetchpost/instaFetchPost.js';
 import { resolveClientIdForLinkReportKhusus } from '../service/userClientService.js';
+import { findClientIdByUserId } from '../model/userModel.js';
+import { sendDebug } from '../middleware/debugHandler.js';
+
+function normalizeOptionalField(value) {
+  if (value == null) return null;
+  const normalized = String(value).trim();
+  return normalized === '' ? null : normalized;
+}
+
+function createHttpError(message, statusCode, reasonCode) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  if (reasonCode) error.reasonCode = reasonCode;
+  return error;
+}
+
+function logCreateLinkReportFailure(reasonCode, req, extra = {}) {
+  sendDebug({
+    tag: 'LINK_REPORT_KHUSUS_CREATE_FAILED',
+    msg: {
+      reason_code: reasonCode,
+      path: req.originalUrl,
+      method: req.method,
+      auth_user_id: req.user?.user_id || null,
+      auth_role: req.user?.role || null,
+      ...extra,
+    },
+  });
+}
+
+async function resolveUserIdForCreateLinkReport(data, req, resolvedClientId) {
+  const role = String(req.user?.role || '').toLowerCase();
+  const bodyUserId = normalizeOptionalField(data.user_id);
+  const targetUserId = normalizeOptionalField(data.target_user_id);
+
+  if (role === 'user') {
+    if (!req.user?.user_id) {
+      throw createHttpError('user_id token tidak ditemukan', 401, 'AUTH_TOKEN_USER_ID_MISSING');
+    }
+    return req.user.user_id;
+  }
+
+  if (bodyUserId) {
+    throw createHttpError(
+      'Gunakan field target_user_id untuk menentukan user tujuan',
+      400,
+      'VALIDATION_USER_ID_FIELD_NOT_ALLOWED'
+    );
+  }
+
+  if (!targetUserId) {
+    throw createHttpError(
+      'target_user_id is required untuk role non-user',
+      400,
+      'VALIDATION_TARGET_USER_ID_REQUIRED'
+    );
+  }
+
+  const targetClientId = await findClientIdByUserId(targetUserId);
+  if (!targetClientId) {
+    throw createHttpError('target_user_id tidak ditemukan', 422, 'VALIDATION_TARGET_USER_NOT_FOUND');
+  }
+
+  if (String(targetClientId).toLowerCase() !== String(resolvedClientId).toLowerCase()) {
+    throw createHttpError(
+      'target_user_id tidak diizinkan untuk client_id ini',
+      403,
+      'AUTH_TARGET_USER_CLIENT_MISMATCH'
+    );
+  }
+
+  return targetUserId;
+}
+
+function mapFetchSinglePostError(err) {
+  const message = String(err?.message || '').toLowerCase();
+  const upstreamStatus = err?.response?.status;
+  const upstreamCode = String(err?.code || '').toUpperCase();
+
+  if (message.includes('post not found') || upstreamStatus === 404) {
+    return createHttpError('Invalid post: Instagram post tidak ditemukan', 422, 'FETCH_IG_POST_NOT_FOUND');
+  }
+
+  const isTimeout =
+    upstreamCode === 'ECONNABORTED' ||
+    upstreamCode === 'ETIMEDOUT' ||
+    message.includes('timeout') ||
+    message.includes('timed out');
+  if (isTimeout) {
+    return createHttpError('Layanan Instagram sedang tidak tersedia (timeout)', 503, 'FETCH_IG_TIMEOUT');
+  }
+
+  if (upstreamStatus && upstreamStatus >= 500) {
+    return createHttpError('Layanan Instagram sedang tidak tersedia', 503, 'FETCH_IG_UPSTREAM_5XX');
+  }
+
+  return createHttpError('Gagal mengambil data Instagram post', 503, 'FETCH_IG_UNKNOWN');
+}
 
 export async function getAllLinkReports(req, res, next) {
   try {
@@ -37,26 +135,29 @@ export async function createLinkReport(req, res, next) {
     });
 
     data.client_id = resolvedClientId;
+    data.user_id = await resolveUserIdForCreateLinkReport(data, req, resolvedClientId);
+    delete data.target_user_id;
     
     // Validate that Instagram link is provided
     if (!data.instagram_link) {
-      const error = new Error('instagram_link is required');
-      error.statusCode = 400;
+      const error = createHttpError('instagram_link is required', 400, 'VALIDATION_INSTAGRAM_LINK_REQUIRED');
       throw error;
     }
     
     // Extract and validate Instagram link format
     const instagramLink = extractFirstUrl(data.instagram_link);
     if (!instagramLink) {
-      const error = new Error('instagram_link must be a valid URL');
-      error.statusCode = 400;
+      const error = createHttpError('instagram_link must be a valid URL', 400, 'VALIDATION_INSTAGRAM_LINK_INVALID_URL');
       throw error;
     }
     
     const shortcode = extractInstagramShortcode(instagramLink);
     if (!shortcode) {
-      const error = new Error('instagram_link must be a valid Instagram post URL');
-      error.statusCode = 400;
+      const error = createHttpError(
+        'instagram_link must be a valid Instagram post URL',
+        400,
+        'VALIDATION_INSTAGRAM_LINK_INVALID_POST'
+      );
       throw error;
     }
     
@@ -64,14 +165,27 @@ export async function createLinkReport(req, res, next) {
     const otherLinks = ['facebook_link', 'twitter_link', 'tiktok_link', 'youtube_link'];
     const hasOtherLinks = otherLinks.some(field => data[field]);
     if (hasOtherLinks) {
-      const error = new Error('Only instagram_link is allowed for special assignment uploads');
-      error.statusCode = 400;
+      const error = createHttpError(
+        'Only instagram_link is allowed for special assignment uploads',
+        400,
+        'VALIDATION_NON_INSTAGRAM_LINK_NOT_ALLOWED'
+      );
       throw error;
     }
     
     // Fetch and store Instagram post metadata via RapidAPI
     // The stored data will be referenced by createLinkReport using the shortcode
-    await fetchSinglePostKhusus(instagramLink, data.client_id);
+    try {
+      await fetchSinglePostKhusus(instagramLink, data.client_id);
+    } catch (fetchErr) {
+      const mappedError = mapFetchSinglePostError(fetchErr);
+      mappedError.logContext = {
+        upstream_status: fetchErr?.response?.status || null,
+        upstream_code: fetchErr?.code || null,
+        upstream_message: fetchErr?.message || null,
+      };
+      throw mappedError;
+    }
     
     // Create link report with validated Instagram link
     data.instagram_link = instagramLink;
@@ -84,6 +198,18 @@ export async function createLinkReport(req, res, next) {
     const report = await linkReportModel.createLinkReport(data);
     sendSuccess(res, report, 201);
   } catch (err) {
+    const fallbackReasonCode = (() => {
+      if (err?.reasonCode) return err.reasonCode;
+      if ((err?.statusCode || 500) === 401 || (err?.statusCode || 500) === 403) return 'AUTHORIZATION_FAILED';
+      if ((err?.statusCode || 500) >= 400 && (err?.statusCode || 500) < 500) return 'VALIDATION_FAILED';
+      return 'UNEXPECTED_ERROR';
+    })();
+
+    logCreateLinkReportFailure(fallbackReasonCode, req, {
+      status_code: err?.statusCode || 500,
+      message: err?.message || 'unknown error',
+      ...(err?.logContext || {}),
+    });
     next(err);
   }
 }
