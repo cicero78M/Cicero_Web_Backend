@@ -1,5 +1,5 @@
 # Link Reports API
-*Last updated: 2026-02-16 (update policy periode `POST /api/link-reports-khusus`)*
+*Last updated: 2026-02-16 (update user_id derivation, target_user_id untuk non-user, dan error mapping fetch IG)*
 
 Dokumen ini menjelaskan endpoint untuk mengambil data link report.
 
@@ -94,7 +94,20 @@ Endpoint ini **wajib** menggunakan Bearer token (`Authorization: Bearer <token>`
 ### Field Request
 - `instagram_link` (**wajib**): URL post/reel Instagram yang valid.
 - `client_id` (opsional untuk token role `user`): jika tidak dikirim, backend akan resolve otomatis dari profil user di DB berdasarkan `req.user.user_id`.
-- `user_id` (kondisional): kirim jika proses insert link report khusus masih membutuhkan `user_id` eksplisit dari request.
+- `user_id` (**tidak digunakan**): untuk role `user`, backend selalu mengambil `user_id` dari token (`req.user.user_id`) dan mengabaikan `user_id` dari request body.
+- `target_user_id` (kondisional, wajib untuk role non-`user` seperti dashboard/operator): user tujuan pelaporan. Backend akan validasi bahwa user tujuan berada pada `client_id` yang diizinkan oleh token.
+
+
+### Resolusi `user_id`
+Backend meresolusi `user_id` dengan kebijakan berikut:
+1. **Role `user`**: `user_id` selalu diambil dari token (`req.user.user_id`). Nilai `user_id` di body diabaikan.
+2. **Role non-user (mis. dashboard/operator)**: wajib kirim `target_user_id`.
+3. Untuk role non-user, penggunaan `user_id` langsung di body akan ditolak (`400`) agar kontrak API konsisten dan eksplisit.
+
+Validasi otorisasi `target_user_id`:
+- `target_user_id` harus ada di DB.
+- `target_user_id` harus berada pada `client_id` yang sama dengan `client_id` hasil resolusi token/request.
+- Jika tidak lolos validasi, API mengembalikan `403` atau `422` sesuai tipe kegagalan.
 
 ### Resolusi `client_id`
 Backend meresolusi `client_id` dengan prioritas berikut:
@@ -139,8 +152,21 @@ Content-Type: application/json
 
 {
   "instagram_link": "https://www.instagram.com/p/DSl7lfmgd14/",
+  "client_id": "cicero-client-01"
+}
+```
+
+
+### Contoh Request Role Non-User (dashboard/operator)
+```
+POST /api/link-reports-khusus
+Authorization: Bearer <token-dashboard/operator>
+Content-Type: application/json
+
+{
+  "instagram_link": "https://www.instagram.com/p/DSl7lfmgd14/",
   "client_id": "cicero-client-01",
-  "user_id": "84110583"
+  "target_user_id": "84110583"
 }
 ```
 
@@ -158,6 +184,18 @@ Content-Type: application/json
   }
 }
 ```
+
+
+### Error Mapping Fetch Instagram Post
+Agar stabil untuk frontend, kegagalan fetch metadata Instagram dipetakan ke response berikut:
+- `422 Invalid post`: post tidak ditemukan di upstream (`post not found` / HTTP 404 dari upstream).
+- `503 Upstream unavailable`: timeout upstream (`ECONNABORTED`, `ETIMEDOUT`, atau indikasi timeout lain).
+- `503 Upstream unavailable`: kegagalan upstream lain (termasuk 5xx).
+
+Backend juga menulis logging terstruktur dengan `reason_code` pada titik gagal untuk membedakan kategori:
+- gagal auth/otorisasi (`AUTH_*`),
+- gagal validasi (`VALIDATION_*`),
+- gagal fetch IG (`FETCH_IG_*`).
 
 ### Contoh Error Input Invalid (400)
 ```
