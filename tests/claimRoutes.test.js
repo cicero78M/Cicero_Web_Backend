@@ -57,6 +57,19 @@ describe('claim routes credential flow', () => {
     });
   });
 
+  test('returns not registered message when nrp is not found during claim register', async () => {
+    userModelMocks.findUserById.mockResolvedValueOnce(null);
+    const res = await request(app)
+      .post('/api/claim/register')
+      .send({ nrp: '999', password: 'Password1!' });
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({
+      success: false,
+      message: 'NRP anda tidak terdaftar',
+    });
+  });
+
   test('reads user-data with nrp + password', async () => {
     const res = await request(app)
       .post('/api/claim/user-data')

@@ -3,7 +3,7 @@
 
 ## Description
 
-**Cicero_V2** is an automation backend for monitoring social media, managing editorial workflows, and orchestrating WhatsApp messaging. The service ingests Instagram and TikTok metrics for multiple clients, tracks attendance, powers daily/weekly reporting, manages premium subscriptions, and now drives the Penmas editorial approval process. A single unified WhatsApp client (using baileys) handles all messaging including operator interactions, user requests, and directorate broadcasts. Claim registration now uses NRP + username + password credentials (without OTP email).
+**Cicero_V2** is an automation backend for monitoring social media, managing editorial workflows, and orchestrating WhatsApp messaging. The service ingests Instagram and TikTok metrics for multiple clients, tracks attendance, powers daily/weekly reporting, manages premium subscriptions, and now drives the Penmas editorial approval process. A single unified WhatsApp client (using baileys) handles all messaging including operator interactions, user requests, and directorate broadcasts. Claim registration now uses NRP + password credentials (without OTP email).
 
 The web dashboard lives in a separate Next.js repository, [Cicero_Web](https://github.com/cicero78M/Cicero_Web), which communicates with this API. Refer to [docs/combined_overview.md](docs/combined_overview.md) for how the repositories interact.
 

@@ -83,7 +83,7 @@ export async function registerClaimCredentials(req, res, next) {
     }
 
     if (!user) {
-      return res.status(404).json({ success: false, message: 'User tidak ditemukan' });
+      return res.status(404).json({ success: false, message: 'NRP anda tidak terdaftar' });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -92,7 +92,7 @@ export async function registerClaimCredentials(req, res, next) {
     });
 
     if (!updatedUser) {
-      return res.status(404).json({ success: false, message: 'User tidak ditemukan' });
+      return res.status(404).json({ success: false, message: 'NRP anda tidak terdaftar' });
     }
 
     sendSuccess(res, {
