@@ -3,7 +3,7 @@
 
 ## Description
 
-**Cicero_V2** is an automation backend for monitoring social media, managing editorial workflows, and orchestrating WhatsApp messaging. The service ingests Instagram and TikTok metrics for multiple clients, tracks attendance, powers daily/weekly reporting, manages premium subscriptions, and now drives the Penmas editorial approval process. A single unified WhatsApp client (using baileys) handles all messaging including operator interactions, user requests, and directorate broadcasts. OTP distribution has moved to instant email delivery.
+**Cicero_V2** is an automation backend for monitoring social media, managing editorial workflows, and orchestrating WhatsApp messaging. The service ingests Instagram and TikTok metrics for multiple clients, tracks attendance, powers daily/weekly reporting, manages premium subscriptions, and now drives the Penmas editorial approval process. A single unified WhatsApp client (using baileys) handles all messaging including operator interactions, user requests, and directorate broadcasts. Claim registration now uses NRP + password credentials (without OTP email).
 
 The web dashboard lives in a separate Next.js repository, [Cicero_Web](https://github.com/cicero78M/Cicero_Web), which communicates with this API. Refer to [docs/combined_overview.md](docs/combined_overview.md) for how the repositories interact.
 
@@ -14,7 +14,7 @@ Role-aware deactivation flows (per-role removal across WhatsApp menus and REST) 
 ## Key Capabilities
 
 - Multi-tenant Instagram and TikTok ingestion with RapidAPI fallbacks and deduplication middleware for idempotent requests.
-- Automated WhatsApp digests, OTP notifications via SMTP email, and Google Contacts synchronisation for administrator address books.
+- Automated WhatsApp digests, SMTP-based complaint email notifications, and Google Contacts synchronisation for administrator address books.
 - Editorial event planning, press-release drafting, and approval logging exposed under Penmas-protected routes.
 - Directorat WhatsApp dirrequest menus that now include an Instagram all-data recap export (menu 4️⃣2️⃣) spanning September-to-current months with per-polres totals.
 - Premium subscription management, link amplification (regular and khusus), and directorate-level recap exports.
@@ -56,7 +56,7 @@ Cicero_V2/
 
 ## API Overview
 
-The API exposes endpoints for managing clients and users, fetching Instagram and TikTok data, handling OAuth callbacks, orchestrating editorial events, and providing dashboard statistics. Dedicated routers cover aggregator widgets, directorate recap exports, complaint handling, Penmas press releases, premium requests, link amplification (regular and khusus), and OTP-powered data-claim flows. Detailed documentation for each route is available in the source code comments (`src/routes/**/*.js`).
+The API exposes endpoints for managing clients and users, fetching Instagram and TikTok data, handling OAuth callbacks, orchestrating editorial events, and providing dashboard statistics. Dedicated routers cover aggregator widgets, directorate recap exports, complaint handling, Penmas press releases, premium requests, link amplification (regular and khusus), and credential-based data-claim flows. Detailed documentation for each route is available in the source code comments (`src/routes/**/*.js`).
 
 Basic health checks are available without authentication. `GET` or `POST /` returns `{ "status": "ok" }` for load balancers or uptime probes, and `/_next/dev/` responds the same to keep Next.js dev proxies from spamming logs.
 
@@ -263,7 +263,7 @@ Application logs are timestamped using the Asia/Jakarta timezone by the console 
    `WA_AUTH_CLEAR_SESSION_ON_REINIT=true` forces the adapter to remove the `session-<clientId>` folder before reinitializing after `auth_failure` or `LOGGED_OUT`. Back up the session folder before manual cleanup.
    `ENABLE_DIRREQUEST_GROUP=false` disables all Ditbinmas dirRequest features at once.
    `GOOGLE_SERVICE_ACCOUNT` may be set to a JSON string or a path to a JSON file. If the value starts with `/` or ends with `.json`, the application reads the file; otherwise it parses the variable directly as JSON. `GOOGLE_IMPERSONATE_EMAIL` should be set to the Workspace user to impersonate when performing contact operations.
-   `SMTP_*` variables enable OTP and complaint notifications through email (`claimRoutes.js`). Leave them unset to disable email delivery in development.
+   `SMTP_*` variables enable complaint notifications through email. Leave them unset to disable email delivery in development.
    `CONTACT_CACHE_TTL_MS` controls how long Google contact lookups stay cached in memory.
    `DASHBOARD_RESET_TOKEN_EXPIRY_MINUTES` and `DASHBOARD_PASSWORD_RESET_URL` customise dashboard password reset links.
    `RAPIDAPI_KEY` wajib diisi untuk semua fetch Instagram/TikTok. Endpoint seperti `/api/insta/rapid-info` akan mengembalikan error operasional (500/503) bila `RAPIDAPI_KEY` belum di-set, sebelum melakukan request keluar.
@@ -343,7 +343,7 @@ psql -U <dbuser> -h <host> -d <dbname> < cicero_backup.sql
 - WhatsApp readiness is tracked and logged with `[BAILEYS]` prefix in the console.
 - Legacy wwebjs adapter code (`src/service/wwebjsAdapter.js`) is retained for reference only and is not used in production.
 
-The OTP worker (`src/service/otpQueue.js`) now resolves immediately because OTP emails are sent synchronously via SMTP to minimise delays.
+Claim flow no longer uses OTP worker/email delivery; SMTP remains used for complaint notifications.
 
 ---
 
@@ -376,7 +376,7 @@ All notifications are also sent via WhatsApp to maintain backward compatibility.
 
 - **DB connection errors** – check database credentials and PostgreSQL status.
 - **WhatsApp not connected** – rescan the QR code. Session data is stored in `~/.cicero/baileys_auth/`. If you need to re-authenticate, set `WA_AUTH_CLEAR_SESSION_ON_REINIT=true` to clear the session on next restart.
-- **Email OTP delivery failed** – verify `SMTP_*` variables and network egress.
+- **Complaint email delivery failed** – verify `SMTP_*` variables and network egress.
 - **External API errors** – verify `RAPIDAPI_KEY` and check application logs.
 
 ---
@@ -390,7 +390,7 @@ All notifications are also sent via WhatsApp to maintain backward compatibility.
 
 ## Request Deduplication
 
-The middleware in [`src/middleware/dedupRequestMiddleware.js`](src/middleware/dedupRequestMiddleware.js) hashes non-GET requests and caches them in Redis for five minutes. Identical requests sent again within that window receive an HTTP 429 response. Claim endpoints under `/api/claim` are exempt so that the OTP flow can be retried without delay. Set `ALLOW_DUPLICATE_REQUESTS=true` to bypass this protection during development.
+The middleware in [`src/middleware/dedupRequestMiddleware.js`](src/middleware/dedupRequestMiddleware.js) hashes non-GET requests and caches them in Redis for five minutes. Identical requests sent again within that window receive an HTTP 429 response. Claim endpoints under `/api/claim` are exempt so that registration/profile updates can be retried without delay. Set `ALLOW_DUPLICATE_REQUESTS=true` to bypass this protection during development.
 
 ---
 

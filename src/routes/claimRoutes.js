@@ -1,19 +1,15 @@
 import express from 'express';
 import {
-  requestOtp,
-  verifyOtpController,
+  registerClaimCredentials,
   getUserData,
   updateUserData,
-  validateEmail,
 } from '../controller/claimController.js';
 
 const router = express.Router();
 
-// Routes for OTP flow via email
-router.post('/request-otp', requestOtp); // body: { nrp, email }
-router.post('/verify-otp', verifyOtpController); // body: { nrp, email, otp }
-router.post('/user-data', getUserData); // body: { nrp, email }
-router.put('/update', updateUserData); // body: { nrp, email, ... }
-router.post('/validate-email', validateEmail); // body: { email }
+// Routes for claim registration via NRP + password
+router.post('/register', registerClaimCredentials); // body: { nrp, password }
+router.post('/user-data', getUserData); // body: { nrp, password }
+router.put('/update', updateUserData); // body: { nrp, password, ... }
 
 export default router;

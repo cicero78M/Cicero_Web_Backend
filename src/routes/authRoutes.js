@@ -18,6 +18,7 @@ import {
 import redis from "../config/redis.js";
 import { insertVisitorLog } from "../model/visitorLogModel.js";
 import { insertLoginLog } from "../model/loginLogModel.js";
+import { normalizeUserId } from '../utils/utilsHelper.js';
 import { 
   sendLoginLogNotification, 
   sendUserApprovalRequest,
@@ -680,24 +681,29 @@ router.post('/user-register', async (req, res) => {
 });
 
 router.post('/user-login', async (req, res) => {
-  const { nrp, whatsapp, password } = req.body;
-  const waInput = whatsapp || password;
-  if (!nrp || !waInput) {
+  const { nrp, password } = req.body;
+  const normalizedNrp = normalizeUserId(nrp);
+  if (!normalizedNrp || !password) {
     return res
       .status(400)
-      .json({ success: false, message: 'nrp dan whatsapp wajib diisi' });
+      .json({ success: false, message: 'nrp dan password wajib diisi' });
   }
-  const wa = normalizeWhatsappNumber(waInput);
-  const rawWa = String(waInput).replace(/\D/g, "");
   const { rows } = await query(
-    'SELECT user_id, nama FROM "user" WHERE user_id = $1 AND (whatsapp = $2 OR whatsapp = $3)',
-    [nrp, wa, rawWa]
+    'SELECT user_id, nama, password_hash FROM "user" WHERE user_id = $1',
+    [normalizedNrp]
   );
   const user = rows[0];
-  if (!user) {
+  if (!user || !user.password_hash) {
     return res
       .status(401)
-      .json({ success: false, message: 'Login gagal: data tidak ditemukan' });
+      .json({ success: false, message: 'Login gagal: kredensial belum terdaftar' });
+  }
+
+  const match = await bcrypt.compare(password, user.password_hash);
+  if (!match) {
+    return res
+      .status(401)
+      .json({ success: false, message: 'Login gagal: password salah' });
   }
   const payload = { user_id: user.user_id, nama: user.nama, role: 'user' };
   const token = jwt.sign(payload, process.env.JWT_SECRET, {

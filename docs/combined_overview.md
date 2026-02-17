@@ -10,7 +10,7 @@ This document summarizes the three main repositories that make up the **Cicero**
 - Node.js/Express REST API used for monitoring Instagram and TikTok, orchestrating WhatsApp messaging, and running the Penmas editorial workflow.
 - Maintains two WhatsApp sessions (`waClient` and `waGatewayClient`) for operator menus and directorate broadcasts.
 - Cron buckets are activated when each WhatsApp session is ready, covering Instagram/TikTok ingestion, link amplification (reguler & khusus), directorate recaps, and database backups.
-- OTP emails for data-claim flows are delivered synchronously via SMTP.
+- Data-claim flows now use NRP + password credentials (without OTP email).
 - See [enterprise_architecture.md](enterprise_architecture.md) for architecture details.
 
 ### 2. Cicero_Web (Dashboard)
@@ -22,14 +22,14 @@ This document summarizes the three main repositories that make up the **Cicero**
 
 ### 3. pegiat_medsos_apps (Android App - External)
 - External Android application repository.
-- Lightweight Android application for field agents with OTP-based data claim and premium subscription upsell screens.
+- Lightweight Android application for field agents with credential-based data claim and premium subscription upsell screens.
 - Uses a login screen to obtain a JWT from the backend.
 - Displays profile information and Instagram posts for the logged in user.
 - Provides a dashboard, reporting, and premium request submission via simple activities.
 
 ## Integration Flow
 1. The dashboard and Android app authenticate users against the backend API.
-2. Both clients call endpoints such as `/api/insta/rapid-posts`, `/api/dashboard/aggregator`, and `/api/claim/request-otp` to retrieve social media data or update profiles.
+2. Both clients call endpoints such as `/api/insta/rapid-posts`, `/api/dashboard/aggregator`, and `/api/claim/register` to retrieve social media data or update profiles.
 3. Scheduled jobs in the backend collect posts and metrics, generate directorate recaps, and send WhatsApp reminders/reports once the associated WhatsApp client signals readiness.
 4. Heavy tasks can be processed asynchronously using RabbitMQ when enabled.
 5. Editorial users employ the Penmas module to create events and submit approval requests that are reviewed via WhatsApp commands.

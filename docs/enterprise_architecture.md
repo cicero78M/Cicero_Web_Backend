@@ -21,9 +21,9 @@ The backend exposes REST endpoints to manage clients, users, and social media an
 
 - `app.js` – Express entry point registering middleware, routes, and scheduled cron buckets based on WhatsApp readiness.
 - `src/controller` – Controller layer for clients, users, OAuth callbacks, dashboard metrics, editorial events, aggregator feeds, premium flows, and social media endpoints.
-- `src/service` – Cron helpers, API wrappers, WhatsApp helpers, OTP/email delivery, Google contact sync, RabbitMQ queues, and various utility functions.
+- `src/service` – Cron helpers, API wrappers, WhatsApp helpers, email delivery, Google contact sync, RabbitMQ queues, and various utility functions.
 - `src/handler` – WhatsApp menu logic, link amplification processors, and fetch helpers for automation.
-- `src/routes` – API routes for auth, clients, users, Instagram/TikTok, logs, metadata, dashboards, aggregator widgets, Penmas editorial workflows, OTP claim flows, premium requests, and link amplification.
+- `src/routes` – API routes for auth, clients, users, Instagram/TikTok, logs, metadata, dashboards, aggregator widgets, Penmas editorial workflows, claim credential flows, premium requests, and link amplification.
 - `src/middleware` – Authentication (JWT, dashboard, Penmas), request deduplication, debugging, and global error handling. The global `errorHandler` always returns JSON (`success: false`, `message`) with a safe fallback message and logs minimal request metadata (`method`, `path`, `status`) for production tracing.
 - `src/repository` – Database helper queries.
 - `src/model` – Database models for clients, users, social media posts, metrics, and visitor logs.
@@ -41,7 +41,7 @@ Located in the separate `Cicero_Web/cicero-dashboard` directory. The dashboard c
 ## Integration Flow
 
 1. **Authentication**
-   - Dashboard or Android user logs in via `/api/auth/dashboard-login`, `/api/auth/login`, or `/api/auth/user-login` and receives a JWT. OTP-based data claims start with `/api/claim/request-otp` and continue after verifying the emailed code.
+   - Dashboard or Android user logs in via `/api/auth/dashboard-login`, `/api/auth/login`, or `/api/auth/user-login` and receives a JWT. Claim data flow starts with `/api/claim/register` and continues with credential-based access (`nrp`, `password`) after credentials are bound to the same NRP.
    - Backend returns a JWT token stored in `localStorage` on the frontend (dashboard) or in secure storage on the mobile app.
    - Subsequent requests attach `Authorization: Bearer <token>` header or reuse the `token` HTTP-only cookie.
 
@@ -56,7 +56,7 @@ Located in the separate `Cicero_Web/cicero-dashboard` directory. The dashboard c
 
 4. **Queue Processing**
 - High‑volume tasks can be published to RabbitMQ using `src/service/rabbitMQService.js` for asynchronous processing.
-- OTP emails are dispatched synchronously through `src/service/otpQueue.js` → `src/service/emailService.js`, eliminating the earlier background worker delay.
+- Claim flow no longer depends on OTP email; registration and profile updates use credentials stored in table `user`.
 
 ## Deployment Considerations
 
