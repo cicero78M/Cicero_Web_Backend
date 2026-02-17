@@ -47,6 +47,8 @@ CREATE TABLE "user" (
   tiktok VARCHAR,
   whatsapp VARCHAR,
   email VARCHAR,
+  username VARCHAR,
+  password_hash TEXT,
   desa VARCHAR,
   client_id VARCHAR REFERENCES clients(client_id),
   status BOOLEAN DEFAULT TRUE,

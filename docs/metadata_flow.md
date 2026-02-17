@@ -7,10 +7,10 @@ This document outlines the flow of data and the main database tables used by the
 
 1. **Client and User Setup**
    - Administrators log in through the dashboard and register new clients using the `/clients` API.
-   - Users for each client are created via the `/users` API, imported from Google Sheets, or self-service through the OTP claim flow (`/api/claim/*`).
+   - Users for each client are created via the `/users` API, imported from Google Sheets, or self-service through the claim credential flow (`/api/claim/*`).
 2. **Authentication & Claim**
    - Users authenticate by calling `/api/auth/login`, `/api/auth/user-login`, or `/api/auth/dashboard-login` and receive a JWT token.
-   - Operators without updated records request OTP codes through `/api/claim/request-otp`. OTPs are emailed instantly and must be verified before profile edits. Jika NRP tidak ditemukan tetapi email sudah dipakai akun lain, API mengembalikan konflik 409 dengan pesan yang menjelaskan agar user memakai email berbeda atau menghubungi admin.
+   - Operators without updated records now register claim credentials through `/api/claim/register` menggunakan NRP dan password kuat. Kredensial ini dipakai untuk akses `/api/claim/user-data` dan `/api/claim/update` tanpa OTP email.
    - The JWT token or HTTP-only cookie is included in subsequent API calls to authorize access.
 
 ## 2. Database Overview
@@ -46,7 +46,7 @@ These tables are updated regularly by scheduled jobs and form the basis for anal
    - Editorial submissions persist to `editorial_event` and related tables, awaiting approvals captured through WhatsApp.
 3. **Reporting & Messaging**
   - Cron tasks (`cronDirRequestFetchSosmed.js`, `cronRekapLink.js`, `cronAmplifyLinkMonthly.js`, etc.) send recaps to administrators through `waClient` or `waGatewayClient`.
-   - OTP emails and complaint confirmations are sent immediately via SMTP to reduce follow-up latency.
+   - Complaint confirmations are sent immediately via SMTP to reduce follow-up latency. Claim flow does not use OTP email.
 4. **Queue Processing (Optional)**
    - Heavy operations can publish tasks to RabbitMQ with `rabbitMQService.js` and are processed asynchronously.
 

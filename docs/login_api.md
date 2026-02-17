@@ -58,12 +58,11 @@ Untuk deployment web yang mengandalkan cookie token lintas origin:
 ```json
 {
   "nrp": "123456",
-  "whatsapp": "628123456789"
+  "password": "Abcd1234!"
 }
 ```
 
-> **Note:** For legacy Android clients, the `password` field may be used instead of `whatsapp`. Both are treated equivalently.
-> The backend normalizes WhatsApp input to digits only with the `62` prefix (minimum 8 digits) and never stores the `@c.us` suffix.
+> **Note:** Login user sekarang menggunakan pasangan `nrp` + `password` yang didaftarkan melalui flow claim (`/api/claim/register`).
 
 ### User Registration
 `POST /api/auth/user-register`
@@ -325,7 +324,7 @@ const apiClient = createProtectedApiClient({
   logger: console
 });
 
-await apiClient.userLogin({ nrp: '123456', whatsapp: '628123456789' });
+await apiClient.userLogin({ nrp: '123456', password: 'Abcd1234!' });
 await apiClient.getUserById('123456');
 await apiClient.createLinkReport({ shortcode: 'abc123' });
 await apiClient.createLinkReportKhusus({ shortcode: 'xyz789' });

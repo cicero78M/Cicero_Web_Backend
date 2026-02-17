@@ -684,20 +684,21 @@ describe('POST /dashboard-login', () => {
 
 
 describe('POST /user-login', () => {
-  test('logs in user with correct whatsapp', async () => {
+  test('logs in user with correct password', async () => {
+    const passwordHash = await bcrypt.hash('Password1!', 10);
     mockQuery.mockResolvedValueOnce({
-      rows: [{ user_id: 'u1', nama: 'User' }]
+      rows: [{ user_id: 'u1', nama: 'User', password_hash: passwordHash }]
     });
 
     const res = await request(app)
       .post('/api/auth/user-login')
-      .send({ nrp: 'u1', whatsapp: '0808' });
+      .send({ nrp: '00123', password: 'Password1!' });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(mockQuery).toHaveBeenCalledWith(
-      'SELECT user_id, nama FROM "user" WHERE user_id = $1 AND (whatsapp = $2 OR whatsapp = $3)',
-      ['u1', '62808', '0808']
+      'SELECT user_id, nama, password_hash FROM "user" WHERE user_id = $1',
+      ['00123']
     );
     expect(mockRedis.sAdd).toHaveBeenCalledWith('user_login:u1', res.body.token);
     expect(mockRedis.set).toHaveBeenCalledWith(
@@ -710,40 +711,51 @@ describe('POST /user-login', () => {
       loginType: 'user',
       loginSource: 'mobile'
     });
-    expect(mockQueueAdminNotification).toHaveBeenCalledWith(
-      expect.stringContaining('Login user: u1 - User')
-    );
   });
 
-  test('logs in user using password field', async () => {
+  test('returns 401 when user has no password_hash', async () => {
     mockQuery.mockResolvedValueOnce({
-      rows: [{ user_id: 'u2', nama: 'User2' }]
+      rows: [{ user_id: 'u2', nama: 'User2', password_hash: null }]
     });
 
     const res = await request(app)
       .post('/api/auth/user-login')
-      .send({ nrp: 'u2', password: '0812' });
+      .send({ nrp: '987', password: 'Password1!' });
 
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(mockQuery).toHaveBeenCalledWith(
-      'SELECT user_id, nama FROM "user" WHERE user_id = $1 AND (whatsapp = $2 OR whatsapp = $3)',
-      ['u2', '62812', '0812']
-    );
-    expect(mockRedis.sAdd).toHaveBeenCalledWith('user_login:u2', res.body.token);
-    expect(mockRedis.set).toHaveBeenCalledWith(
-      `login_token:${res.body.token}`,
-      'user:u2',
-      { EX: 2 * 60 * 60 }
-    );
-    expect(mockInsertLoginLog).toHaveBeenCalledWith({
-      actorId: 'u2',
-      loginType: 'user',
-      loginSource: 'mobile'
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({
+      success: false,
+      message: 'Login gagal: kredensial belum terdaftar'
     });
-    expect(mockQueueAdminNotification).toHaveBeenCalledWith(
-      expect.stringContaining('Login user: u2 - User2')
-    );
+  });
+
+  test('returns 401 when password is incorrect', async () => {
+    const passwordHash = await bcrypt.hash('Password1!', 10);
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ user_id: 'u2', nama: 'User2', password_hash: passwordHash }]
+    });
+
+    const res = await request(app)
+      .post('/api/auth/user-login')
+      .send({ nrp: '987', password: 'WrongPass1!' });
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({
+      success: false,
+      message: 'Login gagal: password salah'
+    });
+  });
+
+  test('returns 400 when nrp or password missing', async () => {
+    const res = await request(app)
+      .post('/api/auth/user-login')
+      .send({ nrp: '987' });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      success: false,
+      message: 'nrp dan password wajib diisi'
+    });
   });
 });
 

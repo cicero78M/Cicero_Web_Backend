@@ -445,6 +445,26 @@ export async function findUserByEmail(email) {
   return rows[0] || null;
 }
 
+export async function findUserByUsername(username) {
+  const normalizedUsername = String(username ?? '').trim().toLowerCase();
+  if (!normalizedUsername) return null;
+  const { rows } = await query('SELECT * FROM "user" WHERE LOWER(username) = LOWER($1)', [normalizedUsername]);
+  return rows[0] || null;
+}
+
+export async function setClaimCredentials(userId, { passwordHash }) {
+  const uid = normalizeUserId(userId);
+  const { rows } = await query(
+    `UPDATE "user"
+     SET password_hash = $1,
+         updated_at = NOW()
+     WHERE user_id = $2
+     RETURNING *`,
+    [passwordHash, uid]
+  );
+  return rows[0] || null;
+}
+
 // Ambil user berdasarkan user_id dan client_id
 export async function findUserByIdAndClient(user_id, client_id, roleFilter = null) {
   const uid = normalizeUserId(user_id);
