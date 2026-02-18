@@ -1,11 +1,15 @@
 import bcrypt from 'bcrypt';
 import * as userModel from '../model/userModel.js';
 import { sendSuccess } from '../utils/response.js';
-import { normalizeUserId } from '../utils/utilsHelper.js';
+import { normalizeEmail, normalizeUserId } from '../utils/utilsHelper.js';
 import { normalizeWhatsappNumber, minPhoneDigitLength } from '../utils/waHelper.js';
 
 function isConnectionError(err) {
   return err && err.code === 'ECONNREFUSED';
+}
+
+function isValidEmailFormat(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 function extractInstagramUsername(value) {
@@ -151,6 +155,7 @@ export async function updateUserData(req, res, next) {
       insta,
       tiktok,
       whatsapp,
+      email,
     } = req.body;
     const nrp = normalizeUserId(rawNrp);
     if (!nrp || !password) {
@@ -217,9 +222,27 @@ export async function updateUserData(req, res, next) {
       }
     }
 
+    let normalizedEmail;
+    if (email !== undefined) {
+      if (email === null || email === '') {
+        normalizedEmail = '';
+      } else {
+        normalizedEmail = normalizeEmail(email);
+        if (!isValidEmailFormat(normalizedEmail)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Format email tidak valid.',
+          });
+        }
+      }
+    }
+
     const data = { nama, title, divisi, jabatan, desa };
     if (whatsapp !== undefined) {
       data.whatsapp = normalizedWhatsapp;
+    }
+    if (email !== undefined) {
+      data.email = normalizedEmail;
     }
     if (insta !== undefined) {
       if (igUsername === 'cicero_devs') {
