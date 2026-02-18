@@ -18,6 +18,14 @@ Dokumen ini merangkum endpoint claim data berbasis NRP dan password (tanpa OTP e
 ## Perbarui Data Pengguna
 - **Endpoint:** `PUT /api/claim/update`
 - **Body:** `{ "nrp": "12345678", "password": "Abcd1234!", ... }`
+- **Field yang didukung untuk update:**
+  - Profil umum: `nama`, `title`, `divisi`, `jabatan`, `desa`
+  - Kontak: `whatsapp`, `email`
+  - Sosial: `insta`, `tiktok`
+- **Aturan validasi tambahan:**
+  - `whatsapp` akan dinormalisasi ke format numerik (contoh `0812...` → `62812...`) dan minimal 8 digit.
+  - `email` akan dinormalisasi ke lowercase dan harus sesuai format email.
+  - `insta` dan `tiktok` menerima username atau URL profil, lalu dinormalisasi ke username.
 - **Catatan:** Kredensial yang sama dipakai sebagai autentikasi update; mekanisme OTP email sudah dihapus.
 
 ## Login User Setelah Claim
