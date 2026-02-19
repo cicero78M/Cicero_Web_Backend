@@ -147,7 +147,9 @@ Ketika `role` dan `scope` dikirim, filter mengikuti aturan berikut:
 
 ### `scope=direktorat`
 
-- **Data tugas (post)** diambil berdasarkan `client_id`.
+- **Data tugas (post)** mencakup dua sumber sekaligus:
+  - post dengan `client_id` yang sama (termasuk input manual post ke client tersebut), dan
+  - post yang ditandai ke role direktorat melalui `tiktok_post_roles`.
 - **Data personil** direkap berdasarkan **role yang sama** (`role`) lintas client.
 
 ### `scope=org`

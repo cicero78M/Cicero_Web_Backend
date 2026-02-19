@@ -196,6 +196,10 @@ export async function getTiktokRekapKomentar(req, res) {
         postClientId = client_id;
         userClientId = null;
         userRoleFilter = resolvedRole;
+        // Untuk scope direktorat, data tugas harus mencakup:
+        // 1) post dengan client_id yang sama (termasuk input manual), dan
+        // 2) post yang ditandai ke role direktorat di tiktok_post_roles.
+        // Ini menjaga kompatibilitas data akun resmi sekaligus post manual per-client.
       } else if (resolvedScope === 'org') {
         if (resolvedRole === 'operator') {
           const tokenClientId = req.user?.client_id;
@@ -219,7 +223,9 @@ export async function getTiktokRekapKomentar(req, res) {
         postClientId,
         userClientId,
         userRoleFilter,
-        includePostRoleFilter: false,
+        includePostRoleFilter: resolvedScope === 'direktorat',
+        postRoleFilterMode:
+          resolvedScope === 'direktorat' ? 'include_client_or_role' : undefined,
         regionalId,
       };
       roleForQuery = resolvedRole;

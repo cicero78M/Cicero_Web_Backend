@@ -267,6 +267,9 @@ export async function getRekapKomentarByClient(
   const postRoleFilterNameOverride = hasOption('postRoleFilterName')
     ? options.postRoleFilterName
     : undefined;
+  const postRoleFilterModeOverride = hasOption('postRoleFilterMode')
+    ? options.postRoleFilterMode
+    : undefined;
   const regionalIdOverride = hasOption('regionalId')
     ? options.regionalId
     : null;
@@ -276,6 +279,7 @@ export async function getRekapKomentarByClient(
     userRoleFilterOverride,
     includePostRoleFilterOverride,
     postRoleFilterNameOverride,
+    postRoleFilterModeOverride,
   ].some((value) => value !== undefined);
 
   let clientType = null;
@@ -386,6 +390,10 @@ export async function getRekapKomentarByClient(
         : shouldIncludeRoleFilter
           ? resolvedUserRole
           : null;
+    postRoleFilterMode =
+      postRoleFilterModeOverride !== undefined
+        ? postRoleFilterModeOverride
+        : 'match_role';
   }
 
   let postClientFilter = "1=1";
@@ -469,10 +477,12 @@ export async function getRekapKomentarByClient(
           SELECT 1 FROM tiktok_post_roles pr_all WHERE pr_all.video_id = p.video_id
         )
       )`;
-    } else {
+    } else if (postRoleFilterMode === 'include_client_or_role') {
       const roleFilterCondition =
         `LOWER(p.client_id) = LOWER($${roleParamIndex}) OR LOWER(pr.role_name) = LOWER($${roleParamIndex})`;
       postRoleFilter = `AND (${roleFilterCondition})`;
+    } else {
+      postRoleFilter = 'AND pr.video_id IS NOT NULL';
     }
   }
   if (normalizedRegionalId) {
