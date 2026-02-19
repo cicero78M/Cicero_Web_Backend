@@ -339,7 +339,7 @@ export async function getRekapKomentarByClient(
       const idx = addParam(tanggal);
       tanggalFilter = `date_trunc('week', __DATE_FIELD__) = date_trunc('week', $${idx}::date)`;
     } else {
-      tanggalFilter = "date_trunc('week', __DATE_FIELD__) = date_trunc('week', NOW())";
+      tanggalFilter = "date_trunc('week', __DATE_FIELD__) = date_trunc('week', NOW() AT TIME ZONE 'Asia/Jakarta')";
     }
   } else if (periode === "bulanan") {
     if (tanggal) {
@@ -355,8 +355,8 @@ export async function getRekapKomentarByClient(
     tanggalFilter = `__DATE_FIELD__::date = $${idx}::date`;
   }
 
-  const commentDateField = "(c.updated_at AT TIME ZONE 'Asia/Jakarta')";
-  const postDateField = "(p.created_at AT TIME ZONE 'Asia/Jakarta')";
+  const commentDateField = "((c.updated_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')";
+  const postDateField = "((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')";
   const commentTanggalFilter = tanggalFilter.replaceAll(
     "__DATE_FIELD__",
     commentDateField
