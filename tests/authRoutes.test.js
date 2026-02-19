@@ -754,7 +754,96 @@ describe('POST /user-login', () => {
     expect(res.status).toBe(400);
     expect(res.body).toEqual({
       success: false,
-      message: 'nrp dan password wajib diisi'
+      message: 'user_id dan whatsapp atau nrp dan password wajib diisi'
+    });
+  });
+
+  test('logs in user with user_id and whatsapp', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ user_id: 'u1', nama: 'User', whatsapp: '628123456789' }]
+    });
+
+    const res = await request(app)
+      .post('/api/auth/user-login')
+      .send({ user_id: '00123', whatsapp: '628123456789' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.user).toEqual({
+      user_id: 'u1',
+      nama: 'User',
+      role: 'user'
+    });
+    expect(mockQuery).toHaveBeenCalledWith(
+      'SELECT user_id, nama, whatsapp FROM "user" WHERE user_id = $1 AND whatsapp = $2',
+      ['00123', '628123456789']
+    );
+    expect(mockRedis.sAdd).toHaveBeenCalledWith('user_login:u1', res.body.token);
+    expect(mockRedis.set).toHaveBeenCalledWith(
+      `login_token:${res.body.token}`,
+      'user:u1',
+      { EX: 2 * 60 * 60 }
+    );
+    expect(mockInsertLoginLog).toHaveBeenCalledWith({
+      actorId: 'u1',
+      loginType: 'user',
+      loginSource: 'mobile'
+    });
+  });
+
+  test('normalizes whatsapp number for user_id login', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ user_id: 'u1', nama: 'User', whatsapp: '08123456789' }]
+    });
+
+    const res = await request(app)
+      .post('/api/auth/user-login')
+      .send({ user_id: '00123', whatsapp: '08123456789' });
+
+    expect(res.status).toBe(200);
+    expect(mockQuery).toHaveBeenCalledWith(
+      'SELECT user_id, nama, whatsapp FROM "user" WHERE user_id = $1 AND whatsapp = $2',
+      ['00123', '08123456789']
+    );
+  });
+
+  test('returns 401 when user_id and whatsapp do not match', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: []
+    });
+
+    const res = await request(app)
+      .post('/api/auth/user-login')
+      .send({ user_id: 'u1', whatsapp: '628123456789' });
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({
+      success: false,
+      message: 'Login gagal: user_id atau whatsapp tidak sesuai'
+    });
+  });
+
+  test('returns 400 when whatsapp number is invalid', async () => {
+    const res = await request(app)
+      .post('/api/auth/user-login')
+      .send({ user_id: 'u1', whatsapp: '123' });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      success: false,
+      message: 'whatsapp tidak valid'
+    });
+  });
+
+  test('returns 400 when neither credential set is provided', async () => {
+    const res = await request(app)
+      .post('/api/auth/user-login')
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      success: false,
+      message: 'user_id dan whatsapp atau nrp dan password wajib diisi'
     });
   });
 });

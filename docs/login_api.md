@@ -55,6 +55,18 @@ Untuk deployment web yang mengandalkan cookie token lintas origin:
 
 ### User Login
 `POST /api/auth/user-login`
+
+This endpoint supports two authentication methods:
+
+**Method 1: User ID + WhatsApp (New - for Android APK)**
+```json
+{
+  "user_id": "123456",
+  "whatsapp": "628123456789"
+}
+```
+
+**Method 2: NRP + Password (Legacy)**
 ```json
 {
   "nrp": "123456",
@@ -62,7 +74,10 @@ Untuk deployment web yang mengandalkan cookie token lintas origin:
 }
 ```
 
-> **Note:** Login user sekarang menggunakan pasangan `nrp` + `password` yang didaftarkan melalui flow claim (`/api/claim/register`).
+> **Note:** 
+> - The new `user_id` + `whatsapp` method allows users to login using their user ID and WhatsApp number, enabling access from the Android APK frontend.
+> - The legacy `nrp` + `password` method is still supported for backward compatibility. These credentials are registered through the claim flow (`/api/claim/register`).
+> - WhatsApp numbers are normalized by removing non-digit characters and must be at least 8 digits long.
 
 ### User Registration
 `POST /api/auth/user-register`

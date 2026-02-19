@@ -681,58 +681,124 @@ router.post('/user-register', async (req, res) => {
 });
 
 router.post('/user-login', async (req, res) => {
-  const { nrp, password } = req.body;
-  const normalizedNrp = normalizeUserId(nrp);
-  if (!normalizedNrp || !password) {
+  const { user_id, whatsapp, nrp, password } = req.body;
+  
+  // Support both new mechanism (user_id + whatsapp) and old mechanism (nrp + password)
+  if (user_id && whatsapp) {
+    // New mechanism: authenticate with user_id and whatsapp
+    const normalizedUserId = normalizeUserId(user_id);
+    const normalizedWhatsapp = normalizeWhatsappNumber(whatsapp);
+    
+    if (!normalizedUserId) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'user_id dan whatsapp wajib diisi' });
+    }
+    
+    if (!normalizedWhatsapp || normalizedWhatsapp.length < minPhoneDigitLength) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'whatsapp tidak valid' });
+    }
+    
+    const { rows } = await query(
+      'SELECT user_id, nama, whatsapp FROM "user" WHERE user_id = $1 AND whatsapp = $2',
+      [normalizedUserId, normalizedWhatsapp]
+    );
+    const user = rows[0];
+    
+    if (!user) {
+      return res
+        .status(401)
+        .json({ success: false, message: 'Login gagal: user_id atau whatsapp tidak sesuai' });
+    }
+    
+    const payload = { user_id: user.user_id, nama: user.nama, role: 'user' };
+    const token = jwt.sign(payload, process.env.JWT_SECRET, {
+      expiresIn: '2h'
+    });
+    await clearUserSessions(user.user_id);
+    try {
+      await redis.sAdd(`user_login:${user.user_id}`, token);
+      await redis.set(`login_token:${token}`, `user:${user.user_id}`, {
+        EX: 2 * 60 * 60
+      });
+    } catch (err) {
+      console.error('[AUTH] Gagal menyimpan token login user:', err.message);
+    }
+    res.cookie('token', token, cookieOptions);
+    await insertLoginLog({
+      actorId: user.user_id,
+      loginType: 'user',
+      loginSource: 'mobile'
+    });
+    if (process.env.ADMIN_NOTIFY_LOGIN !== 'false') {
+      const time = new Date().toLocaleString('id-ID', {
+        timeZone: 'Asia/Jakarta'
+      });
+      console.warn('[AUTH]', 
+        `\uD83D\uDD11 Login user: ${user.user_id} - ${user.nama}\nWaktu: ${time}`
+      );
+    }
+    return res.json({ success: true, token, user: payload });
+  } else if (nrp && password) {
+    // Old mechanism: authenticate with nrp and password
+    const normalizedNrp = normalizeUserId(nrp);
+    if (!normalizedNrp || !password) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'nrp dan password wajib diisi' });
+    }
+    const { rows } = await query(
+      'SELECT user_id, nama, password_hash FROM "user" WHERE user_id = $1',
+      [normalizedNrp]
+    );
+    const user = rows[0];
+    if (!user || !user.password_hash) {
+      return res
+        .status(401)
+        .json({ success: false, message: 'Login gagal: kredensial belum terdaftar' });
+    }
+
+    const match = await bcrypt.compare(password, user.password_hash);
+    if (!match) {
+      return res
+        .status(401)
+        .json({ success: false, message: 'Login gagal: password salah' });
+    }
+    const payload = { user_id: user.user_id, nama: user.nama, role: 'user' };
+    const token = jwt.sign(payload, process.env.JWT_SECRET, {
+      expiresIn: '2h'
+    });
+    await clearUserSessions(user.user_id);
+    try {
+      await redis.sAdd(`user_login:${user.user_id}`, token);
+      await redis.set(`login_token:${token}`, `user:${user.user_id}`, {
+        EX: 2 * 60 * 60
+      });
+    } catch (err) {
+      console.error('[AUTH] Gagal menyimpan token login user:', err.message);
+    }
+    res.cookie('token', token, cookieOptions);
+    await insertLoginLog({
+      actorId: user.user_id,
+      loginType: 'user',
+      loginSource: 'mobile'
+    });
+    if (process.env.ADMIN_NOTIFY_LOGIN !== 'false') {
+      const time = new Date().toLocaleString('id-ID', {
+        timeZone: 'Asia/Jakarta'
+      });
+      console.warn('[AUTH]', 
+        `\uD83D\uDD11 Login user: ${user.user_id} - ${user.nama}\nWaktu: ${time}`
+      );
+    }
+    return res.json({ success: true, token, user: payload });
+  } else {
     return res
       .status(400)
-      .json({ success: false, message: 'nrp dan password wajib diisi' });
+      .json({ success: false, message: 'user_id dan whatsapp atau nrp dan password wajib diisi' });
   }
-  const { rows } = await query(
-    'SELECT user_id, nama, password_hash FROM "user" WHERE user_id = $1',
-    [normalizedNrp]
-  );
-  const user = rows[0];
-  if (!user || !user.password_hash) {
-    return res
-      .status(401)
-      .json({ success: false, message: 'Login gagal: kredensial belum terdaftar' });
-  }
-
-  const match = await bcrypt.compare(password, user.password_hash);
-  if (!match) {
-    return res
-      .status(401)
-      .json({ success: false, message: 'Login gagal: password salah' });
-  }
-  const payload = { user_id: user.user_id, nama: user.nama, role: 'user' };
-  const token = jwt.sign(payload, process.env.JWT_SECRET, {
-    expiresIn: '2h'
-  });
-  await clearUserSessions(user.user_id);
-  try {
-    await redis.sAdd(`user_login:${user.user_id}`, token);
-    await redis.set(`login_token:${token}`, `user:${user.user_id}`, {
-      EX: 2 * 60 * 60
-    });
-  } catch (err) {
-    console.error('[AUTH] Gagal menyimpan token login user:', err.message);
-  }
-  res.cookie('token', token, cookieOptions);
-  await insertLoginLog({
-    actorId: user.user_id,
-    loginType: 'user',
-    loginSource: 'mobile'
-  });
-  if (process.env.ADMIN_NOTIFY_LOGIN !== 'false') {
-    const time = new Date().toLocaleString('id-ID', {
-      timeZone: 'Asia/Jakarta'
-    });
-    console.warn('[AUTH]', 
-      `\uD83D\uDD11 Login user: ${user.user_id} - ${user.nama}\nWaktu: ${time}`
-    );
-  }
-  return res.json({ success: true, token, user: payload });
 });
 
 router.get('/open', async (req, res) => {
