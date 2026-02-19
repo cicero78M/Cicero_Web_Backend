@@ -336,7 +336,7 @@ router.post('/dashboard-register', async (req, res) => {
       .json({ success: false, message: 'username, password, dan whatsapp wajib diisi' });
   }
   const normalizedWhatsapp = normalizeWhatsappNumber(whatsapp);
-  if (normalizedWhatsapp.length < 8) {
+  if (!normalizedWhatsapp || normalizedWhatsapp.length < 8) {
     return res
       .status(400)
       .json({ success: false, message: 'whatsapp tidak valid' });
@@ -657,7 +657,7 @@ router.post('/user-register', async (req, res) => {
       .json({ success: false, message: 'nrp, nama, dan client_id wajib diisi' });
   }
   const normalizedWhatsapp = normalizeWhatsappNumber(whatsapp);
-  if (whatsapp && normalizedWhatsapp.length < minPhoneDigitLength) {
+  if (whatsapp && (!normalizedWhatsapp || normalizedWhatsapp.length < minPhoneDigitLength)) {
     return res
       .status(400)
       .json({ success: false, message: 'whatsapp tidak valid' });
