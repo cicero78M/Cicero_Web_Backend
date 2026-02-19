@@ -76,3 +76,7 @@ laporan harian serta menyiapkan narasi yang konsisten.
   (konten dan komentar). Parameter `tanggal`, `start_date`, atau `end_date`
   akan langsung mengisi filter `created_at`/`updated_at` di query sehingga
   rekap harian Ditbinmas tidak menyertakan post di luar rentang yang diminta.
+- Fallback periode `mingguan` kini memaksa pembanding minggu berjalan memakai
+  `date_trunc('week', NOW() AT TIME ZONE 'Asia/Jakarta')` pada template
+  `tanggalFilter`, sehingga filter komentar (`updated_at`) dan total post
+  (`created_at`) konsisten mengikuti minggu WIB yang sama.

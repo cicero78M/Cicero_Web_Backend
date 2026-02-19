@@ -328,6 +328,7 @@ export async function getRekapKomentarByClient(
     : null;
   let tanggalFilter =
     "__DATE_FIELD__::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date";
+  const weekNowJakartaExpression = "date_trunc('week', NOW() AT TIME ZONE 'Asia/Jakarta')";
   if (start_date && end_date) {
     const startIdx = addParam(start_date);
     const endIdx = addParam(end_date);
@@ -339,7 +340,7 @@ export async function getRekapKomentarByClient(
       const idx = addParam(tanggal);
       tanggalFilter = `date_trunc('week', __DATE_FIELD__) = date_trunc('week', $${idx}::date)`;
     } else {
-      tanggalFilter = "date_trunc('week', __DATE_FIELD__) = date_trunc('week', NOW() AT TIME ZONE 'Asia/Jakarta')";
+      tanggalFilter = `date_trunc('week', __DATE_FIELD__) = ${weekNowJakartaExpression}`;
     }
   } else if (periode === "bulanan") {
     if (tanggal) {
