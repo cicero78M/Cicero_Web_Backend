@@ -195,3 +195,15 @@ Filter regional sekarang dipisah antara sumber personil dan visibilitas post:
 
 Perilaku ini menjaga agar rekap direktorat tetap global untuk data tugas berbasis role,
 sementara filter regional personil tetap konsisten untuk pembatasan daftar akun.
+
+## Basis Tanggal & Zona Waktu
+
+Untuk menghindari selisih hari antara data komentar dan post, seluruh percabangan
+filter tanggal (`harian`, `mingguan`, `bulanan`, dan `start_date/end_date`) di level
+model memakai basis waktu lokal **Asia/Jakarta** dari field sumber berikut:
+
+- Komentar: `((c.updated_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')`
+- Post: `((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')`
+
+Khusus fallback `periode=mingguan` tanpa parameter `tanggal`, pembanding minggu
+menggunakan `NOW() AT TIME ZONE 'Asia/Jakarta'` agar konsisten dengan zona lokal.
