@@ -151,9 +151,20 @@ export async function replaceMentionsForMedia(satbinmas_media_id, mentions = [])
 export async function deleteMissingMediaForDate(
   satbinmas_account_id,
   fetchDate,
-  identifiers = []
+  identifiers = [],
+  { isCompleteFetch = false, graceHours = 24 } = {}
 ) {
-  if (!satbinmas_account_id || !fetchDate) return { deleted: 0, ids: [] };
+  if (!satbinmas_account_id || !fetchDate) {
+    return {
+      existing: 0,
+      candidateDeletion: 0,
+      quarantined: 0,
+      hardDeleted: 0,
+      ids: [],
+      skipped: true,
+      skipReason: 'missing account/date',
+    };
+  }
 
   const uniqueMediaIds = Array.from(
     new Set(
@@ -188,17 +199,67 @@ export async function deleteMissingMediaForDate(
 
   const keepPredicate = keepClauses.length ? keepClauses.join(' OR ') : 'FALSE';
 
-  const res = await query(
-    `DELETE FROM satbinmas_official_media
+  const existingRes = await query(
+    `SELECT COUNT(*)::int AS total
+     FROM satbinmas_official_media
+     WHERE satbinmas_account_id = $1
+       AND fetched_for_date = $2::date`,
+    [satbinmas_account_id, fetchDate]
+  );
+  const existing = existingRes.rows?.[0]?.total || 0;
+
+  const candidateRes = await query(
+    `SELECT satbinmas_media_id
+     FROM satbinmas_official_media
      WHERE satbinmas_account_id = $1
        AND fetched_for_date = $2::date
-       AND NOT (${keepPredicate})
-     RETURNING satbinmas_media_id`,
+       AND NOT (${keepPredicate})`,
     params
   );
+  const candidateIds = candidateRes.rows
+    ?.map((row) => row.satbinmas_media_id)
+    .filter(Boolean) || [];
 
-  const ids = res.rows?.map((row) => row.satbinmas_media_id).filter(Boolean) || [];
-  return { deleted: ids.length, ids };
+  if (!isCompleteFetch) {
+    return {
+      existing,
+      candidateDeletion: candidateIds.length,
+      quarantined: 0,
+      hardDeleted: 0,
+      ids: [],
+      skipped: true,
+      skipReason: 'partial-fetch',
+    };
+  }
+
+  const quarantineRes = await query(
+    `UPDATE satbinmas_official_media
+     SET is_missing_since = COALESCE(is_missing_since, NOW())
+     WHERE satbinmas_media_id = ANY($1)
+       AND is_missing_since IS NULL
+     RETURNING satbinmas_media_id`,
+    [candidateIds]
+  );
+
+  const purgeRes = await query(
+    `DELETE FROM satbinmas_official_media
+     WHERE satbinmas_media_id = ANY($1)
+       AND is_missing_since IS NOT NULL
+       AND is_missing_since <= NOW() - $2::interval
+     RETURNING satbinmas_media_id`,
+    [candidateIds, `${Math.max(1, graceHours)} hours`]
+  );
+
+  const ids = purgeRes.rows?.map((row) => row.satbinmas_media_id).filter(Boolean) || [];
+  return {
+    existing,
+    candidateDeletion: candidateIds.length,
+    quarantined: quarantineRes.rowCount || 0,
+    hardDeleted: ids.length,
+    ids,
+    skipped: false,
+    skipReason: null,
+  };
 }
 
 async function findMediaWithRelations(whereClause, params = []) {
@@ -219,6 +280,7 @@ async function findMediaWithRelations(whereClause, params = []) {
        GROUP BY satbinmas_media_id
      ) mentions ON mentions.satbinmas_media_id = media.satbinmas_media_id
      WHERE ${whereClause}
+       AND media.is_missing_since IS NULL
      ORDER BY media.taken_at DESC NULLS LAST, media.created_at DESC`,
     params
   );
@@ -243,6 +305,8 @@ export async function summarizeMediaCountsByAccounts(accountIds = [], startDate,
   const res = await query(
     `SELECT satbinmas_account_id, client_id, username,
             COUNT(*) AS total,
+            COUNT(*) FILTER (WHERE is_missing_since IS NOT NULL) AS soft_deleted,
+            COUNT(*) FILTER (WHERE is_missing_since IS NULL) AS active_total,
             COALESCE(SUM(like_count), 0) AS likes,
             COALESCE(SUM(comment_count), 0) AS comments
      FROM satbinmas_official_media
@@ -257,6 +321,8 @@ export async function summarizeMediaCountsByAccounts(accountIds = [], startDate,
   res.rows.forEach((row) => {
     map.set(row.satbinmas_account_id, {
       total: Number(row.total) || 0,
+      soft_deleted: Number(row.soft_deleted) || 0,
+      active_total: Number(row.active_total) || 0,
       likes: Number(row.likes) || 0,
       comments: Number(row.comments) || 0,
       client_id: row.client_id,

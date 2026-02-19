@@ -3,7 +3,10 @@
 import pLimit from "p-limit";
 import { query } from "../../db/index.js";
 import { sendDebug } from "../../middleware/debugHandler.js";
-import { fetchInstagramPosts, fetchInstagramPostInfo } from "../../service/instagramApi.js";
+import {
+  fetchInstagramPostsWithQuality,
+  fetchInstagramPostInfo,
+} from "../../service/instagramApi.js";
 import { savePostWithMedia } from "../../model/instaPostExtendedModel.js";
 import { upsertInstaPost as upsertInstaPostKhusus } from "../../model/instaPostKhususModel.js";
 import { extractInstagramShortcode } from "../../utils/utilsHelper.js";
@@ -14,6 +17,7 @@ const ADMIN_WHATSAPP = (process.env.ADMIN_WHATSAPP || "")
   .filter(Boolean);
 
 const limit = pLimit(6);
+const IG_DELETE_GRACE_HOURS = Number(process.env.IG_DELETE_GRACE_HOURS || 24);
 
 /**
  * Utility: Cek apakah unixTimestamp adalah hari ini (Asia/Jakarta)
@@ -43,7 +47,7 @@ async function getShortcodesToday(clientId = null) {
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth() + 1).padStart(2, "0");
   const dd = String(today.getDate()).padStart(2, "0");
-  let sql = `SELECT shortcode FROM insta_post WHERE DATE(created_at) = $1`;
+  let sql = `SELECT shortcode FROM insta_post WHERE DATE(created_at) = $1 AND is_missing_since IS NULL`;
   const params = [`${yyyy}-${mm}-${dd}`];
   if (clientId) {
     sql += ` AND client_id = $2`;
@@ -60,8 +64,48 @@ async function tableExists(tableName) {
   return Boolean(res.rows[0]?.table_name);
 }
 
-async function deleteShortcodes(shortcodesToDelete, clientId = null) {
-  if (!shortcodesToDelete.length) return;
+async function deleteShortcodes(
+  shortcodesToDelete,
+  { clientId = null, isCompleteFetch = false, graceHours = IG_DELETE_GRACE_HOURS } = {}
+) {
+  if (!shortcodesToDelete.length) return { quarantined: 0, hardDeleted: 0 };
+  if (!isCompleteFetch) {
+    sendDebug({
+      tag: "IG SYNC",
+      msg: `Skip deleteShortcodes karena fetch parsial/tdk lengkap. kandidat=${shortcodesToDelete.length}`,
+      client_id: clientId,
+    });
+    return { quarantined: 0, hardDeleted: 0 };
+  }
+
+  const graceParam = `${Math.max(1, graceHours)} hours`;
+  const quarantineResult = await query(
+    `UPDATE insta_post
+     SET is_missing_since = COALESCE(is_missing_since, NOW())
+     WHERE shortcode = ANY($1)
+       AND ($2::text IS NULL OR client_id = $2)
+       AND DATE(created_at) = CURRENT_DATE
+       AND is_missing_since IS NULL
+     RETURNING shortcode`,
+    [shortcodesToDelete, clientId]
+  );
+
+  const purgeTargetResult = await query(
+    `SELECT shortcode
+     FROM insta_post
+     WHERE shortcode = ANY($1)
+       AND ($2::text IS NULL OR client_id = $2)
+       AND DATE(created_at) = CURRENT_DATE
+       AND is_missing_since IS NOT NULL
+       AND is_missing_since <= NOW() - $3::interval`,
+    [shortcodesToDelete, clientId, graceParam]
+  );
+
+  const purgeShortcodes = purgeTargetResult.rows.map((row) => row.shortcode);
+  if (!purgeShortcodes.length) {
+    return { quarantined: quarantineResult.rowCount || 0, hardDeleted: 0 };
+  }
+
   // ig_ext_posts rows cascade when insta_post entries are deleted
   const today = new Date();
   const yyyy = today.getFullYear();
@@ -69,20 +113,20 @@ async function deleteShortcodes(shortcodesToDelete, clientId = null) {
   const dd = String(today.getDate()).padStart(2, "0");
   let sql =
     `DELETE FROM insta_post WHERE shortcode = ANY($1) AND DATE(created_at) = $2`;
-  const params = [shortcodesToDelete, `${yyyy}-${mm}-${dd}`];
-  if (clientId) {
+  const params = [purgeShortcodes, `${yyyy}-${mm}-${dd}`];
+  if (clientId !== null) {
     sql += ` AND client_id = $3`;
     params.push(clientId);
   }
   await query(`DELETE FROM insta_like_audit WHERE shortcode = ANY($1)`, [
-    shortcodesToDelete,
+    purgeShortcodes,
   ]);
   await query(`DELETE FROM insta_like WHERE shortcode = ANY($1)`, [
-    shortcodesToDelete,
+    purgeShortcodes,
   ]);
   if (await tableExists("insta_comment")) {
     await query(`DELETE FROM insta_comment WHERE shortcode = ANY($1)`, [
-      shortcodesToDelete,
+      purgeShortcodes,
     ]);
   } else {
     sendDebug({
@@ -91,6 +135,10 @@ async function deleteShortcodes(shortcodesToDelete, clientId = null) {
     });
   }
   await query(sql, params);
+  return {
+    quarantined: quarantineResult.rowCount || 0,
+    hardDeleted: purgeShortcodes.length,
+  };
 }
 
 async function getEligibleClients() {
@@ -151,6 +199,7 @@ export async function fetchAndStoreInstaContent(
     const dbShortcodesToday = await getShortcodesToday(client.id);
     let fetchedShortcodesToday = [];
     let hasSuccessfulFetch = false;
+    let isCompleteFetch = false;
     const username = client.client_insta;
     let postsRes;
     try {
@@ -158,11 +207,20 @@ export async function fetchAndStoreInstaContent(
         tag: "IG FETCH",
         msg: `Fetch posts for client: ${client.id} / @${username}`
       });
-      postsRes = await limit(() => fetchInstagramPosts(username, 50));
+      const fetchResult = await limit(() =>
+        fetchInstagramPostsWithQuality(username, 50)
+      );
+      postsRes = fetchResult.items;
+      isCompleteFetch = Boolean(fetchResult.isCompleteFetch);
       sendDebug({
         tag: "IG FETCH",
         msg: `RapidAPI posts fetched: ${postsRes.length}`,
         client_id: client.id
+      });
+      sendDebug({
+        tag: "IG FETCH QUALITY",
+        msg: `isCompleteFetch=${isCompleteFetch}, pages=${fetchResult.fetchMeta?.pagesFetched || 0}, endedByLimit=${Boolean(fetchResult.fetchMeta?.endedByLimit)}`,
+        client_id: client.id,
       });
     } catch (err) {
       sendDebug({
@@ -239,6 +297,7 @@ export async function fetchAndStoreInstaContent(
               image_url = EXCLUDED.image_url,
               images_url = EXCLUDED.images_url,
               is_carousel = EXCLUDED.is_carousel,
+              is_missing_since = NULL,
              created_at = to_timestamp($12)`,
         [
           toSave.client_id,
@@ -274,17 +333,31 @@ export async function fetchAndStoreInstaContent(
       (x) => !fetchedShortcodesToday.includes(x)
     );
 
-    if (hasSuccessfulFetch) {
+    sendDebug({
+      tag: "IG AUDIT",
+      msg: `fetched_today=${fetchedShortcodesToday.length}, existing_today=${dbShortcodesToday.length}, delete_candidates=${shortcodesToDelete.length}, complete=${isCompleteFetch}`,
+      client_id: client.id,
+    });
+
+    if (isCompleteFetch) {
       sendDebug({
         tag: "IG SYNC",
         msg: `Akan menghapus shortcodes yang tidak ada hari ini: jumlah=${shortcodesToDelete.length}`,
         client_id: client.id
       });
-      await deleteShortcodes(shortcodesToDelete, client.id);
+      const deletionSummary = await deleteShortcodes(shortcodesToDelete, {
+        clientId: client.id,
+        isCompleteFetch,
+      });
+      sendDebug({
+        tag: "IG SYNC",
+        msg: `Quarantine=${deletionSummary.quarantined}, hardDelete=${deletionSummary.hardDeleted}`,
+        client_id: client.id,
+      });
     } else {
       sendDebug({
         tag: "IG SYNC",
-        msg: `Tidak ada fetch IG berhasil untuk client ${client.id}, database tidak dihapus`,
+        msg: `Fetch IG tidak eligible delete untuk client ${client.id}. hasSuccessfulFetch=${hasSuccessfulFetch}, isCompleteFetch=${isCompleteFetch}`,
         client_id: client.id
       });
     }
