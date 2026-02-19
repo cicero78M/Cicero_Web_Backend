@@ -5,6 +5,7 @@ import {
   sendUserRejectionConfirmation,
   sendTelegramMessage
 } from '../service/telegramService.js';
+import { sendApprovalEmail, sendRejectionEmail } from '../service/emailService.js';
 
 export async function approveDashboardUser(req, res, next) {
   try {
@@ -36,6 +37,14 @@ export async function approveDashboardUser(req, res, next) {
         );
       }
     }
+
+    // Send email notification to user if they have email
+    if (usr.email) {
+      sendApprovalEmail(usr.email, usr.username).catch((err) => {
+        console.warn(`[Email] Failed to send approval email to ${usr.username}: ${err.message}`);
+      });
+    }
+
     sendSuccess(res, updated);
   } catch (err) {
     next(err);
@@ -48,6 +57,7 @@ export async function rejectDashboardUser(req, res, next) {
       return res.status(403).json({ success: false, message: 'Forbidden' });
     }
     const { id } = req.params;
+    const { reason } = req.body || {};
     const usr = await dashboardUserModel.findById(id);
     if (!usr) {
       return res.status(404).json({ success: false, message: 'User not found' });
@@ -72,6 +82,14 @@ export async function rejectDashboardUser(req, res, next) {
         );
       }
     }
+
+    // Send email notification to user if they have email
+    if (usr.email) {
+      sendRejectionEmail(usr.email, usr.username, reason || null).catch((err) => {
+        console.warn(`[Email] Failed to send rejection email to ${usr.username}: ${err.message}`);
+      });
+    }
+
     sendSuccess(res, updated);
   } catch (err) {
     next(err);
