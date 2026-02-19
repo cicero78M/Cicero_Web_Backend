@@ -58,7 +58,6 @@ function buildAccountBuckets(clientSummaries) {
         inserted: account.inserted,
         updated: account.updated,
         removed: account.removed,
-        softDeleted: account.softDeleted || 0,
         likes: account.likes,
         comments: account.comments,
       };
@@ -95,7 +94,6 @@ function renderInstagramRecap(summary, { periodLabel } = {}) {
     `Total Polres     : ${formatNumber(summary.totals.clients)}`,
     `Total Akun      : ${formatNumber(summary.totals.accounts)}`,
     `Total Konten   : ${formatNumber(summary.totals.fetched)} konten.`,
-    `Total Soft-Delete (Quarantine): ${formatNumber(summary.totals.softDeleted || 0)} konten.`,
   ];
 
   lines.push("", "🔥 Akun Aktif (urut jumlah konten tertinggi)");
@@ -104,7 +102,6 @@ function renderInstagramRecap(summary, { periodLabel } = {}) {
       lines.push(
         `${index + 1}. ${account.clientLabel} (@${account.username}):`,
         `- Jumlah Post Konten : ${formatNumber(account.total)} konten`,
-        `- Soft-Delete (karantina): ${formatNumber(account.softDeleted)} konten`,
         `- Total Likes : ${formatNumber(account.likes)} Likes`,
         `- Total Komentar : ${formatNumber(account.comments)} Komentar`,
         ""

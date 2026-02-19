@@ -8,6 +8,6 @@ export {
   fetchAllInstagramLikesItems,
   fetchAllInstagramComments,
   fetchInstagramHashtag,
-  fetchInstagramPostInfo,
-  fetchInstagramPostsWithQuality,
+  fetchInstagramPostInfo
 } from './instaRapidService.js';
+

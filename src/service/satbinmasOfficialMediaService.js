@@ -1,12 +1,9 @@
 import * as clientModel from '../model/clientModel.js';
 import * as satbinmasOfficialAccountModel from '../model/satbinmasOfficialAccountModel.js';
 import * as satbinmasOfficialMediaModel from '../model/satbinmasOfficialMediaModel.js';
-import { fetchInstagramPostsWithQuality } from './instaRapidService.js';
+import { fetchInstagramPosts } from './instaRapidService.js';
 
 const RAPIDAPI_FETCH_DELAY_MS = 1500;
-const OFFICIAL_MEDIA_DELETE_GRACE_HOURS = Number(
-  process.env.OFFICIAL_MEDIA_DELETE_GRACE_HOURS || 24
-);
 
 function wait(ms = RAPIDAPI_FETCH_DELAY_MS) {
   if (!ms || ms < 0) return Promise.resolve();
@@ -17,10 +14,6 @@ function createError(message, statusCode) {
   const error = new Error(message);
   error.statusCode = statusCode;
   return error;
-}
-
-function logFetchAudit(message) {
-  process.stdout.write(`${message}\n`);
 }
 
 function normalizeTimestamp(value) {
@@ -194,7 +187,7 @@ async function fetchMediaForClient(client, usernameFilter = null, delayMs = RAPI
     clientId: client.client_id,
     name: client.nama || null,
     accounts: [],
-    totals: { fetched: 0, inserted: 0, updated: 0, removed: 0, softDeleted: 0 },
+    totals: { fetched: 0, inserted: 0, updated: 0, removed: 0 },
     errors: [],
   };
 
@@ -205,9 +198,7 @@ async function fetchMediaForClient(client, usernameFilter = null, delayMs = RAPI
   for (let index = 0; index < scopedAccounts.length; index += 1) {
     const account = scopedAccounts[index];
     try {
-      const fetchResult = await fetchInstagramPostsWithQuality(account.username, 50);
-      const posts = fetchResult.items;
-      const isCompleteFetch = Boolean(fetchResult.isCompleteFetch);
+      const posts = await fetchInstagramPosts(account.username, 50);
       const postsWithDate = posts
         .map((post) => ({ post, takenAt: resolveTakenAt(post) }))
         .filter((item) => item.takenAt && item.takenAt >= start && item.takenAt < end);
@@ -215,7 +206,6 @@ async function fetchMediaForClient(client, usernameFilter = null, delayMs = RAPI
       let inserted = 0;
       let updated = 0;
       let removed = 0;
-      let softDeleted = 0;
       let likeCount = 0;
       let commentCount = 0;
       const identifiers = [];
@@ -257,17 +247,9 @@ async function fetchMediaForClient(client, usernameFilter = null, delayMs = RAPI
         const deletionResult = await satbinmasOfficialMediaModel.deleteMissingMediaForDate(
           account.satbinmas_account_id,
           start,
-          identifiers,
-          {
-            isCompleteFetch,
-            graceHours: OFFICIAL_MEDIA_DELETE_GRACE_HOURS,
-          }
+          identifiers
         );
-        removed = deletionResult.hardDeleted;
-        softDeleted = deletionResult.quarantined;
-        logFetchAudit(
-          `[SATBINMAS IG AUDIT] client=${client.client_id} account=@${account.username} complete=${isCompleteFetch} fetched=${postsWithDate.length} existing=${deletionResult.existing} candidates=${deletionResult.candidateDeletion} quarantined=${deletionResult.quarantined} hard_deleted=${deletionResult.hardDeleted}`
-        );
+        removed = deletionResult.deleted;
       }
 
       summary.accounts.push({
@@ -276,8 +258,6 @@ async function fetchMediaForClient(client, usernameFilter = null, delayMs = RAPI
         inserted,
         updated,
         removed,
-        softDeleted,
-        isCompleteFetch,
         likes: likeCount,
         comments: commentCount,
       });
@@ -285,7 +265,6 @@ async function fetchMediaForClient(client, usernameFilter = null, delayMs = RAPI
       summary.totals.inserted += inserted;
       summary.totals.updated += updated;
       summary.totals.removed += removed;
-      summary.totals.softDeleted += softDeleted;
     } catch (error) {
       summary.errors.push({
         username: account.username,
@@ -324,7 +303,6 @@ export async function fetchTodaySatbinmasOfficialMediaForOrgClients(
     inserted: 0,
     updated: 0,
     removed: 0,
-    softDeleted: 0,
     errors: 0,
   };
 
@@ -339,7 +317,6 @@ export async function fetchTodaySatbinmasOfficialMediaForOrgClients(
     totals.inserted += summary.totals.inserted;
     totals.updated += summary.totals.updated;
     totals.removed += summary.totals.removed;
-    totals.softDeleted += summary.totals.softDeleted;
     totals.errors += summary.errors.length;
 
     const isLastClient = index === clients.length - 1;
@@ -359,7 +336,7 @@ export async function fetchSatbinmasOfficialMediaFromDb({ start, end } = {}) {
   const clients = await clientModel.findAllOrgClients();
   const summary = {
     clients: [],
-    totals: { clients: clients.length, accounts: 0, fetched: 0, softDeleted: 0 },
+    totals: { clients: clients.length, accounts: 0, fetched: 0 },
   };
 
   for (const client of clients) {
@@ -377,25 +354,17 @@ export async function fetchSatbinmasOfficialMediaFromDb({ start, end } = {}) {
       );
 
       accounts.forEach((account) => {
-        const stats = statsMap.get(account.satbinmas_account_id) || {
-          total: 0,
-          active_total: 0,
-          soft_deleted: 0,
-          likes: 0,
-          comments: 0,
-        };
+        const stats = statsMap.get(account.satbinmas_account_id) || { total: 0, likes: 0, comments: 0 };
 
         summary.totals.accounts += 1;
-        summary.totals.fetched += stats.active_total;
-        summary.totals.softDeleted += stats.soft_deleted;
+        summary.totals.fetched += stats.total;
 
         clientSummary.accounts.push({
           username: account.username,
-          total: stats.active_total,
+          total: stats.total,
           inserted: 0,
           updated: 0,
           removed: 0,
-          softDeleted: stats.soft_deleted,
           likes: stats.likes,
           comments: stats.comments,
         });

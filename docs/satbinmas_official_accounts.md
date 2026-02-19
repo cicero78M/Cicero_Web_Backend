@@ -1,5 +1,5 @@
 # Satbinmas Official Account Management
-*Last updated: 2026-06-15*
+*Last updated: 2025-12-18*
 
 This document explains how Satbinmas official social-media handles are stored
 and managed inside the Cicero backend. The feature introduces a dedicated table
@@ -55,22 +55,20 @@ rejecting inserts when the parameters shift, ensuring the daily ingestion loop
 can retry rows idempotently. To keep the boolean `inserted` flag compatible with
 newer PostgreSQL releases, the `RETURNING` clause now compares `xmax` against
 `'0'::xid` instead of an `oid` cast. Stale rows are removed per-account via
-`deleteMissingMediaForDate`, which now marks missing rows with
-`is_missing_since` (soft-delete quarantine) and only hard-deletes after a grace
-period when fetch quality is complete. Partial fetches skip delete execution and
-return audit counters for investigation. `satbinmasOfficialAccountModel` now includes
+`deleteMissingMediaForDate`, which deletes any media for the current fetch date
+whose `media_id`/`code` no longer appear in the latest crawl (cascading
+hashtags/mentions automatically). `satbinmasOfficialAccountModel` now includes
 `findActiveByClientAndPlatform` to load active Instagram handles per client,
 ensuring the media ingestion process only touches live accounts.【F:src/model/satbinmasOfficialMediaModel.js†L1-L158】【F:src/model/satbinmasOfficialAccountModel.js†L5-L27】
 
 `src/service/satbinmasOfficialMediaService.js` orchestrates the end-to-end
 fetch: it validates the client, loads active Instagram accounts, pulls the
-current-day posts from RapidAPI via `fetchInstagramPostsWithQuality`, filters by
+current-day posts from RapidAPI via `fetchInstagramPosts`, filters by
 `taken_at`, and upserts metadata plus hashtag/mention rows. After each account
-is processed the service collects the returned `media_id`/`code` set, logs audit
-counts (fetched vs existing vs candidate deletion), applies quarantine
-soft-delete first, then hard-deletes only after grace period expiry. The recap
-summary now separates hard deletions (`removed`) and quarantined rows
-(`softDeleted`) so operators can verify before permanent purge. It also captures
+is processed the service collects the returned `media_id`/`code` set and removes
+any `satbinmas_official_media` rows for the same fetch date that were not
+present, relying on cascade deletes to purge hashtags/mentions for removed
+records. It returns a summary of inserts vs. updates vs. deletions and captures
 errors per account for operator messaging. The WhatsApp dirrequest menu now
 includes option **3️⃣7️⃣** to trigger this service for a chosen
 client/username and respond with a per-account recap and a total
