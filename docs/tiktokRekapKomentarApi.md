@@ -184,4 +184,14 @@ disaring dengan aturan yang konsisten dengan dashboard stats:
 
 ## Regional Filter
 
-Jika `regional_id` dikirim, data post dan personil hanya akan dihitung untuk client yang berada pada regional tersebut. Contoh: `regional_id=JATIM` membatasi rekap ke struktur Polda Jatim.
+Filter regional sekarang dipisah antara sumber personil dan visibilitas post:
+
+- **Personil (`userWhere`)** tetap menggunakan `regional_id` ketika parameter dikirim.
+- **Post (`postRegionalFilter`)** menggunakan `regional_id` secara default pada scope non-direktorat.
+- Untuk `scope=direktorat` (mode query `postRoleFilterMode=include_client_or_role`),
+  filter regional post bersifat opsional dan secara default **tidak dipaksakan**,
+  sehingga post yang ditandai role direktorat tetap muncul walaupun `client_id`
+  post berasal dari regional berbeda.
+
+Perilaku ini menjaga agar rekap direktorat tetap global untuk data tugas berbasis role,
+sementara filter regional personil tetap konsisten untuk pembatasan daftar akun.
