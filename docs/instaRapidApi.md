@@ -37,18 +37,3 @@ GET /api/insta/rapid-profile?username=polri
 ### Catatan Perilaku
 - Jika cache tersedia, data diambil dari cache; jika tidak, sistem akan memanggil RapidAPI lalu menyimpan cache.
 - Saat data profil valid, sistem melakukan `upsert` ke tabel profil dan metrik pengguna Instagram.
-
-## Catatan Pagination `fetchInstagramPostsPageToken`
-
-Untuk menjaga konsistensi bentuk respons RapidAPI yang bisa berubah antara nested/top-level, parsing pagination token di service Instagram menggunakan fallback berlapis:
-
-1. `data.data.pagination_token`
-2. `data.pagination_token`
-3. `data.data.next_cursor` lalu `data.next_cursor`
-4. `data.data.end_cursor` lalu `data.end_cursor`
-
-Flag `has_more` juga dibaca dari dua level payload:
-- `data.data.has_more`
-- `data.has_more`
-
-Jika token pagination tidak ditemukan, service akan menulis log debug ringkas berisi struktur kunci token/flag agar investigasi response shape lebih cepat saat troubleshooting.

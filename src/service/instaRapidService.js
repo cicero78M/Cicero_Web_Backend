@@ -314,32 +314,8 @@ export async function fetchInstagramPostsPageToken(username, token = null) {
   const data = await res.json();
   const items = data?.data?.items || [];
   sendConsoleDebug('fetchInstagramPostsPageToken received', { items: items.length });
-  const next_token =
-    data?.data?.pagination_token ||
-    data?.pagination_token ||
-    data?.data?.next_cursor ||
-    data?.next_cursor ||
-    data?.data?.end_cursor ||
-    data?.end_cursor ||
-    null;
-  const has_more =
-    (data?.data?.has_more || false) ||
-    (data?.has_more || false) ||
-    (next_token && next_token !== '');
-  if (!next_token) {
-    sendConsoleDebug('fetchInstagramPostsPageToken missing pagination token', {
-      hasMoreNested: data?.data?.has_more,
-      hasMoreTopLevel: data?.has_more,
-      nestedTokenKeys: data?.data
-        ? Object.keys(data.data).filter(key =>
-            ['pagination_token', 'next_cursor', 'end_cursor'].includes(key)
-          )
-        : [],
-      topLevelTokenKeys: Object.keys(data || {}).filter(key =>
-        ['pagination_token', 'next_cursor', 'end_cursor'].includes(key)
-      ),
-    });
-  }
+  const next_token = data?.pagination_token || null;
+  const has_more = (data?.has_more || false) || (next_token && next_token !== '');
   sendConsoleDebug('fetchInstagramPostsPageToken success', { items: items.length, next_token, has_more });
   return { items, next_token, has_more };
 }
