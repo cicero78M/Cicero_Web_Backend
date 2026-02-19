@@ -270,9 +270,15 @@ export async function getRekapKomentarByClient(
   const postRoleFilterModeOverride = hasOption('postRoleFilterMode')
     ? options.postRoleFilterMode
     : undefined;
+  const userRegionalIdOverride = hasOption('userRegionalId')
+    ? options.userRegionalId
+    : undefined;
+  const postRegionalIdOverride = hasOption('postRegionalId')
+    ? options.postRegionalId
+    : undefined;
   const regionalIdOverride = hasOption('regionalId')
     ? options.regionalId
-    : null;
+    : undefined;
   const usesOverrides = [
     postClientIdOverride,
     userClientIdOverride,
@@ -280,6 +286,9 @@ export async function getRekapKomentarByClient(
     includePostRoleFilterOverride,
     postRoleFilterNameOverride,
     postRoleFilterModeOverride,
+    userRegionalIdOverride,
+    postRegionalIdOverride,
+    regionalIdOverride,
   ].some((value) => value !== undefined);
 
   let clientType = null;
@@ -296,11 +305,26 @@ export async function getRekapKomentarByClient(
     params.push(value);
     return params.length;
   };
-  const normalizedRegionalId = regionalIdOverride
-    ? String(regionalIdOverride).trim().toUpperCase()
-    : null;
-  const regionalParamIdx = normalizedRegionalId
-    ? addParam(normalizedRegionalId)
+  const fallbackRegionalId =
+    regionalIdOverride !== undefined ? regionalIdOverride : null;
+  const normalizedUserRegionalId =
+    userRegionalIdOverride !== undefined
+      ? userRegionalIdOverride
+        ? String(userRegionalIdOverride).trim().toUpperCase()
+        : null
+      : fallbackRegionalId
+        ? String(fallbackRegionalId).trim().toUpperCase()
+        : null;
+  const normalizedPostRegionalId =
+    postRegionalIdOverride !== undefined
+      ? postRegionalIdOverride
+        ? String(postRegionalIdOverride).trim().toUpperCase()
+        : null
+      : fallbackRegionalId
+        ? String(fallbackRegionalId).trim().toUpperCase()
+        : null;
+  const userRegionalParamIdx = normalizedUserRegionalId
+    ? addParam(normalizedUserRegionalId)
     : null;
   let tanggalFilter =
     "__DATE_FIELD__::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date";
@@ -454,8 +478,8 @@ export async function getRekapKomentarByClient(
     }
   }
 
-  if (regionalParamIdx !== null) {
-    const regionalFilter = `UPPER(cl.regional_id) = UPPER($${regionalParamIdx})`;
+  if (userRegionalParamIdx !== null) {
+    const regionalFilter = `UPPER(cl.regional_id) = UPPER($${userRegionalParamIdx})`;
     userWhere = userWhere === "1=1"
       ? regionalFilter
       : `${userWhere} AND ${regionalFilter}`;
@@ -485,8 +509,8 @@ export async function getRekapKomentarByClient(
       postRoleFilter = 'AND pr.video_id IS NOT NULL';
     }
   }
-  if (normalizedRegionalId) {
-    const regionalIdx = addParam(normalizedRegionalId);
+  if (normalizedPostRegionalId) {
+    const regionalIdx = addParam(normalizedPostRegionalId);
     postRegionalJoin = 'JOIN clients cp ON cp.client_id = p.client_id';
     postRegionalFilter = `AND UPPER(cp.regional_id) = UPPER($${regionalIdx})`;
   }
