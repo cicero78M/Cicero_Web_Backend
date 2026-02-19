@@ -298,11 +298,12 @@ describe('POST /dashboard-register', () => {
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ role_id: 1, role_name: 'operator' }] })
       .mockResolvedValueOnce({ rows: [{ dashboard_user_id: 'd1', status: false }] })
-      .mockResolvedValueOnce({ rows: [] });
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ client_id: 'c1', nama: 'Client 1' }] });
 
     const res = await request(app)
       .post('/api/auth/dashboard-register')
-      .send({ username: 'dash', password: 'pass', whatsapp: '0812-1234x', client_ids: ['c1'] });
+      .send({ username: 'dash', password: 'pass', email: 'dash@example.com', client_ids: ['c1'] });
 
     expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
@@ -317,23 +318,12 @@ describe('POST /dashboard-register', () => {
       expect(mockQuery).toHaveBeenNthCalledWith(
         3,
         expect.stringContaining('INSERT INTO dashboard_user'),
-        [expect.any(String), 'dash', expect.any(String), 1, false, '628121234']
+        [expect.any(String), 'dash', expect.any(String), 1, false, 'dash@example.com']
       );
       expect(mockQuery).toHaveBeenNthCalledWith(
         4,
         expect.stringContaining('INSERT INTO dashboard_user_clients'),
         [expect.any(String), 'c1']
-      );
-      expect(mockWAClient.sendMessage).toHaveBeenCalledTimes(2);
-      expect(mockWAClient.sendMessage).toHaveBeenCalledWith(
-        'admin@c.us',
-        expect.stringContaining('Permintaan User Approval'),
-        {}
-      );
-      expect(mockWAClient.sendMessage).toHaveBeenCalledWith(
-        '628121234@c.us',
-        expect.stringContaining('Permintaan registrasi dashboard Anda telah diterima'),
-        {}
       );
   });
 
@@ -342,11 +332,12 @@ describe('POST /dashboard-register', () => {
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ role_id: 1, role_name: 'operator' }] })
       .mockResolvedValueOnce({ rows: [{ dashboard_user_id: 'd1', status: false }] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] });
 
     const res = await request(app)
       .post('/api/auth/dashboard-register')
-      .send({ username: 'dash', password: 'pass', whatsapp: '0812-1234x', client_id: 'c1' });
+      .send({ username: 'dash', password: 'pass', email: 'dash@example.com', client_id: 'c1' });
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
@@ -365,14 +356,13 @@ describe('POST /dashboard-register', () => {
 
     const res = await request(app)
       .post('/api/auth/dashboard-register')
-      .send({ username: 'dash', password: 'pass', whatsapp: '0812-1234x', role: 'ditbinmas' });
+      .send({ username: 'dash', password: 'pass', email: 'dash@example.com', role: 'ditbinmas' });
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
     expect(mockQuery.mock.calls[1][0]).toContain('FROM roles');
     expect(mockQuery.mock.calls[1][1]).toEqual(['ditbinmas']);
     expect(mockQuery.mock.calls[2][1][3]).toBe(5);
-    expect(mockWAClient.sendMessage).toHaveBeenCalledTimes(2);
   });
 
   test('creates default role when missing', async () => {
@@ -381,11 +371,12 @@ describe('POST /dashboard-register', () => {
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ role_id: 2, role_name: 'operator' }] })
       .mockResolvedValueOnce({ rows: [{ dashboard_user_id: 'd1', status: false }] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] });
 
     const res = await request(app)
       .post('/api/auth/dashboard-register')
-      .send({ username: 'dash', password: 'pass', whatsapp: '0812-1234x', client_ids: ['c1'] });
+      .send({ username: 'dash', password: 'pass', email: 'dash@example.com', client_ids: ['c1'] });
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
@@ -413,7 +404,7 @@ describe('POST /dashboard-register', () => {
 
     const res = await request(app)
       .post('/api/auth/dashboard-register')
-      .send({ username: 'dash', password: 'pass', whatsapp: '0812-1234x' });
+      .send({ username: 'dash', password: 'pass', email: 'dash@example.com' });
 
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
@@ -421,14 +412,25 @@ describe('POST /dashboard-register', () => {
     expect(mockQuery).toHaveBeenCalledTimes(2);
   });
 
-  test('returns 400 when whatsapp invalid', async () => {
+  test('returns 400 when email invalid', async () => {
     const res = await request(app)
       .post('/api/auth/dashboard-register')
-      .send({ username: 'dash', password: 'pass', whatsapp: '123' });
+      .send({ username: 'dash', password: 'pass', email: 'not-an-email' });
 
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
-    expect(res.body.message).toMatch(/whatsapp tidak valid/i);
+    expect(res.body.message).toMatch(/email tidak valid/i);
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  test('returns 400 when email missing', async () => {
+    const res = await request(app)
+      .post('/api/auth/dashboard-register')
+      .send({ username: 'dash', password: 'pass' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.message).toMatch(/email wajib diisi/i);
     expect(mockQuery).not.toHaveBeenCalled();
   });
 
@@ -437,7 +439,7 @@ describe('POST /dashboard-register', () => {
 
     const res = await request(app)
       .post('/api/auth/dashboard-register')
-      .send({ username: 'dash', password: 'pass', whatsapp: '0812-1234' });
+      .send({ username: 'dash', password: 'pass', email: 'dash@example.com' });
 
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);

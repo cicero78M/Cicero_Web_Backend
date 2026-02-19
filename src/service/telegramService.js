@@ -10,6 +10,16 @@ let isInitializing = false;
 const DEFAULT_TIMEZONE = process.env.TIMEZONE || 'Asia/Jakarta';
 
 /**
+ * Rejection reason options shown to admin in Telegram
+ */
+export const REJECTION_REASONS = [
+  'Penggunaan username dan role tidak sesuai',
+  'Penggunaan username tidak sesuai',
+  'Role tidak sesuai',
+  'Wilayah tidak sesuai',
+];
+
+/**
  * Escape Markdown special characters for Telegram
  * @param {string} text - Text to escape
  * @returns {string} Escaped text safe for Markdown parsing
@@ -273,12 +283,11 @@ export async function sendLoginLogNotification(logData) {
  * @returns {Promise<object|null>}
  */
 export async function sendUserApprovalRequest(userData) {
-  const { dashboard_user_id, username, whatsapp, email, role, clientNames } = userData;
+  const { dashboard_user_id, username, email, role, clientNames } = userData;
   
   let message = `📋 *Permintaan Registrasi Dashboard*\n\n`;
   message += `*User ID:* ${escapeMarkdown(String(dashboard_user_id))}\n`;
   message += `*Username:* ${escapeMarkdown(username)}\n`;
-  if (whatsapp) message += `*WhatsApp:* ${escapeMarkdown(whatsapp)}\n`;
   if (email) message += `*Email:* ${escapeMarkdown(email)}\n`;
   if (role) message += `*Role:* ${escapeMarkdown(role)}\n`;
   if (clientNames) message += `*Satker/Polres:* ${escapeMarkdown(clientNames)}\n`;
@@ -591,6 +600,7 @@ function buildConfirmationMessage(baseMessage, user, userNotified, userNotificat
 async function processApproval(chatId, username) {
   try {
     const { findByUsername, updateStatus } = await import('../model/dashboardUserModel.js');
+    const { sendApprovalEmail } = await import('./emailService.js');
     
     // Find user by username
     const user = await findByUsername(username);
@@ -621,6 +631,13 @@ async function processApproval(chatId, username) {
       `✅ Registrasi dashboard Anda telah disetujui.\nUsername: ${escapeMarkdown(user.username)}`
     );
     
+    // Send approval email to user if they have email
+    if (user.email) {
+      sendApprovalEmail(user.email, user.username).catch((err) => {
+        console.warn(`[Email] Failed to send approval email to ${user.username}: ${err.message}`);
+      });
+    }
+    
     // Send confirmation to admin via Telegram with notification status
     const confirmationMessage = buildConfirmationMessage(
       `✅ User "${escapeMarkdown(username)}" berhasil disetujui.`,
@@ -641,13 +658,13 @@ async function processApproval(chatId, username) {
 }
 
 /**
- * Process user rejection
+ * Process user rejection - shows rejection reason selection to admin
  * @param {number|string} chatId - Telegram chat ID
  * @param {string} username - Username to reject
  */
 async function processRejection(chatId, username) {
   try {
-    const { findByUsername, updateStatus } = await import('../model/dashboardUserModel.js');
+    const { findByUsername } = await import('../model/dashboardUserModel.js');
     
     // Find user by username
     const user = await findByUsername(username);
@@ -660,11 +677,59 @@ async function processRejection(chatId, username) {
     }
     
     // Check if user is not approved (status = false means either pending or already rejected)
-    // Note: The system doesn't distinguish between pending and rejected states
-    // Both have status = false, only approved users have status = true
     if (!user.status) {
       await bot.sendMessage(
         chatId, 
+        `✅ User "${escapeMarkdown(username)}" sudah ditolak sebelumnya.`
+      );
+      return;
+    }
+    
+    // Show rejection reason selection
+    const inlineKeyboard = {
+      inline_keyboard: REJECTION_REASONS.map((reason, index) => [
+        { text: reason, callback_data: `reject_reason:${username}:${index}` }
+      ])
+    };
+    
+    await bot.sendMessage(
+      chatId,
+      `❌ Pilih alasan penolakan untuk user "${escapeMarkdown(username)}":`,
+      { reply_markup: inlineKeyboard }
+    );
+    
+  } catch (err) {
+    console.error('[Telegram] Error handling deny command:', err);
+    await bot.sendMessage(
+      chatId, 
+      `❌ Terjadi kesalahan: ${escapeMarkdown(err.message)}`
+    );
+  }
+}
+
+/**
+ * Finalize user rejection with selected reason
+ * @param {number|string} chatId - Telegram chat ID
+ * @param {string} username - Username to reject
+ * @param {string} reason - Rejection reason text
+ */
+async function finalizeRejection(chatId, username, reason) {
+  try {
+    const { findByUsername, updateStatus } = await import('../model/dashboardUserModel.js');
+    const { sendRejectionEmail } = await import('./emailService.js');
+    
+    const user = await findByUsername(username);
+    if (!user) {
+      await bot.sendMessage(
+        chatId,
+        `❌ User dengan username "${escapeMarkdown(username)}" tidak ditemukan.`
+      );
+      return;
+    }
+    
+    if (!user.status) {
+      await bot.sendMessage(
+        chatId,
         `✅ User "${escapeMarkdown(username)}" sudah ditolak sebelumnya.`
       );
       return;
@@ -676,12 +741,19 @@ async function processRejection(chatId, username) {
     // Send notification to user via Telegram if available
     const { userNotified, userNotificationError } = await sendUserTelegramNotification(
       user,
-      `❌ Registrasi dashboard Anda ditolak.\nUsername: ${escapeMarkdown(user.username)}`
+      `❌ Registrasi dashboard Anda ditolak.\nUsername: ${escapeMarkdown(user.username)}\nAlasan: ${escapeMarkdown(reason)}`
     );
+    
+    // Send rejection email to user if they have email
+    if (user.email) {
+      sendRejectionEmail(user.email, user.username, reason).catch((err) => {
+        console.warn(`[Email] Failed to send rejection email to ${user.username}: ${err.message}`);
+      });
+    }
     
     // Send confirmation to admin via Telegram with notification status
     const confirmationMessage = buildConfirmationMessage(
-      `✅ User "${escapeMarkdown(username)}" berhasil ditolak.`,
+      `✅ User "${escapeMarkdown(username)}" berhasil ditolak.\nAlasan: ${escapeMarkdown(reason)}`,
       user,
       userNotified,
       userNotificationError
@@ -690,9 +762,9 @@ async function processRejection(chatId, username) {
     await bot.sendMessage(chatId, confirmationMessage);
     
   } catch (err) {
-    console.error('[Telegram] Error handling deny command:', err);
+    console.error('[Telegram] Error finalizing rejection:', err);
     await bot.sendMessage(
-      chatId, 
+      chatId,
       `❌ Terjadi kesalahan: ${escapeMarkdown(err.message)}`
     );
   }
@@ -749,8 +821,52 @@ function setupCallbackHandlers() {
       return;
     }
     
+    // Handle reject_reason:username:index callback
+    if (data.startsWith('reject_reason:')) {
+      const parts = data.split(':');
+      // parts = ['reject_reason', ...usernameParts, index]
+      const reasonIndex = parseInt(parts[parts.length - 1], 10);
+      const username = parts.slice(1, parts.length - 1).join(':');
+      
+      if (!username || isNaN(reasonIndex) || reasonIndex < 0 || reasonIndex >= REJECTION_REASONS.length) {
+        await bot.answerCallbackQuery(callbackQuery.id, {
+          text: '❌ Data tidak valid',
+          show_alert: true
+        });
+        return;
+      }
+      
+      const reason = REJECTION_REASONS[reasonIndex];
+      
+      await bot.answerCallbackQuery(callbackQuery.id, {
+        text: `Memproses penolakan dengan alasan: ${reason}...`
+      });
+      
+      await finalizeRejection(chatId, username, reason);
+      
+      // Edit the message to remove buttons
+      try {
+        await bot.editMessageReplyMarkup(
+          { inline_keyboard: [] },
+          { chat_id: chatId, message_id: messageId }
+        );
+      } catch (err) {
+        console.warn('[Telegram] Failed to remove inline keyboard:', err.message);
+      }
+      return;
+    }
+    
     // Parse callback data: "approve:username" or "deny:username"
-    const [action, username] = data.split(':');
+    const colonIndex = data.indexOf(':');
+    if (colonIndex === -1) {
+      await bot.answerCallbackQuery(callbackQuery.id, {
+        text: '❌ Data tidak valid',
+        show_alert: true
+      });
+      return;
+    }
+    const action = data.slice(0, colonIndex);
+    const username = data.slice(colonIndex + 1);
     
     if (!username) {
       await bot.answerCallbackQuery(callbackQuery.id, {
@@ -768,18 +884,26 @@ function setupCallbackHandlers() {
     // Process the action
     if (action === 'approve') {
       await processApproval(chatId, username);
+      // Edit the message to remove buttons
+      try {
+        await bot.editMessageReplyMarkup(
+          { inline_keyboard: [] },
+          { chat_id: chatId, message_id: messageId }
+        );
+      } catch (err) {
+        console.warn('[Telegram] Failed to remove inline keyboard:', err.message);
+      }
     } else if (action === 'deny') {
       await processRejection(chatId, username);
-    }
-    
-    // Edit the message to remove buttons
-    try {
-      await bot.editMessageReplyMarkup(
-        { inline_keyboard: [] },
-        { chat_id: chatId, message_id: messageId }
-      );
-    } catch (err) {
-      console.warn('[Telegram] Failed to remove inline keyboard:', err.message);
+      // Remove original buttons - rejection reason list will appear in new message
+      try {
+        await bot.editMessageReplyMarkup(
+          { inline_keyboard: [] },
+          { chat_id: chatId, message_id: messageId }
+        );
+      } catch (err) {
+        console.warn('[Telegram] Failed to remove inline keyboard:', err.message);
+      }
     }
   });
   
@@ -804,5 +928,6 @@ export default {
   sendDashboardPremiumRequestNotification,
   sendComplaintNotification,
   sendPasswordResetToken,
-  sendPasswordResetFailureNotification
+  sendPasswordResetFailureNotification,
+  REJECTION_REASONS
 };

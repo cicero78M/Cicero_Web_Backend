@@ -67,9 +67,13 @@ export async function findAllByNormalizedWhatsApp(whatsapp) {
   return runDashboardUserQuery({ whereClause, params: [candidates], expectMany: true });
 }
 
+export async function findByEmail(email) {
+  return findOneBy('email', email);
+}
+
 export async function createUser(data) {
   const res = await query(
-    `INSERT INTO dashboard_user (dashboard_user_id, username, password_hash, role_id, status, whatsapp)
+    `INSERT INTO dashboard_user (dashboard_user_id, username, password_hash, role_id, status, email)
      VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
     [
@@ -78,7 +82,7 @@ export async function createUser(data) {
       data.password_hash,
       data.role_id,
       data.status,
-      data.whatsapp,
+      data.email,
     ],
   );
   return res.rows[0];

@@ -29,3 +29,22 @@ export async function sendComplaintEmail(email, subject, message) {
     text: message,
   });
 }
+
+export async function sendApprovalEmail(email, username) {
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to: email,
+    subject: 'Registrasi Dashboard Disetujui',
+    text: `Halo ${username},\n\nRegistrasi akun dashboard Anda telah disetujui. Silakan login ke dashboard.\n\nSalam,\nAdmin`,
+  });
+}
+
+export async function sendRejectionEmail(email, username, reason) {
+  const reasonText = reason ? `\n\nAlasan penolakan: ${reason}` : '';
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to: email,
+    subject: 'Registrasi Dashboard Ditolak',
+    text: `Halo ${username},\n\nRegistrasi akun dashboard Anda ditolak.${reasonText}\n\nSilakan perbaiki data Anda dan daftar kembali.\n\nSalam,\nAdmin`,
+  });
+}

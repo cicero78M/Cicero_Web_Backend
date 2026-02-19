@@ -327,21 +327,21 @@ router.post('/penmas-login', async (req, res) => {
 });
 
 router.post('/dashboard-register', async (req, res) => {
-  let { username, password, role_id, role, client_ids, client_id, whatsapp, email } = req.body;
+  let { username, password, role_id, role, client_ids, client_id, email } = req.body;
   const status = false;
   const clientIds = client_ids || (client_id ? [client_id] : []);
-  if (!username || !password || !whatsapp) {
+  if (!username || !password || !email) {
     return res
       .status(400)
-      .json({ success: false, message: 'username, password, dan whatsapp wajib diisi' });
+      .json({ success: false, message: 'username, password, dan email wajib diisi' });
   }
-  const normalizedWhatsapp = normalizeWhatsappNumber(whatsapp);
-  if (!normalizedWhatsapp || normalizedWhatsapp.length < 8) {
+  // Basic email format validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
     return res
       .status(400)
-      .json({ success: false, message: 'whatsapp tidak valid' });
+      .json({ success: false, message: 'email tidak valid' });
   }
-  whatsapp = normalizedWhatsapp;
   const existing = await dashboardUserModel.findByUsername(username);
   if (existing) {
     return res
@@ -396,7 +396,7 @@ router.post('/dashboard-register', async (req, res) => {
     password_hash,
     role_id,
     status,
-    whatsapp,
+    email,
   });
   if (clientIds.length > 0) {
     await dashboardUserModel.addClients(dashboard_user_id, clientIds);
@@ -418,9 +418,9 @@ router.post('/dashboard-register', async (req, res) => {
     });
   }
 
-  // Send approval request to admin via WhatsApp
+  // Log approval request
   console.log('[AUTH]', 
-    `\uD83D\uDCCB Permintaan User Approval dengan data sebagai berikut :\nUsername: ${username}\nID: ${dashboard_user_id}\nRole: ${roleRow?.role_name || '-'}\nWhatsApp: ${whatsapp}\nClient ID: ${
+    `\uD83D\uDCCB Permintaan User Approval dengan data sebagai berikut :\nUsername: ${username}\nID: ${dashboard_user_id}\nRole: ${roleRow?.role_name || '-'}\nEmail: ${email}\nClient ID: ${
       clientIds.length ? clientIds.join(', ') : '-'
     }\n\nBalas approvedash#${username} untuk menyetujui atau denydash#${username} untuk menolak.`
   );
@@ -429,7 +429,6 @@ router.post('/dashboard-register', async (req, res) => {
   sendUserApprovalRequest({
     dashboard_user_id,
     username,
-    whatsapp,
     email,
     role: roleRow?.role_name,
     clientIds: clientIds.length ? clientIds.join(', ') : '-',
@@ -438,7 +437,6 @@ router.post('/dashboard-register', async (req, res) => {
     console.warn(`[Telegram] Failed to send approval request: ${err.message}`);
   });
 
-  // WhatsApp user notification removed - using Telegram only
   return res
     .status(201)
     .json({ success: true, dashboard_user_id: user.dashboard_user_id, status: user.status });
