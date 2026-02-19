@@ -19,6 +19,12 @@ const ADMIN_WHATSAPP = (process.env.ADMIN_WHATSAPP || "")
 const limit = pLimit(6);
 const IG_DELETE_GRACE_HOURS = Number(process.env.IG_DELETE_GRACE_HOURS || 24);
 
+export function getJakartaDateString(referenceDate = new Date()) {
+  return referenceDate.toLocaleDateString("en-CA", {
+    timeZone: "Asia/Jakarta",
+  });
+}
+
 /**
  * Utility: Cek apakah unixTimestamp adalah hari ini (Asia/Jakarta)
  */
@@ -34,21 +40,15 @@ function isTodayJakarta(unixTimestamp) {
   });
   
   // Get today's date string in Jakarta timezone (format: YYYY-MM-DD)
-  const todayJakarta = new Date().toLocaleDateString("en-CA", {
-    timeZone: "Asia/Jakarta",
-  });
+  const todayJakarta = getJakartaDateString();
   
   // Compare the date strings directly
   return postDateJakarta === todayJakarta;
 }
 
 async function getShortcodesToday(clientId = null) {
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, "0");
-  const dd = String(today.getDate()).padStart(2, "0");
-  let sql = `SELECT shortcode FROM insta_post WHERE DATE(created_at) = $1 AND is_missing_since IS NULL`;
-  const params = [`${yyyy}-${mm}-${dd}`];
+  let sql = `SELECT shortcode FROM insta_post WHERE DATE((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta') = $1 AND is_missing_since IS NULL`;
+  const params = [getJakartaDateString()];
   if (clientId) {
     sql += ` AND client_id = $2`;
     params.push(clientId);
@@ -79,15 +79,16 @@ async function deleteShortcodes(
   }
 
   const graceParam = `${Math.max(1, graceHours)} hours`;
+  const jakartaDate = getJakartaDateString();
   const quarantineResult = await query(
     `UPDATE insta_post
      SET is_missing_since = COALESCE(is_missing_since, NOW())
      WHERE shortcode = ANY($1)
        AND ($2::text IS NULL OR client_id = $2)
-       AND DATE(created_at) = CURRENT_DATE
+       AND DATE((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta') = $3
        AND is_missing_since IS NULL
      RETURNING shortcode`,
-    [shortcodesToDelete, clientId]
+    [shortcodesToDelete, clientId, jakartaDate]
   );
 
   const purgeTargetResult = await query(
@@ -95,10 +96,10 @@ async function deleteShortcodes(
      FROM insta_post
      WHERE shortcode = ANY($1)
        AND ($2::text IS NULL OR client_id = $2)
-       AND DATE(created_at) = CURRENT_DATE
+       AND DATE((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta') = $3
        AND is_missing_since IS NOT NULL
-       AND is_missing_since <= NOW() - $3::interval`,
-    [shortcodesToDelete, clientId, graceParam]
+       AND is_missing_since <= NOW() - $4::interval`,
+    [shortcodesToDelete, clientId, jakartaDate, graceParam]
   );
 
   const purgeShortcodes = purgeTargetResult.rows.map((row) => row.shortcode);
@@ -107,13 +108,9 @@ async function deleteShortcodes(
   }
 
   // ig_ext_posts rows cascade when insta_post entries are deleted
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, "0");
-  const dd = String(today.getDate()).padStart(2, "0");
   let sql =
-    `DELETE FROM insta_post WHERE shortcode = ANY($1) AND DATE(created_at) = $2`;
-  const params = [purgeShortcodes, `${yyyy}-${mm}-${dd}`];
+    `DELETE FROM insta_post WHERE shortcode = ANY($1) AND DATE((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta') = $2`;
+  const params = [purgeShortcodes, jakartaDate];
   if (clientId !== null) {
     sql += ` AND client_id = $3`;
     params.push(clientId);
@@ -363,13 +360,10 @@ export async function fetchAndStoreInstaContent(
     }
 
     // Hitung jumlah konten hari ini untuk summary
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, "0");
-    const dd = String(today.getDate()).padStart(2, "0");
+    const jakartaDate = getJakartaDateString();
       const countRes = await query(
-        `SELECT shortcode FROM insta_post WHERE client_id = $1 AND DATE(created_at) = $2`,
-        [client.id, `${yyyy}-${mm}-${dd}`]
+        `SELECT shortcode FROM insta_post WHERE client_id = $1 AND DATE((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta') = $2`,
+        [client.id, jakartaDate]
       );
     summary[client.id] = { count: countRes.rows.length };
   }
@@ -378,14 +372,11 @@ export async function fetchAndStoreInstaContent(
   clearInterval(intervalId);
 
   // Ringkasan WA/console
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, "0");
-  const dd = String(today.getDate()).padStart(2, "0");
+  const jakartaDate = getJakartaDateString();
 
   let sumSql =
-    `SELECT shortcode, created_at FROM insta_post WHERE DATE(created_at) = $1`;
-  const sumParams = [`${yyyy}-${mm}-${dd}`];
+    `SELECT shortcode, created_at FROM insta_post WHERE DATE((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta') = $1`;
+  const sumParams = [jakartaDate];
   if (targetClientId) {
     sumSql += ` AND client_id = $2`;
     sumParams.push(targetClientId);
