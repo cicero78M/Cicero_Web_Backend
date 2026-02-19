@@ -422,7 +422,7 @@ export async function getRekapKomentarByClient(
   }
 
   let postClientFilter = "1=1";
-  if (resolvedPostClientId) {
+  if (resolvedPostClientId && postRoleFilterMode !== 'include_client_or_role') {
     const postClientIdx = addParam(resolvedPostClientId);
     postClientFilter = `LOWER(p.client_id) = LOWER($${postClientIdx})`;
   }

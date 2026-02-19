@@ -42,9 +42,23 @@ export async function verifyDashboardToken(req, res, next) {
   if (!token) {
     return res.status(401).json({ success: false, message: 'Token required' });
   }
+  let payload;
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    const exists = await redis.get(`login_token:${token}`);
+    payload = jwt.verify(token, process.env.JWT_SECRET);
+  } catch (err) {
+    console.error('[AUTH] Failed to verify dashboard token:', err);
+    return res.status(401).json({ success: false, message: 'Invalid token' });
+  }
+
+  let exists;
+  try {
+    exists = await redis.get(`login_token:${token}`);
+  } catch (redisErr) {
+    console.error('[AUTH] Redis unavailable in verifyDashboardToken:', redisErr);
+    return res.status(503).json({ success: false, message: 'Service temporarily unavailable' });
+  }
+
+  try {
     if (!exists) {
       return res.status(401).json({ success: false, message: 'Invalid token' });
     }
@@ -85,7 +99,7 @@ export async function verifyDashboardToken(req, res, next) {
     req.user = sanitizedUser;
     next();
   } catch (err) {
-    console.error('[AUTH] Failed to verify dashboard token:', err);
+    console.error('[AUTH] Failed to process dashboard token:', err);
     return res.status(401).json({ success: false, message: 'Invalid token' });
   }
 }
@@ -104,8 +118,15 @@ export async function verifyDashboardOrClientToken(req, res, next) {
     return res.status(401).json({ success: false, message: 'Invalid token' });
   }
 
+  let exists;
   try {
-    const exists = await redis.get(`login_token:${token}`);
+    exists = await redis.get(`login_token:${token}`);
+  } catch (redisErr) {
+    console.error('[AUTH] Redis unavailable in verifyDashboardOrClientToken:', redisErr);
+    return res.status(503).json({ success: false, message: 'Service temporarily unavailable' });
+  }
+
+  try {
     if (!exists) {
       return res.status(401).json({ success: false, message: 'Invalid token' });
     }
