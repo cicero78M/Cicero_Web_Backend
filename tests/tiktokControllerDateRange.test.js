@@ -30,10 +30,12 @@ test('accepts tanggal_mulai and tanggal_selesai', async () => {
   mockGetRekap.mockResolvedValue([]);
   const req = {
     query: {
+      client_id: 'DITBINMAS',
       periode: 'harian',
       tanggal_mulai: '2024-01-01',
       tanggal_selesai: '2024-01-31'
-    }
+    },
+    headers: {}
   };
   const json = jest.fn();
   const res = { json, status: jest.fn().mockReturnThis() };
@@ -44,9 +46,10 @@ test('accepts tanggal_mulai and tanggal_selesai', async () => {
     undefined,
     '2024-01-01',
     '2024-01-31',
-    undefined
+    undefined,
+    expect.any(Object)
   );
-  expect(json).toHaveBeenCalledWith(expect.objectContaining({ chartHeight: 300 }));
+  expect(json).toHaveBeenCalledWith(expect.objectContaining({ chartHeight: 320 }));
 });
 
 test('returns user comment summaries with counts', async () => {
@@ -56,7 +59,7 @@ test('returns user comment summaries with counts', async () => {
     { username: 'charlie', jumlah_komentar: 1 }
   ];
   mockGetRekap.mockResolvedValue(rows);
-  const req = { query: {} };
+  const req = { query: { client_id: 'DITBINMAS' }, headers: {} };
   const json = jest.fn();
   const res = { json, status: jest.fn().mockReturnThis() };
   await getTiktokRekapKomentar(req, res);
@@ -71,3 +74,44 @@ test('returns user comment summaries with counts', async () => {
   );
 });
 
+
+
+test('scope direktorat forwards post role+client merge options', async () => {
+  mockGetRekap.mockResolvedValue([]);
+  const req = {
+    query: {
+      client_id: 'DITINTELKAM',
+      periode: 'harian',
+      tanggal: '2026-02-19',
+      role: 'ditintelkam',
+      scope: 'DIREKTORAT',
+      regional_id: 'JATIM'
+    },
+    user: {
+      client_id: 'DITINTELKAM',
+      role: 'ditintelkam'
+    },
+    headers: {}
+  };
+  const json = jest.fn();
+  const res = { json, status: jest.fn().mockReturnThis() };
+
+  await getTiktokRekapKomentar(req, res);
+
+  expect(mockGetRekap).toHaveBeenCalledWith(
+    'DITINTELKAM',
+    'harian',
+    '2026-02-19',
+    undefined,
+    undefined,
+    'ditintelkam',
+    expect.objectContaining({
+      postClientId: 'DITINTELKAM',
+      userClientId: null,
+      userRoleFilter: 'ditintelkam',
+      includePostRoleFilter: true,
+      postRoleFilterMode: 'include_client_or_role',
+      regionalId: 'JATIM'
+    })
+  );
+});
