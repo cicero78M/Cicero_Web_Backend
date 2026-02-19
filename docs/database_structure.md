@@ -156,7 +156,6 @@ Stores Instagram posts fetched for a client.
 - `images_url` – JSON array of all image URLs when the post is a carousel
 - `is_carousel` – boolean indicating whether the post contains multiple images
 - `created_at` – timestamp of the post
-- `is_missing_since` – quarantine timestamp when post is missing from a complete fetch before hard delete
 
 ### `insta_post_khusus`
 Stores curated Instagram posts for khusus audiences.

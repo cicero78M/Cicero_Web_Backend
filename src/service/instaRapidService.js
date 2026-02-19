@@ -103,81 +103,28 @@ async function axiosGetRapidApi(path, params, options = {}) {
 }
 
 export async function fetchInstagramPosts(username, limit = 10) {
-  const result = await fetchInstagramPostsWithQualityInternal(username, limit);
-  const responseItems = result.items;
-  Object.defineProperty(responseItems, '_fetchQuality', {
-    value: {
-      isCompleteFetch: result.isCompleteFetch,
-      fetchMeta: result.fetchMeta,
-    },
-    enumerable: false,
-    configurable: true,
-    writable: false,
-  });
-  return responseItems;
-}
-
-async function fetchInstagramPostsWithQualityInternal(username, limit = 10) {
-  if (!username) {
-    return {
-      items: [],
-      isCompleteFetch: false,
-      fetchMeta: {
-        endedByLimit: false,
-        exhaustedPagination: false,
-        pagesFetched: 0,
-        totalFetchedBeforeLimit: 0,
-      },
-    };
-  }
+  if (!username) return [];
   assertRapidApiKey();
 
   sendConsoleDebug('fetchInstagramPosts start', { username, limit });
 
   const all = [];
   let token = null;
-  let endedByLimit = false;
-  let exhaustedPagination = false;
-  let pagesFetched = 0;
 
   do {
     sendConsoleDebug('fetchInstagramPostsPageToken', { token });
     const { items, next_token, has_more } = await fetchInstagramPostsPageToken(username, token);
-    pagesFetched += 1;
     sendConsoleDebug('fetched page', { items: items.length, next_token, has_more });
     if (!items.length) break;
     all.push(...items);
     token = next_token;
     sendConsoleDebug('pagination token updated', { token });
-    if (!has_more || !token) {
-      exhaustedPagination = true;
-      break;
-    }
-    if (limit && all.length >= limit) {
-      endedByLimit = true;
-      break;
-    }
+    if (!has_more || !token || (limit && all.length >= limit)) break;
   } while (true);
 
   sendConsoleDebug('fetchInstagramPosts done', { total: all.length });
 
-  const items = limit ? all.slice(0, limit) : all;
-  const isCompleteFetch = !endedByLimit || exhaustedPagination;
-
-  return {
-    items,
-    isCompleteFetch,
-    fetchMeta: {
-      endedByLimit,
-      exhaustedPagination,
-      pagesFetched,
-      totalFetchedBeforeLimit: all.length,
-    },
-  };
-}
-
-export async function fetchInstagramPostsWithQuality(username, limit = 10) {
-  return fetchInstagramPostsWithQualityInternal(username, limit);
+  return limit ? all.slice(0, limit) : all;
 }
 
 export async function fetchInstagramProfile(username) {
