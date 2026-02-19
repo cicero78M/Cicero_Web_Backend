@@ -54,5 +54,15 @@ These tables are updated regularly by scheduled jobs and form the basis for anal
 
 Administrators receive automated WhatsApp reports summarizing daily engagement. The dashboard retrieves analytics via REST endpoints, giving a complete view of social media activity per client.
 
+## 5. Timezone Decision for Daily Instagram Ingestion
+
+- Seluruh boundary harian pada pipeline fetch Instagram diseragamkan ke **Asia/Jakarta (WIB)**.
+- Implementasi di `src/handler/fetchpost/instaFetchPost.js` memakai helper tunggal `getJakartaDateString()` (`YYYY-MM-DD`) untuk:
+  - seleksi shortcode harian (`getShortcodesToday`),
+  - quarantine/hard-delete shortcode harian (`deleteShortcodes`),
+  - query summary harian setelah proses fetch.
+- Filter post “hari ini” (`isTodayJakarta`) tetap berbasis `Asia/Jakarta`, sehingga konsisten dengan boundary query select/delete di database.
+- Keputusan ini menghindari ketergantungan pada timezone lokal server saat job berjalan mendekati pergantian hari (sekitar 00:00 WIB).
+
 
 Refer to [docs/naming_conventions.md](naming_conventions.md) for code style guidelines.
