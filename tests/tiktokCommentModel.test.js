@@ -24,16 +24,31 @@ function mockClientType(type = 'instansi') {
 
 const PRIORITY_UPPER = PRIORITY_USER_NAMES.map(name => name.toUpperCase());
 
-test('getRekapKomentarByClient uses updated_at BETWEEN for date range', async () => {
+test('getRekapKomentarByClient uses post created_at BETWEEN for date range in both CTEs', async () => {
   mockClientType();
   mockQuery.mockResolvedValueOnce({ rows: [] });
   await getRekapKomentarByClient('POLRES', 'harian', null, '2024-01-01', '2024-01-31');
   expect(mockQuery).toHaveBeenCalledTimes(2);
-  expect(mockQuery.mock.calls[1][0]).toContain('c.updated_at');
+  expect(mockQuery.mock.calls[1][0]).toContain('p.created_at');
+  expect(mockQuery.mock.calls[1][0]).not.toContain("(c.updated_at AT TIME ZONE 'UTC')");
   expect(mockQuery.mock.calls[1][0]).toContain('BETWEEN');
   const params = mockQuery.mock.calls[1][1];
   expect(params).toEqual(expect.arrayContaining(['POLRES', '2024-01-01', '2024-01-31']));
   expect(params).toEqual(expect.arrayContaining(PRIORITY_UPPER));
+});
+
+
+test('getRekapKomentarByClient keeps comment period based on post date even if comment updated_at shifts', async () => {
+  mockClientType();
+  mockQuery.mockResolvedValueOnce({ rows: [] });
+  await getRekapKomentarByClient('POLRES', 'harian', null, '2024-01-01', '2024-01-31');
+
+  const sql = mockQuery.mock.calls[1][0];
+  expect(sql).toContain('valid_comments AS (');
+  expect(sql).toContain('total_posts AS (');
+  const createdAtMatches = sql.match(/\(\(p\.created_at AT TIME ZONE 'UTC'\) AT TIME ZONE 'Asia\/Jakarta'\)/g) || [];
+  expect(createdAtMatches.length).toBeGreaterThanOrEqual(2);
+  expect(sql).not.toContain("((c.updated_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')");
 });
 
 test('getRekapKomentarByClient filters directorate users by ditbinmas role only', async () => {
