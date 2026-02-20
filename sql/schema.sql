@@ -221,7 +221,16 @@ CREATE TABLE insta_post (
   image_url TEXT,
   images_url JSONB,
   is_carousel BOOLEAN DEFAULT FALSE,
+  source_type VARCHAR NOT NULL DEFAULT 'manual_input',
+  original_created_at TIMESTAMP,
   created_at TIMESTAMP
+);
+
+CREATE TABLE insta_post_clients (
+  shortcode VARCHAR REFERENCES insta_post(shortcode) ON DELETE CASCADE,
+  client_id VARCHAR REFERENCES clients(client_id) ON DELETE CASCADE,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (shortcode, client_id)
 );
 
 CREATE TABLE insta_post_roles (

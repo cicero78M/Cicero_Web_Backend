@@ -146,7 +146,7 @@ export async function handleFetchLikesInstagram(waClient, chatId, client_id, opt
        FROM insta_post p
        JOIN insta_post_clients pc ON pc.shortcode = p.shortcode
        WHERE pc.client_id = $1
-         AND (p.created_at AT TIME ZONE 'Asia/Jakarta')::date = $2::date`,
+         AND (COALESCE(p.original_created_at, p.created_at) AT TIME ZONE 'Asia/Jakarta')::date = $2::date`,
       [client_id, todayWib]
     );
 
