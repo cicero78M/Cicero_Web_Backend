@@ -39,3 +39,17 @@ GET /api/instagram/posts?client_id=DITBINMAS&start_date=2025-10-01&end_date=2025
 - Jika `scope=direktorat` dan `role` diisi, pencarian memakai filter role pada relasi `insta_post_roles`. Jika tidak ada hasil, sistem fallback ke pencarian berdasarkan `client_id` untuk direktorat terkait.
 - Jika `scope=org` dengan `role=operator`, maka `client_id` dari token pengguna dipakai agar sesuai hak akses.
 - Hanya post yang sesuai periode atau rentang tanggal yang dikembalikan. Response memakai format `sendSuccess`.
+
+
+## Handler Fetch Likes Instagram (internal)
+
+Handler `handleFetchLikesInstagram` (file `src/handler/fetchengagement/fetchLikesInstagram.js`) mengambil daftar shortcode harian dari relasi post-client melalui junction table `insta_post_clients`, bukan langsung dari kolom `insta_post.client_id`.
+
+### Perilaku Query Shortcode Harian
+- Source shortcode: `insta_post p JOIN insta_post_clients pc ON pc.shortcode = p.shortcode`.
+- Filter client: `pc.client_id = $1`.
+- Filter tanggal harian mengikuti basis WIB (Asia/Jakarta) dengan ekspresi `(p.created_at AT TIME ZONE 'Asia/Jakarta')::date = $2::date`.
+- `SELECT DISTINCT` dipakai untuk mencegah duplikasi shortcode saat terdapat lebih dari satu relasi client pada tabel junction.
+
+### Catatan Logging Error
+- Logging error di handler likes IG sekarang selalu mengirim `client_id` nullable (`client_id || null`) agar telemetry tetap konsisten ketika parameter kosong.

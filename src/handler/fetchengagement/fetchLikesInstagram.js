@@ -85,7 +85,7 @@ async function fetchAndStoreLikes(shortcode, client_id = null, snapshotWindow = 
   sendDebug({
     tag: "IG LIKES FINAL",
     msg: `Shortcode ${shortcode} FINAL jumlah unique: ${mergedLikes.length}`,
-    client_id: client_id || shortcode,
+    client_id: client_id || null,
   });
 
   // Simpan ke database (upsert), gabungkan dengan data lama
@@ -100,7 +100,7 @@ async function fetchAndStoreLikes(shortcode, client_id = null, snapshotWindow = 
   sendDebug({
     tag: "IG FETCH",
     msg: `[DB] Sukses upsert likes IG: ${shortcode} | Total likes disimpan: ${mergedLikes.length}`,
-    client_id: client_id || shortcode,
+    client_id: client_id || null,
   });
 
   const { snapshotWindowStart, snapshotWindowEnd, capturedAt } =
@@ -116,13 +116,13 @@ async function fetchAndStoreLikes(shortcode, client_id = null, snapshotWindow = 
     sendDebug({
       tag: "IG FETCH",
       msg: `[DB] Audit likes IG tersimpan untuk ${shortcode} (${snapshotWindowStart.toISOString()} - ${snapshotWindowEnd.toISOString()})`,
-      client_id: client_id || shortcode,
+      client_id: client_id || null,
     });
   } catch (auditErr) {
     sendDebug({
       tag: "IG FETCH AUDIT ERROR",
       msg: `Gagal menyimpan audit likes IG ${shortcode}: ${(auditErr && auditErr.message) || String(auditErr)}`,
-      client_id: client_id || shortcode,
+      client_id: client_id || null,
     });
   }
 }
@@ -137,14 +137,17 @@ async function fetchAndStoreLikes(shortcode, client_id = null, snapshotWindow = 
  */
 export async function handleFetchLikesInstagram(waClient, chatId, client_id, options = {}) {
   try {
-    // Ambil semua post IG milik client hari ini
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, "0");
-    const dd = String(today.getDate()).padStart(2, "0");
+    // Ambil semua post IG milik client hari ini (basis WIB)
+    const todayWib = new Date().toLocaleDateString("en-CA", {
+      timeZone: "Asia/Jakarta",
+    });
     const { rows } = await query(
-      `SELECT shortcode FROM insta_post WHERE client_id = $1 AND DATE(created_at) = $2`,
-      [client_id, `${yyyy}-${mm}-${dd}`]
+      `SELECT DISTINCT p.shortcode
+       FROM insta_post p
+       JOIN insta_post_clients pc ON pc.shortcode = p.shortcode
+       WHERE pc.client_id = $1
+         AND (p.created_at AT TIME ZONE 'Asia/Jakarta')::date = $2::date`,
+      [client_id, todayWib]
     );
 
     if (!rows.length) {
@@ -179,7 +182,7 @@ export async function handleFetchLikesInstagram(waClient, chatId, client_id, opt
           tag: "IG FETCH LIKES ERROR",
           // Hanya log message/error string, jangan objek error utuh!
           msg: `Gagal fetch likes untuk shortcode: ${r.shortcode}, error: ${(err && err.message) || String(err)}`,
-          client_id,
+          client_id: client_id || null,
         });
         gagal++;
       }
@@ -201,7 +204,7 @@ export async function handleFetchLikesInstagram(waClient, chatId, client_id, opt
     sendDebug({
       tag: "IG FETCH LIKES ERROR",
       msg: (err && err.message) || String(err),
-      client_id,
+      client_id: client_id || null,
     });
   }
 }
