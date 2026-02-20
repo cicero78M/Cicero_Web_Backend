@@ -184,7 +184,7 @@ export async function getTiktokRekapKomentar(req, res) {
           .status(400)
           .json({ success: false, message: 'role wajib diisi' });
       }
-      const resolvedScope = scopeLower || 'org';
+      const resolvedScope = scopeLower || 'direktorat';
       if (!['org', 'direktorat'].includes(resolvedScope)) {
         return res
           .status(400)

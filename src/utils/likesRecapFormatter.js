@@ -194,7 +194,7 @@ export function formatLikesRecapResponse(rowsInput, totalPostsInput) {
   const statusLegend = [
     {
       status: "sudah",
-      label: "Sudah",
+      label: "Likes Lengkap",
       description: "Semua konten pada periode ini telah di-like.",
     },
     {

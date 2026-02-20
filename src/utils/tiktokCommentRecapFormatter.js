@@ -197,7 +197,7 @@ export function formatTiktokCommentRecapResponse(rowsInput, totalPostsInput) {
   const statusLegend = [
     {
       status: "sudah",
-      label: "Sudah",
+      label: "Komentar Lengkap",
       description: "Semua konten pada periode ini telah dikomentari.",
     },
     {
