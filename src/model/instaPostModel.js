@@ -1,6 +1,11 @@
 // src/model/instaPostModel.js
 import { query } from '../repository/db.js';
 
+function instaDateBaseExpression(tableAlias = null) {
+  const prefix = tableAlias ? `${tableAlias}.` : '';
+  return `COALESCE(${prefix}original_created_at, ${prefix}created_at)`;
+}
+
 export async function upsertInstaPost(data) {
   // Pastikan field yang dipakai sesuai dengan kolom di DB
   const {
@@ -83,13 +88,13 @@ export async function getShortcodesTodayByClient(identifier) {
       `SELECT p.shortcode FROM insta_post p\n` +
       `JOIN insta_post_roles pr ON pr.shortcode = p.shortcode\n` +
       `WHERE LOWER(pr.role_name) = LOWER($1)\n` +
-      `  AND (p.created_at AT TIME ZONE 'Asia/Jakarta')::date = $2::date\n` +
+      `  AND (COALESCE(p.original_created_at, p.created_at) AT TIME ZONE 'Asia/Jakarta')::date = $2::date\n` +
       `ORDER BY p.created_at ASC, p.shortcode ASC`;
     params = [identifier, today];
   } else {
     sql =
       `SELECT shortcode FROM insta_post\n` +
-      `WHERE LOWER(client_id) = LOWER($1) AND (created_at AT TIME ZONE 'Asia/Jakarta')::date = $2::date\n` +
+      `WHERE LOWER(client_id) = LOWER($1) AND (COALESCE(original_created_at, created_at) AT TIME ZONE 'Asia/Jakarta')::date = $2::date\n` +
       `ORDER BY created_at ASC, shortcode ASC`;
     params = [identifier, today];
   }
@@ -99,7 +104,7 @@ export async function getShortcodesTodayByClient(identifier) {
   if (useRoleFilter && clientType === 'direktorat' && rows.length === 0) {
     const fallbackQuery =
       `SELECT shortcode FROM insta_post\n` +
-      `WHERE LOWER(client_id) = LOWER($1) AND (created_at AT TIME ZONE 'Asia/Jakarta')::date = $2::date\n` +
+      `WHERE LOWER(client_id) = LOWER($1) AND (COALESCE(original_created_at, created_at) AT TIME ZONE 'Asia/Jakarta')::date = $2::date\n` +
       `ORDER BY created_at ASC, shortcode ASC`;
     rows = (await query(fallbackQuery, [identifier, today])).rows;
   }
@@ -133,12 +138,12 @@ export async function getShortcodesYesterdayByClient(identifier) {
       `SELECT p.shortcode FROM insta_post p\n` +
       `JOIN insta_post_roles pr ON pr.shortcode = p.shortcode\n` +
       `WHERE LOWER(pr.role_name) = LOWER($1)\n` +
-      `  AND (p.created_at AT TIME ZONE 'Asia/Jakarta')::date = $2::date`;
+      `  AND (COALESCE(p.original_created_at, p.created_at) AT TIME ZONE 'Asia/Jakarta')::date = $2::date`;
     params = [identifier, yesterday];
   } else {
     sql =
       `SELECT shortcode FROM insta_post\n` +
-      `WHERE LOWER(client_id) = LOWER($1) AND (created_at AT TIME ZONE 'Asia/Jakarta')::date = $2::date`;
+      `WHERE LOWER(client_id) = LOWER($1) AND (COALESCE(original_created_at, created_at) AT TIME ZONE 'Asia/Jakarta')::date = $2::date`;
     params = [identifier, yesterday];
   }
 
@@ -185,13 +190,13 @@ export async function getShortcodesByDateRange(identifier, startDate, endDate) {
       `SELECT p.shortcode FROM insta_post p\n` +
       `JOIN insta_post_roles pr ON pr.shortcode = p.shortcode\n` +
       `WHERE LOWER(pr.role_name) = LOWER($1)\n` +
-      `  AND (p.created_at AT TIME ZONE 'Asia/Jakarta')::date BETWEEN $2::date AND $3::date`;
+      `  AND (COALESCE(p.original_created_at, p.created_at) AT TIME ZONE 'Asia/Jakarta')::date BETWEEN $2::date AND $3::date`;
     params = [identifier, startBound, endBound];
   } else {
     sql =
       `SELECT shortcode FROM insta_post\n` +
       `WHERE LOWER(client_id) = LOWER($1)\n` +
-      `  AND (created_at AT TIME ZONE 'Asia/Jakarta')::date BETWEEN $2::date AND $3::date`;
+      `  AND (COALESCE(original_created_at, created_at) AT TIME ZONE 'Asia/Jakarta')::date BETWEEN $2::date AND $3::date`;
     params = [identifier, startBound, endBound];
   }
 
@@ -207,7 +212,7 @@ export async function getShortcodesTodayByUsername(username) {
   const dd = String(today.getDate()).padStart(2, '0');
   const res = await query(
     `SELECT p.shortcode FROM insta_post p JOIN clients c ON c.client_id = p.client_id
-     WHERE c.client_insta = $1 AND DATE(p.created_at) = $2`,
+     WHERE c.client_insta = $1 AND DATE(COALESCE(p.original_created_at, p.created_at)) = $2`,
     [username, `${yyyy}-${mm}-${dd}`]
   );
   return res.rows.map(r => r.shortcode);
@@ -219,7 +224,7 @@ export async function getPostsTodayByClient(client_id) {
     `SELECT *
      FROM insta_post
      WHERE LOWER(client_id) = LOWER($1)
-       AND (created_at AT TIME ZONE 'Asia/Jakarta')::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date
+       AND (COALESCE(original_created_at, created_at) AT TIME ZONE 'Asia/Jakarta')::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date
      ORDER BY created_at ASC`,
     [client_id]
   );
@@ -270,33 +275,34 @@ export async function getPostsByFilters(
   }
 
   const addDateFilter = (addParamFn) => {
-    let filter = "p.created_at::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date";
+    const dateBaseExpr = instaDateBaseExpression('p');
+    let filter = `(${dateBaseExpr} AT TIME ZONE 'Asia/Jakarta')::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date`;
     if (startDate && endDate) {
       const startIdx = addParamFn(startDate);
       const endIdx = addParamFn(endDate);
-      filter = `p.created_at::date BETWEEN ${startIdx}::date AND ${endIdx}::date`;
+      filter = `(${dateBaseExpr} AT TIME ZONE 'Asia/Jakarta')::date BETWEEN ${startIdx}::date AND ${endIdx}::date`;
     } else if (periode === 'semua') {
       filter = '1=1';
     } else if (periode === 'mingguan') {
       if (tanggal) {
         const tanggalIdx = addParamFn(tanggal);
-        filter = `date_trunc('week', p.created_at) = date_trunc('week', ${tanggalIdx}::date)`;
+        filter = `date_trunc('week', ${dateBaseExpr} AT TIME ZONE 'Asia/Jakarta') = date_trunc('week', ${tanggalIdx}::date)`;
       } else {
-        filter = "date_trunc('week', p.created_at) = date_trunc('week', NOW())";
+        filter = `date_trunc('week', ${dateBaseExpr} AT TIME ZONE 'Asia/Jakarta') = date_trunc('week', NOW() AT TIME ZONE 'Asia/Jakarta')`;
       }
     } else if (periode === 'bulanan') {
       if (tanggal) {
         const monthDate = tanggal.length === 7 ? `${tanggal}-01` : tanggal;
         const monthIdx = addParamFn(monthDate);
         filter =
-          `date_trunc('month', p.created_at AT TIME ZONE 'Asia/Jakarta') = date_trunc('month', ${monthIdx}::date)`;
+          `date_trunc('month', ${dateBaseExpr} AT TIME ZONE 'Asia/Jakarta') = date_trunc('month', ${monthIdx}::date)`;
       } else {
         filter =
-          "date_trunc('month', p.created_at AT TIME ZONE 'Asia/Jakarta') = date_trunc('month', NOW() AT TIME ZONE 'Asia/Jakarta')";
+          `date_trunc('month', ${dateBaseExpr} AT TIME ZONE 'Asia/Jakarta') = date_trunc('month', NOW() AT TIME ZONE 'Asia/Jakarta')`;
       }
     } else if (tanggal) {
       const tanggalIdx = addParamFn(tanggal);
-      filter = `p.created_at::date = ${tanggalIdx}::date`;
+      filter = `(${dateBaseExpr} AT TIME ZONE 'Asia/Jakarta')::date = ${tanggalIdx}::date`;
     }
     return filter;
   };
@@ -342,7 +348,7 @@ export async function getPostsByFilters(
       `SELECT DISTINCT ON (p.shortcode) p.*
        FROM insta_post p${joinSql}
        WHERE ${whereSql}
-       ORDER BY p.shortcode, p.created_at ASC`,
+       ORDER BY p.shortcode, COALESCE(p.original_created_at, p.created_at) ASC`,
       params
     );
 
@@ -401,33 +407,34 @@ export async function countPostsByClient(
       : normalizedClientId;
 
   const addDateFilter = (addParamFn) => {
-    let filter = "p.created_at::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date";
+    const dateBaseExpr = instaDateBaseExpression('p');
+    let filter = `(${dateBaseExpr} AT TIME ZONE 'Asia/Jakarta')::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date`;
     if (start_date && end_date) {
       const startIdx = addParamFn(start_date);
       const endIdx = addParamFn(end_date);
-      filter = `p.created_at::date BETWEEN ${startIdx}::date AND ${endIdx}::date`;
+      filter = `(${dateBaseExpr} AT TIME ZONE 'Asia/Jakarta')::date BETWEEN ${startIdx}::date AND ${endIdx}::date`;
     } else if (periode === 'semua') {
       filter = '1=1';
     } else if (periode === 'mingguan') {
       if (tanggal) {
         const tanggalIdx = addParamFn(tanggal);
-        filter = `date_trunc('week', p.created_at) = date_trunc('week', ${tanggalIdx}::date)`;
+        filter = `date_trunc('week', ${dateBaseExpr} AT TIME ZONE 'Asia/Jakarta') = date_trunc('week', ${tanggalIdx}::date)`;
       } else {
-        filter = "date_trunc('week', p.created_at) = date_trunc('week', NOW())";
+        filter = `date_trunc('week', ${dateBaseExpr} AT TIME ZONE 'Asia/Jakarta') = date_trunc('week', NOW() AT TIME ZONE 'Asia/Jakarta')`;
       }
     } else if (periode === 'bulanan') {
       if (tanggal) {
         const monthDate = tanggal.length === 7 ? `${tanggal}-01` : tanggal;
         const monthIdx = addParamFn(monthDate);
         filter =
-          `date_trunc('month', p.created_at AT TIME ZONE 'Asia/Jakarta') = date_trunc('month', ${monthIdx}::date)`;
+          `date_trunc('month', ${dateBaseExpr} AT TIME ZONE 'Asia/Jakarta') = date_trunc('month', ${monthIdx}::date)`;
       } else {
         filter =
-          "date_trunc('month', p.created_at AT TIME ZONE 'Asia/Jakarta') = date_trunc('month', NOW() AT TIME ZONE 'Asia/Jakarta')";
+          `date_trunc('month', ${dateBaseExpr} AT TIME ZONE 'Asia/Jakarta') = date_trunc('month', NOW() AT TIME ZONE 'Asia/Jakarta')`;
       }
     } else if (tanggal) {
       const tanggalIdx = addParamFn(tanggal);
-      filter = `p.created_at::date = ${tanggalIdx}::date`;
+      filter = `(${dateBaseExpr} AT TIME ZONE 'Asia/Jakarta')::date = ${tanggalIdx}::date`;
     }
     return filter;
   };

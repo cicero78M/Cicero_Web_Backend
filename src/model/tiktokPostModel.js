@@ -24,6 +24,11 @@ function normalizeUtcCreatedAt(input) {
   return parsed.toISOString();
 }
 
+function tiktokDateBaseExpression(tableAlias = null) {
+  const prefix = tableAlias ? `${tableAlias}.` : "";
+  return `COALESCE(${prefix}original_created_at, ${prefix}created_at)`;
+}
+
 function jakartaDateCast(columnAlias = "created_at") {
   return `(( ${columnAlias} AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')`;
 }
@@ -72,23 +77,53 @@ export async function upsertTiktokPosts(client_id, posts) {
   if (!Array.isArray(posts)) return;
   for (const post of posts) {
     await query(
-      `INSERT INTO tiktok_post (client_id, video_id, caption, like_count, comment_count, created_at)
-       VALUES ($1, $2, $3, $4, $5, (COALESCE($6::timestamptz, NOW()) AT TIME ZONE 'UTC'))
+      `INSERT INTO tiktok_post (
+         client_id,
+         video_id,
+         caption,
+         like_count,
+         comment_count,
+         created_at,
+         original_created_at,
+         source_type
+       )
+       VALUES (
+         $1,
+         $2,
+         $3,
+         $4,
+         $5,
+         (COALESCE($6::timestamptz, NOW()) AT TIME ZONE 'UTC'),
+         (COALESCE($7::timestamptz, $6::timestamptz) AT TIME ZONE 'UTC'),
+         COALESCE($8, 'cron_fetch')
+       )
        ON CONFLICT (video_id) DO UPDATE
          SET client_id = EXCLUDED.client_id,
              caption = EXCLUDED.caption,
              like_count = EXCLUDED.like_count,
              comment_count = EXCLUDED.comment_count,
-             created_at = EXCLUDED.created_at`,
+             created_at = EXCLUDED.created_at,
+             original_created_at = COALESCE(tiktok_post.original_created_at, EXCLUDED.original_created_at),
+             source_type = CASE
+               WHEN tiktok_post.source_type = 'manual_input' THEN tiktok_post.source_type
+               ELSE EXCLUDED.source_type
+             END`,
       [
         client_id,
         post.video_id || post.id,
         post.desc || post.caption || "",
         post.digg_count ?? post.like_count ?? 0,
         post.comment_count ?? 0,
+        normalizeUtcCreatedAt(post.created_at || null),
         normalizeUtcCreatedAt(
-          post.created_at || post.create_time || post.createTime || null
+          post.original_created_at ||
+            post.create_time ||
+            post.createTime ||
+            post.timestamp ||
+            post.created_at ||
+            null
         ),
+        post.source_type || 'cron_fetch',
       ]
     );
   }
@@ -104,6 +139,8 @@ export async function upsertTiktokPosts(client_id, posts) {
  * @param {number} [payload.like_count]
  * @param {number} [payload.comment_count]
  * @param {Date|string|number} [payload.created_at]
+ * @param {Date|string|number} [payload.original_created_at]
+ * @param {string} [payload.source_type='cron_fetch']
  * @returns {Promise<{ inserted: boolean, updated: boolean }>}
  */
 export async function upsertTiktokPostWithStatus({
@@ -113,19 +150,44 @@ export async function upsertTiktokPostWithStatus({
   like_count,
   comment_count,
   created_at,
+  original_created_at,
+  source_type = 'cron_fetch',
 }) {
   const normalizedVideoId = (video_id || "").trim();
   if (!normalizedVideoId) return { inserted: false, updated: false };
 
   const res = await query(
-    `INSERT INTO tiktok_post (client_id, video_id, caption, like_count, comment_count, created_at)
-     VALUES ($1, $2, $3, $4, $5, (COALESCE($6::timestamptz, NOW()) AT TIME ZONE 'UTC'))
+    `INSERT INTO tiktok_post (
+       client_id,
+       video_id,
+       caption,
+       like_count,
+       comment_count,
+       created_at,
+       original_created_at,
+       source_type
+     )
+     VALUES (
+       $1,
+       $2,
+       $3,
+       $4,
+       $5,
+       (COALESCE($6::timestamptz, NOW()) AT TIME ZONE 'UTC'),
+       (COALESCE($7::timestamptz, $6::timestamptz) AT TIME ZONE 'UTC'),
+       COALESCE($8, 'cron_fetch')
+     )
      ON CONFLICT (video_id) DO UPDATE
        SET client_id = EXCLUDED.client_id,
            caption = EXCLUDED.caption,
            like_count = EXCLUDED.like_count,
            comment_count = EXCLUDED.comment_count,
-           created_at = EXCLUDED.created_at
+           created_at = EXCLUDED.created_at,
+           original_created_at = COALESCE(tiktok_post.original_created_at, EXCLUDED.original_created_at),
+           source_type = CASE
+             WHEN tiktok_post.source_type = 'manual_input' THEN tiktok_post.source_type
+             ELSE EXCLUDED.source_type
+           END
      RETURNING xmax = '0'::xid AS inserted`,
     [
       client_id,
@@ -134,6 +196,8 @@ export async function upsertTiktokPostWithStatus({
       toInteger(like_count) ?? 0,
       toInteger(comment_count) ?? 0,
       normalizeUtcCreatedAt(created_at || null),
+      normalizeUtcCreatedAt(original_created_at || created_at || null),
+      source_type || 'cron_fetch',
     ]
   );
 
@@ -152,7 +216,7 @@ export async function getVideoIdsTodayByClient(client_id, referenceDate) {
   const res = await query(
     `SELECT video_id FROM tiktok_post
      WHERE LOWER(TRIM(client_id)) = $1
-     AND ${jakartaDateCast("created_at")}::date = $2::date`,
+     AND ${jakartaDateCast(tiktokDateBaseExpression())}::date = $2::date`,
     [normalizedId, targetDate]
   );
   return res.rows.map((r) => r.video_id);
@@ -168,8 +232,8 @@ export async function getPostsTodayByClient(client_id, referenceDate) {
   const targetDate = resolveJakartaDate(referenceDate);
   const res = await query(
     `SELECT * FROM tiktok_post WHERE LOWER(TRIM(client_id)) = $1 AND ${jakartaDateCast(
-      "created_at"
-    )}::date = $2::date ORDER BY created_at ASC, video_id ASC`,
+      tiktokDateBaseExpression()
+    )}::date = $2::date ORDER BY COALESCE(original_created_at, created_at) ASC, video_id ASC`,
     [normalizedId, targetDate]
   );
   return res.rows;
@@ -215,8 +279,8 @@ export async function getPostsByClientAndDateRange(client_id, startDate, endDate
   const res = await query(
     `SELECT * FROM tiktok_post
      WHERE LOWER(TRIM(client_id)) = $1
-       AND ${jakartaDateCast("created_at")}::date BETWEEN $2::date AND $3::date
-     ORDER BY created_at DESC`,
+       AND ${jakartaDateCast(tiktokDateBaseExpression())}::date BETWEEN $2::date AND $3::date
+     ORDER BY COALESCE(original_created_at, created_at) DESC`,
     [normalizedId, startStr, endStr]
   );
   return res.rows;
@@ -250,7 +314,7 @@ export async function countPostsByClient(
     : null;
 
   const addDateFilter = (addParamFn) => {
-    const jakartaColumn = jakartaDateCast("p.created_at");
+    const jakartaColumn = jakartaDateCast(tiktokDateBaseExpression('p'));
     const nowJakarta = "(NOW() AT TIME ZONE 'Asia/Jakarta')";
     let filter = `${jakartaColumn}::date = ${nowJakarta}::date`;
     if (start_date && end_date) {
