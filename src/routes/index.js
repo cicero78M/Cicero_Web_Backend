@@ -21,6 +21,7 @@ import premiumRequestRoutes from './premiumRequestRoutes.js';
 import likesRoutes from './likesRoutes.js';
 import userRolesRoutes from './userRolesRoutes.js';
 import instagramRoutes from './instagramRoutes.js';
+import commentsRoutes from './commentsRoutes.js';
 import dashboardPremiumRequestRoutes from './dashboardPremiumRequestRoutes.js';
 
 const router = express.Router();
@@ -34,6 +35,7 @@ router.use("/instagram", instagramRoutes);
 router.use("/tiktok", tiktokRoutes);
 router.use("/aggregator", aggregatorRoutes);
 router.use('/likes', likesRoutes);
+router.use('/comments', commentsRoutes);
 router.use('/quotes', quoteRoutes);
 router.use('/oauth', oauthRoutes);
 router.use('/metadata', metaRoutes);

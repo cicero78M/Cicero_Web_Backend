@@ -7,6 +7,9 @@ client tertentu.
 
 `GET /api/tiktok/rekap-komentar`
 
+Alias kompatibilitas frontend juga tersedia di `GET /api/comments/tiktok`
+dengan handler, autentikasi, dan payload yang sama.
+
 ## Authentication
 
 Endpoint ini menerima **dua** jenis token:
@@ -23,7 +26,7 @@ Perilaku `role`/`scope` tetap sama dengan logic di controller:
 `role` default ke `req.user.role`, dan kombinasi `role=operator` + `scope=org` akan menggunakan `req.user.client_id` sebagai sumber `client_id`.
 
 **Operator allowlist (authRequired):**
-- Endpoint ini termasuk allowlist operator dengan path **exact** `/tiktok/rekap-komentar`.
+- Endpoint ini termasuk allowlist operator dengan path **exact** `/tiktok/rekap-komentar` dan `/comments/tiktok`.
 - Pencocokan dilakukan secara exact terhadap `req.path`, sehingga subpath seperti `/tiktok/rekap-komentar/summary` **tidak** otomatis diizinkan.
 
 ### Query Parameters
