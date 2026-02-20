@@ -5,6 +5,10 @@ import { query } from "../../db/index.js";
 import { sendDebug } from "../../middleware/debugHandler.js";
 import { fetchAllTiktokComments } from "../../service/tiktokApi.js";
 import { saveCommentSnapshotAudit } from "../../model/tiktokCommentModel.js";
+import {
+  extractUsernamesFromCommentTree,
+  normalizeTiktokCommentUsername,
+} from "../../utils/tiktokCommentUsernameExtractor.js";
 
 const MAX_COMMENT_FETCH_ATTEMPTS = 3;
 const COMMENT_FETCH_RETRY_DELAY_MS = 2000;
@@ -18,12 +22,6 @@ const limit = pLimit(3); // atur parallel fetch sesuai kebutuhan
 
 function normalizeClientId(id) {
   return typeof id === "string" ? id.trim().toLowerCase() : id;
-}
-
-function normalizeUsername(uname) {
-  if (typeof uname !== "string" || uname.length === 0) return null;
-  const lower = uname.trim().toLowerCase();
-  return lower.startsWith("@") ? lower : `@${lower}`;
 }
 
 function normalizeDateInput(value) {
@@ -54,27 +52,6 @@ function resolveSnapshotWindow(windowOverrides = {}) {
  * Return: array komentar (object asli dari API)
  */
 
-/**
- * Ekstrak & normalisasi username dari array objek komentar TikTok.
- * Diprioritaskan dari: user.unique_id, fallback: username (kalau ada)
- * Return: array string username unik (lowercase, diawali @)
- */
-function extractUniqueUsernamesFromComments(commentsArr) {
-  const usernames = [];
-  for (const c of commentsArr) {
-    let uname = null;
-    if (c && c.user && typeof c.user.unique_id === "string") {
-      uname = c.user.unique_id;
-    } else if (c && typeof c.username === "string") {
-      uname = c.username;
-    }
-    const normalized = normalizeUsername(uname);
-    if (normalized) usernames.push(normalized);
-  }
-  // Unikkan username (no duplicate)
-  return [...new Set(usernames)];
-}
-
 // Ambil komentar lama (existing) dari DB (username string array)
 async function getExistingUsernames(video_id) {
   const res = await query(
@@ -84,7 +61,7 @@ async function getExistingUsernames(video_id) {
   if (res.rows.length && Array.isArray(res.rows[0].comments)) {
     // pastikan string array
     return res.rows[0].comments
-      .map((u) => normalizeUsername(u))
+      .map((u) => normalizeTiktokCommentUsername(u))
       .filter(Boolean);
   }
   return [];
@@ -115,21 +92,26 @@ async function upsertTiktokUserComments(video_id, usernamesArr) {
  */
 export async function handleFetchKomentarTiktokBatch(waClient = null, chatId = null, client_id = null, options = {}) {
   try {
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, "0");
-    const dd = String(today.getDate()).padStart(2, "0");
+    const todayWib = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Jakarta",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
     const normalizedId = normalizeClientId(client_id);
     const { rows } = await query(
-      `SELECT video_id FROM tiktok_post WHERE LOWER(TRIM(client_id)) = $1 AND DATE(created_at) = $2`,
-      [normalizedId, `${yyyy}-${mm}-${dd}`]
+      `SELECT video_id
+       FROM tiktok_post
+       WHERE LOWER(TRIM(client_id)) = $1
+         AND DATE((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta') = $2`,
+      [normalizedId, todayWib]
     );
     const videoIds = rows.map((r) => r.video_id);
     const excRes = await query(
       `SELECT tiktok FROM "user" WHERE exception = true AND tiktok IS NOT NULL`
     );
     const exceptionUsernames = excRes.rows
-      .map((r) => normalizeUsername(r.tiktok))
+      .map((r) => normalizeTiktokCommentUsername(r.tiktok))
       .filter(Boolean);
     sendDebug({
       tag: "TTK COMMENT",
@@ -162,12 +144,15 @@ export async function handleFetchKomentarTiktokBatch(waClient = null, chatId = n
       capturedAt: options.capturedAt || options.snapshotWindow?.capturedAt,
     });
 
-    let sukses = 0, gagal = 0;
-    for (const video_id of videoIds) {
-      await limit(async () => {
-        try {
+    const videoResults = await Promise.all(
+      videoIds.map((video_id) =>
+        limit(async () => {
+          const videoStart = Date.now();
+          let lastAttempt = 0;
           let commentsToday = null;
+
           for (let attempt = 1; attempt <= MAX_COMMENT_FETCH_ATTEMPTS; attempt++) {
+            lastAttempt = attempt;
             try {
               commentsToday = await fetchAllTiktokComments(video_id);
               break;
@@ -182,15 +167,14 @@ export async function handleFetchKomentarTiktokBatch(waClient = null, chatId = n
               await delay(waitMs);
             }
           }
+
           commentsToday = commentsToday || [];
-          const uniqueUsernames = extractUniqueUsernamesFromComments(commentsToday);
+          const uniqueUsernames = extractUsernamesFromCommentTree(commentsToday);
           const allUsernames = [
             ...new Set([...uniqueUsernames, ...exceptionUsernames]),
           ];
-          const mergedUsernames = await upsertTiktokUserComments(
-            video_id,
-            allUsernames
-          );
+          const mergedUsernames = await upsertTiktokUserComments(video_id, allUsernames);
+
           try {
             await saveCommentSnapshotAudit({
               video_id,
@@ -211,22 +195,28 @@ export async function handleFetchKomentarTiktokBatch(waClient = null, chatId = n
               client_id: video_id,
             });
           }
-          sukses++;
+
+          const durationMs = Date.now() - videoStart;
           sendDebug({
             tag: "TTK COMMENT MERGE",
-            msg: `Video ${video_id}: Berhasil simpan/merge komentar (${mergedUsernames.length} username unik)`,
-            client_id: video_id
+            msg: `Video ${video_id}: Berhasil simpan/merge komentar (${mergedUsernames.length} username unik, ${lastAttempt} attempt, ${durationMs} ms)`,
+            client_id: video_id,
           });
-        } catch (err) {
+
+          return { status: "fulfilled", video_id };
+        }).catch((err) => {
           sendDebug({
             tag: "TTK COMMENT ERROR",
             msg: `Gagal fetch/merge video ${video_id}: ${(err && err.message) || String(err)}`,
-            client_id: video_id
+            client_id: video_id,
           });
-          gagal++;
-        }
-      });
-    }
+          return { status: "rejected", video_id };
+        })
+      )
+    );
+
+    const sukses = videoResults.filter((result) => result.status === "fulfilled").length;
+    const gagal = videoResults.length - sukses;
 
     if (waClient && chatId) {
       await waClient.sendMessage(

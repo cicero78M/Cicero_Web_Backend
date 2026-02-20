@@ -3,6 +3,12 @@
 Endpoint `getTiktokRekapKomentar` mengembalikan rekap komentar TikTok untuk
 client tertentu.
 
+Perhitungan komentar pada pipeline TikTok mencakup seluruh node komentar dalam
+tree (komentar level atas **dan** nested replies seperti `replies`,
+`reply_comment`, `reply_comments`, dan variasi field nested lain yang setara).
+Dengan demikian, rekap `jumlah_komentar` merepresentasikan partisipasi user pada
+seluruh percakapan komentar, bukan hanya komentar top-level.
+
 ## Request
 
 `GET /api/tiktok/rekap-komentar`
