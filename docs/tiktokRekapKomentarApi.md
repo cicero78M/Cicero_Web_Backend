@@ -198,12 +198,17 @@ ke regional yang sama saat `regional_id` disediakan.
 
 ## Basis Tanggal & Zona Waktu
 
-Untuk menghindari selisih hari antara data komentar dan post, seluruh percabangan
-filter tanggal (`harian`, `mingguan`, `bulanan`, dan `start_date/end_date`) di level
-model memakai basis waktu lokal **Asia/Jakarta** dari field sumber berikut:
+Untuk menjaga konsistensi numerator (`valid_comments`) dan denominator
+(`total_posts`), seluruh percabangan filter tanggal (`harian`, `mingguan`,
+`bulanan`, dan `start_date/end_date`) di level model memakai basis waktu lokal
+**Asia/Jakarta** dari **tanggal post/konten**:
 
-- Komentar: `((c.updated_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')`
-- Post: `((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')`
+- Komentar (`valid_comments`): `((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')`
+- Total konten (`total_posts`): `((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')`
+
+Dengan demikian, perubahan `tiktok_comment.updated_at` akibat proses sinkronisasi/
+refresh komentar tidak memindahkan data komentar ke periode harian, mingguan,
+atau bulanan yang berbeda.
 
 Khusus fallback `periode=mingguan` tanpa parameter `tanggal`, pembanding minggu
 menggunakan `NOW() AT TIME ZONE 'Asia/Jakarta'` agar konsisten dengan zona lokal.
