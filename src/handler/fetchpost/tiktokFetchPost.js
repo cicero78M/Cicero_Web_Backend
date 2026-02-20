@@ -151,7 +151,9 @@ export async function fetchAndStoreSingleTiktokPost(clientId, videoInput) {
   const postPayload = {
     video_id: detail?.id || detail?.video_id || videoId,
     caption: detail?.desc || detail?.caption || "",
-    created_at: createdAt,
+    created_at: new Date(),
+    original_created_at: createdAt,
+    source_type: 'manual_input',
     like_count: likeCount,
     comment_count: commentCount,
   };
@@ -168,7 +170,8 @@ export async function fetchAndStoreSingleTiktokPost(clientId, videoInput) {
     clientId: dbClientId,
     videoId: postPayload.video_id,
     caption: postPayload.caption,
-    createdAt,
+    createdAt: createdAt || null,
+    systemCreatedAt: postPayload.created_at,
     likeCount,
     commentCount,
   };
@@ -182,7 +185,7 @@ async function getVideoIdsToday(clientId = null) {
     timeZone: "Asia/Jakarta",
   });
   let sql =
-    "SELECT video_id FROM tiktok_post WHERE DATE((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta') = $1";
+    "SELECT video_id FROM tiktok_post WHERE DATE((COALESCE(original_created_at, created_at) AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta') = $1";
   const params = [todayJakarta];
   if (clientId) {
     sql += ` AND LOWER(TRIM(client_id)) = $2`;
@@ -198,7 +201,7 @@ async function deleteVideoIds(videoIdsToDelete, clientId = null) {
     timeZone: "Asia/Jakarta",
   });
   let sql =
-    "DELETE FROM tiktok_post WHERE video_id = ANY($1) AND DATE((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta') = $2";
+    "DELETE FROM tiktok_post WHERE video_id = ANY($1) AND DATE((COALESCE(original_created_at, created_at) AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta') = $2";
   const params = [videoIdsToDelete, todayJakarta];
   if (clientId) {
     sql += ` AND LOWER(TRIM(client_id)) = $3`;
@@ -479,7 +482,7 @@ export async function fetchAndStoreTiktokContent(
     timeZone: "Asia/Jakarta",
   });
   let kontenHariIniSql =
-    "SELECT video_id, client_id, created_at FROM tiktok_post WHERE DATE((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta') = $1";
+    "SELECT video_id, client_id, created_at FROM tiktok_post WHERE DATE((COALESCE(original_created_at, created_at) AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta') = $1";
   const kontenParams = [todayJakarta];
   if (targetClientId) {
     kontenHariIniSql += ` AND LOWER(TRIM(client_id)) = $2`;

@@ -356,7 +356,7 @@ export async function getRekapKomentarByClient(
     tanggalFilter = `__DATE_FIELD__::date = $${idx}::date`;
   }
 
-  const postDateField = "((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')";
+  const postDateField = "((COALESCE(p.original_created_at, p.created_at) AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')";
   const commentDateField = postDateField;
   const commentTanggalFilter = tanggalFilter.replaceAll(
     "__DATE_FIELD__",

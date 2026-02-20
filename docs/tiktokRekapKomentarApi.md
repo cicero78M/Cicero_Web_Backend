@@ -147,6 +147,25 @@ Example:
 
 **Catatan operator:** saat endpoint ini dipakai untuk menu *Absensi Komentar TikTok* di WhatsApp, mode akumulasi menampilkan grouping per satfung dengan sub-list **lengkap/kurang/belum**. Urutan personel di dalam list mengikuti prioritas pangkat berikut: AKP (jabatan Kasat didahulukan), IPTU, IPDA, AIPTU, AIPDA, BRIPKA, BRIGADIR, BRIPTU, BRIPDA, PENATA, PENGATUR TINGKAT I, PENGATUR MUDA TINGKAT I, PENGATUR, JURU, PPPK, PHL.
 
+
+## Sumber Data Post TikTok (`source_type`)
+
+Mulai skema terbaru, data `tiktok_post` menyimpan metadata sumber:
+
+- `source_type='cron_fetch'` (default): post berasal dari proses fetch otomatis/cron.
+- `source_type='manual_input'`: post berasal dari endpoint/manual fetch satu konten.
+
+Perilaku timestamp:
+
+- `original_created_at`: waktu publikasi asli konten di platform TikTok (jika tersedia dari API).
+- `created_at`: waktu data masuk/diinput ke sistem backend.
+
+Pada manual fetch satu konten (`fetchAndStoreSingleTiktokPost`), backend menyimpan:
+
+- `source_type='manual_input'`,
+- `original_created_at` dari timestamp platform (`createTime/create_time/timestamp`),
+- `created_at` dari waktu input sistem saat request diproses.
+
 ## Scope Handling
 
 Ketika `role` dan `scope` dikirim, filter mengikuti aturan berikut:
@@ -209,8 +228,8 @@ Untuk menjaga konsistensi numerator (`valid_comments`) dan denominator
 `bulanan`, dan `start_date/end_date`) di level model memakai basis waktu lokal
 **Asia/Jakarta** dari **tanggal post/konten**:
 
-- Komentar (`valid_comments`): `((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')`
-- Total konten (`total_posts`): `((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')`
+- Komentar (`valid_comments`): `((COALESCE(p.original_created_at, p.created_at) AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')`
+- Total konten (`total_posts`): `((COALESCE(p.original_created_at, p.created_at) AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')`
 
 Dengan demikian, perubahan `tiktok_comment.updated_at` akibat proses sinkronisasi/
 refresh komentar tidak memindahkan data komentar ke periode harian, mingguan,
