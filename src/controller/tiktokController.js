@@ -230,7 +230,7 @@ export async function getTiktokRekapKomentar(req, res) {
         postRoleFilterMode:
           resolvedScope === 'direktorat' ? 'include_client_or_role' : undefined,
         userRegionalId: regionalId,
-        postRegionalId: resolvedScope === 'direktorat' ? null : regionalId,
+        postRegionalId: regionalId,
       };
       roleForQuery = resolvedRole;
     }

@@ -184,17 +184,17 @@ disaring dengan aturan yang konsisten dengan dashboard stats:
 
 ## Regional Filter
 
-Filter regional sekarang dipisah antara sumber personil dan visibilitas post:
+Filter regional diterapkan konsisten untuk sumber personil **dan** post:
 
-- **Personil (`userWhere`)** tetap menggunakan `regional_id` ketika parameter dikirim.
-- **Post (`postRegionalFilter`)** menggunakan `regional_id` secara default pada scope non-direktorat.
-- Untuk `scope=direktorat` (mode query `postRoleFilterMode=include_client_or_role`),
-  filter regional post bersifat opsional dan secara default **tidak dipaksakan**,
-  sehingga post yang ditandai role direktorat tetap muncul walaupun `client_id`
-  post berasal dari regional berbeda.
+- **Personil (`userWhere`)** menggunakan `regional_id` ketika parameter dikirim.
+- **Post (`postRegionalFilter`)** juga menggunakan `regional_id` yang sama, termasuk saat
+  `scope=direktorat` (mode query `postRoleFilterMode=include_client_or_role`).
+- Implementasi SQL filter post dilakukan lewat join `clients cp` pada CTE
+  `valid_comments` dan `total_posts`, lalu disaring dengan
+  `UPPER(cp.regional_id) = UPPER($regionalParam)`.
 
-Perilaku ini menjaga agar rekap direktorat tetap global untuk data tugas berbasis role,
-sementara filter regional personil tetap konsisten untuk pembatasan daftar akun.
+Dengan demikian, pada `scope=direktorat`, rekap final membatasi **post + personil**
+ke regional yang sama saat `regional_id` disediakan.
 
 ## Basis Tanggal & Zona Waktu
 
