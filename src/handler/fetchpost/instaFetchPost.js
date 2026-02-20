@@ -14,41 +14,42 @@ const ADMIN_WHATSAPP = (process.env.ADMIN_WHATSAPP || "")
   .filter(Boolean);
 
 const limit = pLimit(6);
+const MAX_FETCH_LIMIT = 50;
+
+function getTodayWibDateString() {
+  return new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Jakarta",
+  });
+}
 
 /**
  * Utility: Cek apakah unixTimestamp adalah hari ini (Asia/Jakarta)
  */
 function isTodayJakarta(unixTimestamp) {
   if (!unixTimestamp) return false;
-  
-  // Convert Unix timestamp to Date object
   const postDate = new Date(unixTimestamp * 1000);
-  
-  // Get the date string in Jakarta timezone (format: YYYY-MM-DD)
   const postDateJakarta = postDate.toLocaleDateString("en-CA", {
     timeZone: "Asia/Jakarta",
   });
-  
-  // Get today's date string in Jakarta timezone (format: YYYY-MM-DD)
-  const todayJakarta = new Date().toLocaleDateString("en-CA", {
-    timeZone: "Asia/Jakarta",
-  });
-  
-  // Compare the date strings directly
+  const todayJakarta = getTodayWibDateString();
   return postDateJakarta === todayJakarta;
 }
 
 async function getShortcodesToday(clientId = null) {
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, "0");
-  const dd = String(today.getDate()).padStart(2, "0");
-  let sql = `SELECT shortcode FROM insta_post WHERE DATE(created_at) = $1`;
-  const params = [`${yyyy}-${mm}-${dd}`];
+  const todayWib = getTodayWibDateString();
+  const params = [todayWib];
+  let sql = `
+    SELECT DISTINCT p.shortcode
+    FROM insta_post p
+    LEFT JOIN insta_post_clients pc ON pc.shortcode = p.shortcode
+    WHERE (COALESCE(p.original_created_at, p.created_at) AT TIME ZONE 'Asia/Jakarta')::date = $1::date
+  `;
+
   if (clientId) {
-    sql += ` AND client_id = $2`;
     params.push(clientId);
+    sql += ` AND pc.client_id = $2`;
   }
+
   const res = await query(sql, params);
   return res.rows.map((r) => r.shortcode);
 }
@@ -60,29 +61,97 @@ async function tableExists(tableName) {
   return Boolean(res.rows[0]?.table_name);
 }
 
-async function deleteShortcodes(shortcodesToDelete, clientId = null) {
-  if (!shortcodesToDelete.length) return;
-  // ig_ext_posts rows cascade when insta_post entries are deleted
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, "0");
-  const dd = String(today.getDate()).padStart(2, "0");
-  let sql =
-    `DELETE FROM insta_post WHERE shortcode = ANY($1) AND DATE(created_at) = $2`;
-  const params = [shortcodesToDelete, `${yyyy}-${mm}-${dd}`];
-  if (clientId) {
-    sql += ` AND client_id = $3`;
-    params.push(clientId);
+function shouldSkipDeleteGuard({ dbCount, fetchedCount, deleteCount, rawCount }) {
+  if (!deleteCount) return { skip: true, reason: "Tidak ada kandidat delete" };
+
+  const maxDeletePerClient = Number.parseInt(
+    process.env.IG_SAFE_DELETE_MAX_PER_CLIENT || "10",
+    10
+  );
+  if (Number.isFinite(maxDeletePerClient) && deleteCount > maxDeletePerClient) {
+    return {
+      skip: true,
+      reason: `Kandidat delete ${deleteCount} melebihi threshold client ${maxDeletePerClient}`,
+    };
   }
+
+  if (dbCount > 0 && fetchedCount === 0) {
+    return {
+      skip: true,
+      reason: "Indikasi partial response: hasil fetch hari ini kosong",
+    };
+  }
+
+  if (rawCount >= MAX_FETCH_LIMIT) {
+    return {
+      skip: true,
+      reason: "Indikasi partial response: response menyentuh batas limit fetch",
+    };
+  }
+
+  const drasticDropRatio = Number.parseFloat(
+    process.env.IG_SAFE_DELETE_DRASTIC_DROP_RATIO || "0.5"
+  );
+  const minimumBaseline = Number.parseInt(
+    process.env.IG_SAFE_DELETE_MIN_BASELINE || "5",
+    10
+  );
+  const dropRatio = dbCount > 0 ? deleteCount / dbCount : 0;
+
+  if (
+    Number.isFinite(drasticDropRatio) &&
+    dbCount >= minimumBaseline &&
+    dropRatio >= drasticDropRatio
+  ) {
+    return {
+      skip: true,
+      reason: `Indikasi drastic drop ${(dropRatio * 100).toFixed(2)}% dari baseline ${dbCount}`,
+    };
+  }
+
+  return { skip: false, reason: null };
+}
+
+async function deleteShortcodes(shortcodesToDelete, clientId = null) {
+  if (!shortcodesToDelete.length || !clientId) return;
+
+  const todayWib = getTodayWibDateString();
+
+  await query(
+    `DELETE FROM insta_post_clients pc
+     USING insta_post p
+     WHERE pc.shortcode = p.shortcode
+       AND pc.client_id = $1
+       AND pc.shortcode = ANY($2)
+       AND p.source_type = 'cron_fetch'
+       AND (COALESCE(p.original_created_at, p.created_at) AT TIME ZONE 'Asia/Jakarta')::date = $3::date`,
+    [clientId, shortcodesToDelete, todayWib]
+  );
+
+  const deletableRes = await query(
+    `SELECT p.shortcode
+     FROM insta_post p
+     WHERE p.shortcode = ANY($1)
+       AND p.source_type = 'cron_fetch'
+       AND (COALESCE(p.original_created_at, p.created_at) AT TIME ZONE 'Asia/Jakarta')::date = $2::date
+       AND NOT EXISTS (
+         SELECT 1 FROM insta_post_clients pc WHERE pc.shortcode = p.shortcode
+       )`,
+    [shortcodesToDelete, todayWib]
+  );
+
+  const deletableShortcodes = deletableRes.rows.map((row) => row.shortcode);
+  if (!deletableShortcodes.length) return;
+
   await query(`DELETE FROM insta_like_audit WHERE shortcode = ANY($1)`, [
-    shortcodesToDelete,
+    deletableShortcodes,
   ]);
   await query(`DELETE FROM insta_like WHERE shortcode = ANY($1)`, [
-    shortcodesToDelete,
+    deletableShortcodes,
   ]);
   if (await tableExists("insta_comment")) {
     await query(`DELETE FROM insta_comment WHERE shortcode = ANY($1)`, [
-      shortcodesToDelete,
+      deletableShortcodes,
     ]);
   } else {
     sendDebug({
@@ -90,7 +159,10 @@ async function deleteShortcodes(shortcodesToDelete, clientId = null) {
       msg: "Skip delete from insta_comment: table not found.",
     });
   }
-  await query(sql, params);
+
+  await query(`DELETE FROM insta_post WHERE shortcode = ANY($1)`, [
+    deletableShortcodes,
+  ]);
 }
 
 async function getEligibleClients() {
@@ -149,7 +221,7 @@ export async function fetchAndStoreInstaContent(
 
   for (const client of clientsToFetch) {
     const dbShortcodesToday = await getShortcodesToday(client.id);
-    let fetchedShortcodesToday = [];
+    const fetchedShortcodesToday = new Set();
     let hasSuccessfulFetch = false;
     const username = client.client_insta;
     let postsRes;
@@ -158,7 +230,7 @@ export async function fetchAndStoreInstaContent(
         tag: "IG FETCH",
         msg: `Fetch posts for client: ${client.id} / @${username}`
       });
-      postsRes = await limit(() => fetchInstagramPosts(username, 50));
+      postsRes = await limit(() => fetchInstagramPosts(username, MAX_FETCH_LIMIT));
       sendDebug({
         tag: "IG FETCH",
         msg: `RapidAPI posts fetched: ${postsRes.length}`,
@@ -172,15 +244,17 @@ export async function fetchAndStoreInstaContent(
       });
       continue;
     }
-    // ==== FILTER HANYA KONTEN YANG DI-POST HARI INI ====
+
     const items = Array.isArray(postsRes)
       ? postsRes.filter((post) => isTodayJakarta(post.taken_at))
       : [];
+
     sendDebug({
       tag: "IG FETCH",
       msg: `Jumlah post IG HARI INI SAJA: ${items.length}`,
       client_id: client.id
     });
+
     if (items.length > 0) hasSuccessfulFetch = true;
 
     for (const post of items) {
@@ -217,29 +291,45 @@ export async function fetchAndStoreInstaContent(
             : null,
       };
 
-      fetchedShortcodesToday.push(toSave.shortcode);
+      fetchedShortcodesToday.add(toSave.shortcode);
 
-      // UPSERT ke DB: update jika sudah ada (berdasarkan shortcode)
       sendDebug({
         tag: "IG FETCH",
         msg: `[DB] Upsert IG post: ${toSave.shortcode}`,
         client_id: client.id
       });
+
       await query(
-        `INSERT INTO insta_post (client_id, shortcode, caption, comment_count, like_count, thumbnail_url, is_video, video_url, image_url, images_url, is_carousel, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,to_timestamp($12))
+        `INSERT INTO insta_post (
+           client_id, shortcode, caption, comment_count, like_count, thumbnail_url,
+           is_video, video_url, image_url, images_url, is_carousel,
+           source_type, original_created_at, created_at
+         )
+         VALUES (
+           $1,$2,$3,$4,$5,$6,
+           $7,$8,$9,$10,$11,
+           'cron_fetch',to_timestamp($12),NOW()
+         )
          ON CONFLICT (shortcode) DO UPDATE
-          SET client_id = EXCLUDED.client_id,
-              caption = EXCLUDED.caption,
-              comment_count = EXCLUDED.comment_count,
-              like_count = EXCLUDED.like_count,
-              thumbnail_url = EXCLUDED.thumbnail_url,
-              is_video = EXCLUDED.is_video,
-              video_url = EXCLUDED.video_url,
-              image_url = EXCLUDED.image_url,
-              images_url = EXCLUDED.images_url,
-              is_carousel = EXCLUDED.is_carousel,
-             created_at = to_timestamp($12)`,
+         SET client_id = EXCLUDED.client_id,
+             caption = EXCLUDED.caption,
+             comment_count = EXCLUDED.comment_count,
+             like_count = EXCLUDED.like_count,
+             thumbnail_url = EXCLUDED.thumbnail_url,
+             is_video = EXCLUDED.is_video,
+             video_url = EXCLUDED.video_url,
+             image_url = EXCLUDED.image_url,
+             images_url = EXCLUDED.images_url,
+             is_carousel = EXCLUDED.is_carousel,
+             source_type = CASE
+               WHEN insta_post.source_type = 'manual_input' THEN insta_post.source_type
+               ELSE EXCLUDED.source_type
+             END,
+             original_created_at = COALESCE(insta_post.original_created_at, EXCLUDED.original_created_at),
+             created_at = CASE
+               WHEN insta_post.source_type = 'manual_input' THEN insta_post.created_at
+               ELSE NOW()
+             END`,
         [
           toSave.client_id,
           toSave.shortcode,
@@ -255,13 +345,20 @@ export async function fetchAndStoreInstaContent(
           post.taken_at,
         ]
       );
+
+      await query(
+        `INSERT INTO insta_post_clients (shortcode, client_id)
+         VALUES ($1, $2)
+         ON CONFLICT (shortcode, client_id) DO NOTHING`,
+        [toSave.shortcode, client.id]
+      );
+
       sendDebug({
         tag: "IG FETCH",
         msg: `[DB] Sukses upsert IG post: ${toSave.shortcode}`,
         client_id: client.id
       });
 
-      // store extended post data
       try {
         await savePostWithMedia(post);
       } catch (err) {
@@ -269,18 +366,32 @@ export async function fetchAndStoreInstaContent(
       }
     }
 
-    // Hapus konten hari ini yang sudah tidak ada di hasil fetch hari ini
     const shortcodesToDelete = dbShortcodesToday.filter(
-      (x) => !fetchedShortcodesToday.includes(x)
+      (x) => !fetchedShortcodesToday.has(x)
     );
 
     if (hasSuccessfulFetch) {
-      sendDebug({
-        tag: "IG SYNC",
-        msg: `Akan menghapus shortcodes yang tidak ada hari ini: jumlah=${shortcodesToDelete.length}`,
-        client_id: client.id
+      const safeDelete = shouldSkipDeleteGuard({
+        dbCount: dbShortcodesToday.length,
+        fetchedCount: fetchedShortcodesToday.size,
+        deleteCount: shortcodesToDelete.length,
+        rawCount: Array.isArray(postsRes) ? postsRes.length : 0,
       });
-      await deleteShortcodes(shortcodesToDelete, client.id);
+
+      if (safeDelete.skip) {
+        sendDebug({
+          tag: "IG SYNC",
+          msg: `Safe-delete skip untuk client ${client.id}: ${safeDelete.reason}`,
+          client_id: client.id,
+        });
+      } else {
+        sendDebug({
+          tag: "IG SYNC",
+          msg: `Akan menghapus shortcodes yang tidak ada hari ini: jumlah=${shortcodesToDelete.length}`,
+          client_id: client.id
+        });
+        await deleteShortcodes(shortcodesToDelete, client.id);
+      }
     } else {
       sendDebug({
         tag: "IG SYNC",
@@ -289,34 +400,33 @@ export async function fetchAndStoreInstaContent(
       });
     }
 
-    // Hitung jumlah konten hari ini untuk summary
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, "0");
-    const dd = String(today.getDate()).padStart(2, "0");
-      const countRes = await query(
-        `SELECT shortcode FROM insta_post WHERE client_id = $1 AND DATE(created_at) = $2`,
-        [client.id, `${yyyy}-${mm}-${dd}`]
-      );
-    summary[client.id] = { count: countRes.rows.length };
+    const countRes = await query(
+      `SELECT COUNT(DISTINCT p.shortcode) AS total
+       FROM insta_post p
+       JOIN insta_post_clients pc ON pc.shortcode = p.shortcode
+       WHERE pc.client_id = $1
+         AND (COALESCE(p.original_created_at, p.created_at) AT TIME ZONE 'Asia/Jakarta')::date = $2::date`,
+      [client.id, getTodayWibDateString()]
+    );
+    summary[client.id] = { count: Number(countRes.rows[0]?.total || 0) };
   }
 
   processing = false;
   clearInterval(intervalId);
 
-  // Ringkasan WA/console
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, "0");
-  const dd = String(today.getDate()).padStart(2, "0");
+  const todayWib = getTodayWibDateString();
 
   let sumSql =
-    `SELECT shortcode, created_at FROM insta_post WHERE DATE(created_at) = $1`;
-  const sumParams = [`${yyyy}-${mm}-${dd}`];
+    `SELECT DISTINCT p.shortcode
+     FROM insta_post p
+     LEFT JOIN insta_post_clients pc ON pc.shortcode = p.shortcode
+     WHERE (COALESCE(p.original_created_at, p.created_at) AT TIME ZONE 'Asia/Jakarta')::date = $1::date`;
+  const sumParams = [todayWib];
   if (targetClientId) {
-    sumSql += ` AND client_id = $2`;
+    sumSql += ` AND pc.client_id = $2`;
     sumParams.push(targetClientId);
   }
+
   const kontenHariIniRes = await query(sumSql, sumParams);
   const kontenLinksToday = kontenHariIniRes.rows.map(
     (r) => `https://www.instagram.com/p/${r.shortcode}`
@@ -325,7 +435,7 @@ export async function fetchAndStoreInstaContent(
   let msg = `✅ Fetch selesai!`;
   if (targetClientId) msg += `\nClient: *${targetClientId}*`;
   msg += `\nJumlah konten hari ini: *${kontenLinksToday.length}*`;
-  let maxPerMsg = 30;
+  const maxPerMsg = 30;
   const totalMsg = Math.ceil(kontenLinksToday.length / maxPerMsg);
 
   if (waClient && (chatId || ADMIN_WHATSAPP.length)) {
@@ -379,7 +489,7 @@ export async function fetchSinglePostKhusus(linkOrCode, clientId) {
       : null,
     is_carousel: Array.isArray(info.carousel_media) && info.carousel_media.length > 1,
     created_at: info.taken_at ? new Date(info.taken_at * 1000).toISOString() : null
-  }; 
+  };
   await upsertInstaPostKhusus(data);
   try {
     await savePostWithMedia(info);
