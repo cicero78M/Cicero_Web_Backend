@@ -202,7 +202,3 @@ Jika `regional_id` dikirim, data post dan personil hanya akan dihitung untuk cli
 The `GET /likes/instagram` endpoint returns the same payload as above but
 always aggregates data for users with the `ditbinmas` role. It does not require
 `client_id` and ignores the authenticated user's role and client filters.
-
-Untuk kompatibilitas dashboard operator, path `/likes/instagram` sekarang
-masuk allowlist exact di middleware `authRequired`. Ini mencegah request
-operator ditolak 403 saat membuka halaman rekap likes Instagram.
