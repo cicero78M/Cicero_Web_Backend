@@ -1,5 +1,5 @@
 # Menu DirRequest untuk Operator WA
-*Last updated: 2026-01-22*
+*Last updated: 2026-02-21*
 
 Menu **dirrequest** digunakan tim Ditbinmas untuk memicu pengambilan data,
 rekap, dan laporan langsung dari WhatsApp. Menu utama menampilkan beberapa
@@ -636,15 +636,31 @@ berpindah ke dashboard web atau menjalankan skrip manual.
   tabel yang disebutkan di atas.
 
 ## Menu utama `chakranarayana`
-- Menu utama dirrequest sekarang memiliki opsi baru **5️⃣4️⃣ chakranarayana**.
-- Saat operator memilih `chakranarayana`, bot menampilkan submenu:
-  - `Direktorat`
-  - `Jajaran`
-- Submenu `Direktorat` menampilkan referensi menu dirrequest lama dalam urutan naik:
-  `3, 6, 9, 46, 47, 50, 51, 53`.
-- Submenu `Jajaran` menampilkan referensi menu dirrequest lama dalam urutan naik:
-  `1, 48, 49`.
-- Setiap nomor pada submenu meneruskan eksekusi ke dispatcher dirrequest yang sama
-  (routing existing), sehingga business logic menu lama tetap dipakai.
-- Input tidak valid akan menampilkan peringatan standar. Input `back` kembali ke
-  level submenu sebelumnya, dan `batal` menutup sesi menu dirrequest.
+- **Tujuan**: menyediakan pintasan untuk operator agar menu prioritas dirrequest
+  bisa dipanggil dari satu titik masuk tanpa mengubah business logic menu lama.
+- Menu utama dirrequest memiliki opsi **5️⃣4️⃣ chakranarayana**.
+- **Alur navigasi**:
+  1. Dari *Menu Dirrequest*, balas `54` atau `chakranarayana`.
+  2. Bot menampilkan pilihan submenu `Direktorat` dan `Jajaran`.
+  3. Balas nama submenu yang diinginkan, lalu pilih angka menu sesuai daftar.
+- **Daftar nomor submenu (urutan final)**:
+  - `Direktorat`: `3, 6, 9, 46, 47, 50, 51, 53`.
+  - `Jajaran`: `1, 48, 49`.
+- Seluruh nomor di atas tetap meneruskan eksekusi ke dispatcher dirrequest yang
+  sama (routing existing), sehingga hasil eksekusi identik dengan akses menu lama.
+- **Aturan input**:
+  - Angka valid hanya nomor yang tampil pada submenu aktif.
+  - `back` kembali ke level submenu sebelumnya.
+  - `batal` menutup sesi menu dirrequest.
+  - Input selain angka valid/`back`/`batal` akan memunculkan peringatan standar
+    *pilihan tidak valid*.
+- **Catatan dampak cron/otomasi**:
+  - Berdasarkan automasi yang sudah terdokumentasi, nomor yang ikut dieksekusi
+    cron dari daftar chakranarayana hanya **6** dan **9** (cron harian Ditbinmas
+    serta cron BIDHUMAS 22:00).
+  - Nomor **1, 3, 46, 47, 48, 49, 50, 51, 53** pada saat ini tidak tercatat
+    sebagai action cron di dokumen automasi ini, sehingga diperlakukan sebagai
+    eksekusi manual oleh operator.
+  - Submenu `chakranarayana` tidak membuat action cron baru; ia hanya pintasan
+    navigasi ke action yang sama agar operator tidak salah menafsirkan sebagai
+    jadwal otomasi baru.
