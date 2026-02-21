@@ -1,6 +1,7 @@
 import { appendSubmenuBackInstruction } from './menuPromptHelpers.js';
 
 export const CHAKRANARAYANA_MAIN_MENU_KEY = '54';
+export const CHAKRANARAYANA_CLIENT_ID = 'DITINTELKAM';
 
 const chakranarayanaSubmenuMap = {
   direktorat: [3, 6, 9, 46, 47, 50, 51, 53],
@@ -64,6 +65,7 @@ async function routeToExistingDirrequestMenu({
   text,
   waClient,
   dispatchDirrequestNumber,
+  clientIdOverride = null,
 }) {
   const normalized = String(text || '').trim();
 
@@ -72,11 +74,18 @@ async function routeToExistingDirrequestMenu({
     return;
   }
 
+  if (clientIdOverride) {
+    session.dirrequest_client_id = clientIdOverride;
+    session.selected_client_id = clientIdOverride;
+  }
+
   await dispatchDirrequestNumber(Number(normalized), {
     session,
     chatId,
     text,
     waClient,
+    client_id: clientIdOverride || session.dirrequest_client_id,
+    clientId: clientIdOverride || session.dirrequest_client_id,
   });
 }
 
@@ -104,6 +113,8 @@ export async function handleDirrequestCommandEntrypoint({
   if (session.step === 'dirrequest_main') {
     if (normalized === CHAKRANARAYANA_MAIN_MENU_KEY || normalized === 'chakranarayana') {
       session.step = 'dirrequest_chakranarayana_submenu';
+      session.dirrequest_client_id = CHAKRANARAYANA_CLIENT_ID;
+      session.selected_client_id = CHAKRANARAYANA_CLIENT_ID;
       await waClient.sendMessage(chatId, buildChakranarayanaSubmenu());
       return;
     }
@@ -125,13 +136,13 @@ export async function handleDirrequestCommandEntrypoint({
       return;
     }
 
-    if (normalized === '1') {
+    if (normalized === '1' || normalized === 'direktorat') {
       session.step = 'dirrequest_chakranarayana_direktorat';
       await waClient.sendMessage(chatId, buildChakranarayanaDirektoratMenu());
       return;
     }
 
-    if (normalized === '2') {
+    if (normalized === '2' || normalized === 'jajaran') {
       session.step = 'dirrequest_chakranarayana_jajaran';
       await waClient.sendMessage(chatId, buildChakranarayanaJajaranMenu());
       return;
@@ -159,6 +170,7 @@ export async function handleDirrequestCommandEntrypoint({
       text: normalized,
       waClient,
       dispatchDirrequestNumber,
+      clientIdOverride: CHAKRANARAYANA_CLIENT_ID,
     });
     return;
   }
@@ -181,6 +193,11 @@ export async function handleDirrequestCommandEntrypoint({
       text: normalized,
       waClient,
       dispatchDirrequestNumber,
+      clientIdOverride: CHAKRANARAYANA_CLIENT_ID,
     });
+    return;
   }
+
+  session.step = 'dirrequest_main';
+  await waClient.sendMessage(chatId, buildDirrequestMainMenu());
 }
