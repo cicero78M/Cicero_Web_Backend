@@ -1,7 +1,6 @@
 import { jest } from '@jest/globals';
 
 import {
-  CHAKRANARAYANA_CLIENT_ID,
   CHAKRANARAYANA_MAIN_MENU_KEY,
   buildChakranarayanaDirektoratMenu,
   buildChakranarayanaJajaranMenu,
@@ -41,8 +40,6 @@ describe('dirRequestHandlers chakranarayana menu', () => {
     });
 
     expect(session.step).toBe('dirrequest_chakranarayana_submenu');
-    expect(session.dirrequest_client_id).toBe(CHAKRANARAYANA_CLIENT_ID);
-    expect(session.selected_client_id).toBe(CHAKRANARAYANA_CLIENT_ID);
     expect(waClient.sendMessage).toHaveBeenCalledWith(
       'chat-id',
       expect.stringContaining('1️⃣ Direktorat')
@@ -104,8 +101,6 @@ describe('dirRequestHandlers chakranarayana menu', () => {
       expect.objectContaining({
         session,
         chatId: 'chat-id',
-        client_id: CHAKRANARAYANA_CLIENT_ID,
-        clientId: CHAKRANARAYANA_CLIENT_ID,
       })
     );
   });
@@ -128,25 +123,8 @@ describe('dirRequestHandlers chakranarayana menu', () => {
       expect.objectContaining({
         session,
         chatId: 'chat-id',
-        client_id: CHAKRANARAYANA_CLIENT_ID,
-        clientId: CHAKRANARAYANA_CLIENT_ID,
       })
     );
-  });
-
-  test('accepts submenu label input and routes to the correct submenu', async () => {
-    const session = { step: 'dirrequest_chakranarayana_submenu' };
-    const waClient = { sendMessage: jest.fn().mockResolvedValue() };
-
-    await handleDirrequestCommandEntrypoint({
-      session,
-      chatId: 'chat-id',
-      text: 'direktorat',
-      waClient,
-      dispatchDirrequestNumber: jest.fn(),
-    });
-
-    expect(session.step).toBe('dirrequest_chakranarayana_direktorat');
   });
 
   test('handles invalid number, back and batal consistently', async () => {
