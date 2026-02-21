@@ -634,3 +634,17 @@ berpindah ke dashboard web atau menjalankan skrip manual.
 - Menu rekap (**4️⃣0️⃣**, **4️⃣1️⃣**) hanya membaca database sehingga tetap dapat
   dipakai ketika RapidAPI tidak tersedia, selama data konten sudah ada di
   tabel yang disebutkan di atas.
+
+## Menu utama `chakranarayana`
+- Menu utama dirrequest sekarang memiliki opsi baru **5️⃣4️⃣ chakranarayana**.
+- Saat operator memilih `chakranarayana`, bot menampilkan submenu:
+  - `Direktorat`
+  - `Jajaran`
+- Submenu `Direktorat` menampilkan referensi menu dirrequest lama dalam urutan naik:
+  `3, 6, 9, 46, 47, 50, 51, 53`.
+- Submenu `Jajaran` menampilkan referensi menu dirrequest lama dalam urutan naik:
+  `1, 48, 49`.
+- Setiap nomor pada submenu meneruskan eksekusi ke dispatcher dirrequest yang sama
+  (routing existing), sehingga business logic menu lama tetap dipakai.
+- Input tidak valid akan menampilkan peringatan standar. Input `back` kembali ke
+  level submenu sebelumnya, dan `batal` menutup sesi menu dirrequest.
