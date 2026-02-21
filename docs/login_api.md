@@ -454,7 +454,7 @@ Validasi penting:
 Respons merangkum metadata filter dan agregat engagement:
 - `user_directory` menyalin daftar user aktif dari helper User Directory agar frontend tidak perlu menggabungkan data lain.
 - `instagram_engagement` dan `tiktok_engagement` masing-masing memuat total post, total likes/komentar, serta `per_user` yang sudah memetakan username ke `user_id` (username tak terpetakan tetap muncul dengan `unmapped=true`).
-- Insight TikTok (`tiktok_engagement` dan `aggregates.tiktok_posts`) memakai basis tanggal `COALESCE(original_created_at, created_at)` dari tabel `tiktok_post`, lalu dikonversi konsisten dari UTC ke Asia/Jakarta sebelum diterapkan filter `start_date`/`end_date`, sehingga selaras dengan perhitungan post count TikTok.
+- Insight TikTok (`tiktok_engagement` dan `aggregates.tiktok_posts`) memakai basis tanggal `created_at` dari tabel `tiktok_post`, lalu dikonversi konsisten dari UTC ke Asia/Jakarta sebelum diterapkan filter `start_date`/`end_date`, sehingga selaras dengan perhitungan post count TikTok.
 - `filters.permitted_time_ranges` menegaskan daftar rentang waktu yang diterima.
 - `filters.start_date`/`end_date` sudah dihitung ke batas awal/akhir hari Asia/Jakarta.
 - `aggregates.total_users` menghitung user aktif (`status=true`) pada client/regional yang sesuai.
