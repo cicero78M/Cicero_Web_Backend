@@ -4,6 +4,21 @@ import * as satbinmasOfficialMediaModel from '../model/satbinmasOfficialMediaMod
 import { fetchInstagramPosts } from './instaRapidService.js';
 
 const RAPIDAPI_FETCH_DELAY_MS = 1500;
+const RAPIDAPI_FETCH_LIMIT = Number.parseInt(process.env.SATBINMAS_MEDIA_FETCH_LIMIT || '50', 10);
+const DELETE_MIN_VALID_ITEMS = Number.parseInt(
+  process.env.SATBINMAS_MEDIA_DELETE_MIN_VALID_ITEMS || '1',
+  10
+);
+const DELETE_MAX_CANDIDATES = Number.parseInt(
+  process.env.SATBINMAS_MEDIA_DELETE_MAX_CANDIDATES || '15',
+  10
+);
+const DELETE_MAX_DROP_RATIO = Number.parseFloat(
+  process.env.SATBINMAS_MEDIA_DELETE_MAX_DROP_RATIO || '0.7'
+);
+const DELETE_SKIP_WHEN_LIMIT_HIT =
+  String(process.env.SATBINMAS_MEDIA_DELETE_SKIP_WHEN_LIMIT_HIT || 'true').toLowerCase() !==
+  'false';
 
 function wait(ms = RAPIDAPI_FETCH_DELAY_MS) {
   if (!ms || ms < 0) return Promise.resolve();
@@ -171,6 +186,66 @@ function getTodayRange() {
   return { start, end };
 }
 
+function sanitizePositiveInteger(value, fallback) {
+  if (!Number.isFinite(value) || value < 0) return fallback;
+  return Math.trunc(value);
+}
+
+function shouldDeleteMissingMedia({
+  rawPostsCount,
+  postsWithDateCount,
+  normalizedItemsCount,
+  currentStoredCount,
+  fetchLimit,
+}) {
+  if (postsWithDateCount === 0) {
+    return { shouldDelete: false, reason: 'no_posts_for_date' };
+  }
+
+  const minValidItems = sanitizePositiveInteger(DELETE_MIN_VALID_ITEMS, 1);
+  if (normalizedItemsCount < minValidItems) {
+    return {
+      shouldDelete: false,
+      reason: 'below_min_valid_items',
+      context: { normalizedItemsCount, minValidItems },
+    };
+  }
+
+  const normalizedFetchLimit = sanitizePositiveInteger(fetchLimit, RAPIDAPI_FETCH_LIMIT);
+  if (DELETE_SKIP_WHEN_LIMIT_HIT && rawPostsCount >= normalizedFetchLimit) {
+    return {
+      shouldDelete: false,
+      reason: 'api_limit_hit',
+      context: { rawPostsCount, fetchLimit: normalizedFetchLimit },
+    };
+  }
+
+  const deleteCandidates = Math.max(currentStoredCount - normalizedItemsCount, 0);
+  const maxDeleteCandidates = sanitizePositiveInteger(DELETE_MAX_CANDIDATES, 15);
+  if (deleteCandidates > maxDeleteCandidates) {
+    return {
+      shouldDelete: false,
+      reason: 'max_delete_candidates_exceeded',
+      context: { deleteCandidates, maxDeleteCandidates },
+    };
+  }
+
+  const dropRatio = currentStoredCount > 0 ? deleteCandidates / currentStoredCount : 0;
+  if (Number.isFinite(DELETE_MAX_DROP_RATIO) && dropRatio > DELETE_MAX_DROP_RATIO) {
+    return {
+      shouldDelete: false,
+      reason: 'drop_ratio_exceeded',
+      context: { dropRatio, maxDropRatio: DELETE_MAX_DROP_RATIO, deleteCandidates, currentStoredCount },
+    };
+  }
+
+  return {
+    shouldDelete: true,
+    reason: 'healthy_fetch',
+    context: { deleteCandidates, dropRatio },
+  };
+}
+
 async function fetchMediaForClient(client, usernameFilter = null, delayMs = RAPIDAPI_FETCH_DELAY_MS) {
   const accounts = await satbinmasOfficialAccountModel.findByClientAndPlatform(
     client.client_id,
@@ -198,7 +273,7 @@ async function fetchMediaForClient(client, usernameFilter = null, delayMs = RAPI
   for (let index = 0; index < scopedAccounts.length; index += 1) {
     const account = scopedAccounts[index];
     try {
-      const posts = await fetchInstagramPosts(account.username, 50);
+      const posts = await fetchInstagramPosts(account.username, RAPIDAPI_FETCH_LIMIT);
       const postsWithDate = posts
         .map((post) => ({ post, takenAt: resolveTakenAt(post) }))
         .filter((item) => item.takenAt && item.takenAt >= start && item.takenAt < end);
@@ -209,6 +284,9 @@ async function fetchMediaForClient(client, usernameFilter = null, delayMs = RAPI
       let likeCount = 0;
       let commentCount = 0;
       const identifiers = [];
+      const deletionNotes = [];
+      let deleteAttempted = false;
+      let deleteReason = 'not_evaluated';
 
       for (const item of postsWithDate) {
         const normalized = normalizeInstagramMedia(account, item.post, item.takenAt, start);
@@ -244,12 +322,44 @@ async function fetchMediaForClient(client, usernameFilter = null, delayMs = RAPI
       }
 
       if (account?.satbinmas_account_id) {
-        const deletionResult = await satbinmasOfficialMediaModel.deleteMissingMediaForDate(
+        const currentStoredCount = await satbinmasOfficialMediaModel.countMediaByAccountAndFetchDate(
           account.satbinmas_account_id,
-          start,
-          identifiers
+          start
         );
-        removed = deletionResult.deleted;
+
+        const deletionDecision = shouldDeleteMissingMedia({
+          rawPostsCount: posts.length,
+          postsWithDateCount: postsWithDate.length,
+          normalizedItemsCount: identifiers.length,
+          currentStoredCount,
+          fetchLimit: RAPIDAPI_FETCH_LIMIT,
+        });
+
+        if (postsWithDate.length === 0) {
+          console.warn(
+            `[satbinmas-official-media] skip delete for ${account.username}: no posts found for current date`
+          );
+        }
+
+        deleteReason = deletionDecision.reason;
+
+        if (deletionDecision.shouldDelete) {
+          deleteAttempted = true;
+          const deletionResult = await satbinmasOfficialMediaModel.deleteMissingMediaForDate(
+            account.satbinmas_account_id,
+            start,
+            identifiers
+          );
+          removed = deletionResult.deleted;
+        } else {
+          const warningEntry = {
+            username: account.username,
+            message: `Skip deleteMissingMediaForDate: ${deletionDecision.reason}`,
+            context: deletionDecision.context || null,
+          };
+          summary.errors.push(warningEntry);
+          deletionNotes.push(warningEntry);
+        }
       }
 
       summary.accounts.push({
@@ -260,6 +370,12 @@ async function fetchMediaForClient(client, usernameFilter = null, delayMs = RAPI
         removed,
         likes: likeCount,
         comments: commentCount,
+        deleteAudit: {
+          attempted: deleteAttempted,
+          removed,
+          reason: deleteReason,
+          notes: deletionNotes,
+        },
       });
       summary.totals.fetched += postsWithDate.length;
       summary.totals.inserted += inserted;

@@ -151,9 +151,12 @@ export async function replaceMentionsForMedia(satbinmas_media_id, mentions = [])
 export async function deleteMissingMediaForDate(
   satbinmas_account_id,
   fetchDate,
-  identifiers = []
+  identifiers = [],
+  options = {}
 ) {
   if (!satbinmas_account_id || !fetchDate) return { deleted: 0, ids: [] };
+
+  const { forceDeleteWhenIdentifiersEmpty = false } = options;
 
   const uniqueMediaIds = Array.from(
     new Set(
@@ -172,6 +175,16 @@ export async function deleteMissingMediaForDate(
         .map((value) => value.trim())
     )
   );
+
+  const hasIdentifiers = uniqueMediaIds.length > 0 || uniqueCodes.length > 0;
+  if (!hasIdentifiers && !forceDeleteWhenIdentifiersEmpty) {
+    return {
+      deleted: 0,
+      ids: [],
+      skipped: true,
+      reason: 'empty_identifiers_guard',
+    };
+  }
 
   const params = [satbinmas_account_id, fetchDate];
   const keepClauses = [];
@@ -199,6 +212,20 @@ export async function deleteMissingMediaForDate(
 
   const ids = res.rows?.map((row) => row.satbinmas_media_id).filter(Boolean) || [];
   return { deleted: ids.length, ids };
+}
+
+export async function countMediaByAccountAndFetchDate(satbinmas_account_id, fetchDate) {
+  if (!satbinmas_account_id || !fetchDate) return 0;
+
+  const res = await query(
+    `SELECT COUNT(*)::int AS total
+     FROM satbinmas_official_media
+     WHERE satbinmas_account_id = $1
+       AND fetched_for_date = $2::date`,
+    [satbinmas_account_id, fetchDate]
+  );
+
+  return Number(res.rows?.[0]?.total) || 0;
 }
 
 async function findMediaWithRelations(whereClause, params = []) {
