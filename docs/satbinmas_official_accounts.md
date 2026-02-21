@@ -1,5 +1,5 @@
 # Satbinmas Official Account Management
-*Last updated: 2026-02-21*
+*Last updated: 2025-12-18*
 
 This document explains how Satbinmas official social-media handles are stored
 and managed inside the Cicero backend. The feature introduces a dedicated table
@@ -64,24 +64,15 @@ ensuring the media ingestion process only touches live accounts.【F:src/model/s
 `src/service/satbinmasOfficialMediaService.js` orchestrates the end-to-end
 fetch: it validates the client, loads active Instagram accounts, pulls the
 current-day posts from RapidAPI via `fetchInstagramPosts`, filters by
-`taken_at`, and upserts metadata plus hashtag/mention rows. Deletion is now
-guarded and only runs when the fetch is considered healthy. The service skips
-`deleteMissingMediaForDate` when no post exists for the selected date, when
-valid normalized media falls below a minimum threshold, when the upstream
-response appears capped by API limit, when candidate deletions exceed the
-configured cap, or when the drop ratio versus currently stored rows is too
-drastic. Every skip decision is logged in `summary.errors` and mirrored under
-`accounts[].deleteAudit` so operations can audit why rows were (or were not)
-removed. The model-level `deleteMissingMediaForDate` also has a fail-safe: empty
-identifiers default to `{ deleted: 0 }` unless explicitly forced via option.
-Guard thresholds are configurable with env keys:
-`SATBINMAS_MEDIA_FETCH_LIMIT`, `SATBINMAS_MEDIA_DELETE_MIN_VALID_ITEMS`,
-`SATBINMAS_MEDIA_DELETE_MAX_CANDIDATES`,
-`SATBINMAS_MEDIA_DELETE_MAX_DROP_RATIO`, and
-`SATBINMAS_MEDIA_DELETE_SKIP_WHEN_LIMIT_HIT`. The WhatsApp dirrequest menu now
+`taken_at`, and upserts metadata plus hashtag/mention rows. After each account
+is processed the service collects the returned `media_id`/`code` set and removes
+any `satbinmas_official_media` rows for the same fetch date that were not
+present, relying on cascade deletes to purge hashtags/mentions for removed
+records. It returns a summary of inserts vs. updates vs. deletions and captures
+errors per account for operator messaging. The WhatsApp dirrequest menu now
 includes option **3️⃣7️⃣** to trigger this service for a chosen
 client/username and respond with a per-account recap and a total
-row.【F:src/service/satbinmasOfficialMediaService.js†L1-L334】【F:src/model/satbinmasOfficialMediaModel.js†L149-L229】【F:src/handler/menu/dirRequestHandlers.js†L1928-L1999】【F:src/handler/menu/dirRequestHandlers.js†L2299-L2392】
+row.【F:src/service/satbinmasOfficialMediaService.js†L1-L206】【F:src/handler/menu/dirRequestHandlers.js†L1928-L1999】【F:src/handler/menu/dirRequestHandlers.js†L2299-L2392】
 
 TikTok media ingestion now mirrors the Instagram flow with
 `src/service/satbinmasOfficialTiktokService.js`. The service iterates over
