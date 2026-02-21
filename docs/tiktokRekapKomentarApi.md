@@ -166,11 +166,11 @@ Pada manual fetch satu konten (`fetchAndStoreSingleTiktokPost`), backend menyimp
 - `original_created_at` dari timestamp platform (`createTime/create_time/timestamp`),
 - `created_at` dari waktu input sistem saat request diproses.
 
-Aturan ekspresi tanggal TikTok untuk filtering/range dashboard dan rekap komentar:
+Aturan ekspresi tanggal TikTok untuk filtering/range dashboard, rekap komentar, dan engagement insight:
 
-- Jika `source_type='manual_input'`, sistem **wajib** memakai `created_at` sebagai basis tanggal.
-- Untuk source lain, basis tanggal tetap `COALESCE(original_created_at, created_at)`.
-- Seluruh query tanggal tetap dibungkus konversi `jakartaDateCast(...)` agar konsisten dengan timezone `Asia/Jakarta`.
+- Endpoint rekap komentar TikTok **dan** endpoint engagement insight TikTok kini memakai `created_at` sebagai basis tanggal post secara konsisten.
+- Basis tanggal tersebut tetap dikonversi ke timezone `Asia/Jakarta` sebelum diterapkan ke seluruh filter periode.
+- Dengan demikian, seluruh mode periode (`harian`, `mingguan`, `bulanan`, dan rentang `start_date/end_date`) memakai sumber tanggal yang sama, yaitu `created_at`.
 
 ## Scope Handling
 
@@ -234,8 +234,8 @@ Untuk menjaga konsistensi numerator (`valid_comments`) dan denominator
 `bulanan`, dan `start_date/end_date`) di level model memakai basis waktu lokal
 **Asia/Jakarta** dari **tanggal post/konten**:
 
-- Komentar (`valid_comments`): `((COALESCE(p.original_created_at, p.created_at) AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')`
-- Total konten (`total_posts`): `((COALESCE(p.original_created_at, p.created_at) AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')`
+- Komentar (`valid_comments`): `((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')`
+- Total konten (`total_posts`): `((p.created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')`
 
 Dengan demikian, perubahan `tiktok_comment.updated_at` akibat proses sinkronisasi/
 refresh komentar tidak memindahkan data komentar ke periode harian, mingguan,
