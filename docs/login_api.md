@@ -408,6 +408,8 @@ Resolusi konteks:
 - Jika `scope`/`role` dikirim, backend akan mewajibkan `role` dan memvalidasi `scope` (`org`/`direktorat`).
 - `scope=org` dengan `role=operator` selalu memakai `client_id` dari token (bukan dari query/header). Untuk `igPosts`, penghitungan **selalu** dikunci ke `client_id` token tersebut meski ada penyesuaian konteks direktorat lainnya.
 - `scope=org` dengan role direktorat (`ditbinmas`, `ditlantas`, `bidhumas`, `ditsamapta`) menghitung post berdasarkan role tersebut sebagai `client_id` efektif.
+- Khusus `ttPosts`, saat `scope=org` backend **default** memakai filter `client_id` efektif (tidak otomatis memakai role filter), sehingga perilaku sama dengan rekap komentar TikTok untuk konteks ORG.
+- Untuk `ttPosts`, mode union `client_id OR tiktok_post_roles.role_name` hanya dipakai saat `scope=direktorat` (atau fallback legacy ketika `scope` tidak dikirim tetapi `client_id` yang dihitung bertipe direktorat). Role `operator` tidak pernah mengaktifkan filter role pada hitungan TikTok.
 - `scope=direktorat` memakai `role` dan `regional_id` sebagai filter tambahan pada data post.
 - Jika `role`/`scope` tidak dikirim, perilaku lama dipertahankan (mis. fallback `client_id=ditbinmas` bila token ber-role `ditbinmas`), tetapi perhitungan post tetap membawa `regional_id` dari token jika ada.
 - Untuk hitungan Instagram, `scope=direktorat` akan memakai `role` sebagai filter `insta_post_roles` terlebih dahulu. Jika hasilnya kosong dan `client_id` yang diminta adalah client bertipe direktorat, backend otomatis fallback ke filter `client_id` langsung (mirroring TikTok). Parameter `regional_id` membatasi hitungan hanya pada klien dengan `regional_id` yang cocok sehingga dashboard bisa meminta agregasi per-wilayah tanpa mencampur regional lain.
