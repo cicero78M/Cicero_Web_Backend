@@ -141,7 +141,10 @@ function normalizeTiktokUsername(username) {
 
 function tiktokDateBaseExpression(tableAlias = null) {
   const prefix = tableAlias ? `${tableAlias}.` : '';
-  return `COALESCE(${prefix}original_created_at, ${prefix}created_at)`;
+  return `CASE
+    WHEN ${prefix}source_type = 'manual_input' THEN ${prefix}created_at
+    ELSE COALESCE(${prefix}original_created_at, ${prefix}created_at)
+  END`;
 }
 
 function jakartaDateCast(columnAlias = 'created_at') {

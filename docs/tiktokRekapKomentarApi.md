@@ -166,6 +166,12 @@ Pada manual fetch satu konten (`fetchAndStoreSingleTiktokPost`), backend menyimp
 - `original_created_at` dari timestamp platform (`createTime/create_time/timestamp`),
 - `created_at` dari waktu input sistem saat request diproses.
 
+Aturan ekspresi tanggal TikTok untuk filtering/range dashboard dan rekap komentar:
+
+- Jika `source_type='manual_input'`, sistem **wajib** memakai `created_at` sebagai basis tanggal.
+- Untuk source lain, basis tanggal tetap `COALESCE(original_created_at, created_at)`.
+- Seluruh query tanggal tetap dibungkus konversi `jakartaDateCast(...)` agar konsisten dengan timezone `Asia/Jakarta`.
+
 ## Scope Handling
 
 Ketika `role` dan `scope` dikirim, filter mengikuti aturan berikut:
