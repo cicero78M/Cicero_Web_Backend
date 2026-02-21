@@ -57,6 +57,8 @@ Backend menggunakan filter awal `findAllActiveDirektoratWithSosmed` sehingga han
 - Pipeline TikTok terlebih dahulu memanggil host utama RapidAPI (`tiktok-api23.p.rapidapi.com/api/user/posts`). Jika permintaan ini gagal atau mengembalikan daftar kosong, backend otomatis mencoba host cadangan `RAPIDAPI_FALLBACK_HOST` (mis. `tiktok-api6.p.rapidapi.com/user/videos`) menggunakan kunci `RAPIDAPI_FALLBACK_KEY`.
 - Endpoint cadangan diharapkan mengembalikan array pada `videos` atau `result.videos` berisi objek dengan pengenal (`video_id` atau `id`) serta stempel waktu (`create_time` atau `createTime`). Nilai statistik seperti `digg_count`/`comment_count` akan dinormalisasi menjadi `stats.diggCount` dan `stats.commentCount` sebelum disimpan.
 - Tambahkan variabel lingkungan `RAPIDAPI_FALLBACK_HOST` dan `RAPIDAPI_FALLBACK_KEY` ketika operator ingin memastikan konten TikTok tetap terambil saat host utama bermasalah.
+- Sinkronisasi hapus data TikTok harian dilakukan **per client**: backend mengambil baseline `video_id` DB harian untuk setiap client, menyimpan daftar hasil fetch harian khusus client tersebut, lalu menghitung `deleteCount` hanya pada client yang fetch-nya valid/sukses. Query delete selalu menyertakan filter `LOWER(TRIM(client_id))` agar tidak terjadi penghapusan lintas client.
+- Debug log per client mencatat metrik sinkronisasi `dbCount`, `fetchedCount`, dan `deleteCount` untuk mempermudah audit proses refresh.
 
 ### Response
 
