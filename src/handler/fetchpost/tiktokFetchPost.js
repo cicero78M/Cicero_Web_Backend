@@ -264,10 +264,6 @@ export async function fetchAndStoreTiktokContent(
     }
   }, 4000);
 
-  const dbVideoIdsToday = await getVideoIdsToday(targetClientId);
-  let fetchedVideoIdsToday = [];
-  let hasSuccessfulFetch = false;
-
   const clients = await getEligibleTiktokClients();
   const clientsToFetch = targetClientId
     ? clients.filter((c) => c.id === targetClientId)
@@ -283,6 +279,9 @@ export async function fetchAndStoreTiktokContent(
   }
 
   for (const client of clientsToFetch) {
+    const dbVideoIdsToday = await getVideoIdsToday(client.id);
+    const fetchedVideoIdsToday = [];
+    let isFetchValidForClient = false;
     let secUid;
     const username = client.client_tiktok;
     const canFallbackToUsername = Boolean(username);
@@ -344,6 +343,7 @@ export async function fetchAndStoreTiktokContent(
         msg: `API /api/user/posts jumlah konten: ${itemList.length}`,
         client_id: client.id,
       });
+      isFetchValidForClient = true;
 
       for (const post of itemList) {
         sendDebug({
@@ -367,6 +367,7 @@ export async function fetchAndStoreTiktokContent(
               `Gagal fetch utama untuk ${client.id}`
             );
             if (!attempted) continue;
+            isFetchValidForClient = true;
           } catch (fallbackErr) {
             sendDebug({
               tag: "TIKTOK POST ERROR",
@@ -416,8 +417,6 @@ export async function fetchAndStoreTiktokContent(
       client_id: client.id,
     });
 
-    if (items.length > 0) hasSuccessfulFetch = true;
-
     for (const post of items) {
       const toSave = {
         client_id: client.id,
@@ -446,23 +445,25 @@ export async function fetchAndStoreTiktokContent(
         client_id: client.id,
       });
     }
-  }
 
-  // PATCH: Hapus hanya jika ada minimal 1 fetch sukses (dan ada minimal 1 post hari ini)
-  if (hasSuccessfulFetch) {
+    if (!isFetchValidForClient) {
+      sendDebug({
+        tag: "TIKTOK SYNC",
+        msg: `Skip delete karena fetch tidak valid untuk client ini`,
+        client_id: client.id,
+      });
+      continue;
+    }
+
     const videoIdsToDelete = dbVideoIdsToday.filter(
       (x) => !fetchedVideoIdsToday.includes(x)
     );
     sendDebug({
       tag: "TIKTOK SYNC",
-      msg: `Akan menghapus video_id yang tidak ada hari ini: jumlah=${videoIdsToDelete.length}`,
+      msg: `Client sync stats => dbCount=${dbVideoIdsToday.length}, fetchedCount=${fetchedVideoIdsToday.length}, deleteCount=${videoIdsToDelete.length}`,
+      client_id: client.id,
     });
-    await deleteVideoIds(videoIdsToDelete, targetClientId);
-  } else {
-    sendDebug({
-      tag: "TIKTOK SYNC",
-      msg: `Tidak ada fetch TikTok berhasil (mungkin API down atau semua kosong), database hari ini tidak dihapus!`,
-    });
+    await deleteVideoIds(videoIdsToDelete, client.id);
   }
 
   processing = false;
