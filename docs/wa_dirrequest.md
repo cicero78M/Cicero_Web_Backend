@@ -639,10 +639,14 @@ berpindah ke dashboard web atau menjalankan skrip manual.
 - **Tujuan**: menyediakan pintasan untuk operator agar menu prioritas dirrequest
   bisa dipanggil dari satu titik masuk tanpa mengubah business logic menu lama.
 - Menu utama dirrequest memiliki opsi **5️⃣4️⃣ chakranarayana**.
+- Seluruh alur pada menu `chakranarayana` sekarang mengunci konteks client ke
+  **`DITINTELKAM`** agar eksekusi menu prioritas konsisten menggunakan
+  `client_id` tersebut.
 - **Alur navigasi**:
   1. Dari *Menu Dirrequest*, balas `54` atau `chakranarayana`.
   2. Bot menampilkan pilihan submenu `Direktorat` dan `Jajaran`.
-  3. Balas nama submenu yang diinginkan, lalu pilih angka menu sesuai daftar.
+  3. Balas nama submenu yang diinginkan (`1`/`direktorat` atau
+     `2`/`jajaran`), lalu pilih angka menu sesuai daftar.
 - **Daftar nomor submenu (urutan final)**:
   - `Direktorat`: `3, 6, 9, 46, 47, 50, 51, 53`.
   - `Jajaran`: `1, 48, 49`.
@@ -650,10 +654,15 @@ berpindah ke dashboard web atau menjalankan skrip manual.
   sama (routing existing), sehingga hasil eksekusi identik dengan akses menu lama.
 - **Aturan input**:
   - Angka valid hanya nomor yang tampil pada submenu aktif.
+  - Input nama submenu (`direktorat`, `jajaran`) diterima selain angka agar
+    request dari operator tetap terproses ketika tidak memakai angka.
   - `back` kembali ke level submenu sebelumnya.
   - `batal` menutup sesi menu dirrequest.
   - Input selain angka valid/`back`/`batal` akan memunculkan peringatan standar
     *pilihan tidak valid*.
+  - Jika state sesi tidak dikenali (misalnya state lama/stale), sistem akan
+    memulihkan alur dengan mengirim ulang *Menu Dirrequest* supaya bot tetap
+    merespons pesan masuk.
 - **Catatan dampak cron/otomasi**:
   - Berdasarkan automasi yang sudah terdokumentasi, nomor yang ikut dieksekusi
     cron dari daftar chakranarayana hanya **6** dan **9** (cron harian Ditbinmas
