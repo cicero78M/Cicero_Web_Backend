@@ -139,6 +139,15 @@ function normalizeTiktokUsername(username) {
   return trimmed.replace(/^@+/, '').toLowerCase();
 }
 
+function tiktokDateBaseExpression(tableAlias = null) {
+  const prefix = tableAlias ? `${tableAlias}.` : '';
+  return `COALESCE(${prefix}original_created_at, ${prefix}created_at)`;
+}
+
+function jakartaDateCast(columnAlias = 'created_at') {
+  return `(( ${columnAlias} AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')`;
+}
+
 function mapFromObject(obj) {
   return new Map(Object.entries(obj || {}).map(([key, value]) => [key, Number(value) || 0]));
 }
@@ -326,8 +335,9 @@ async function fetchTiktokCommentStats(clientId, startDate, endDate, { role, sco
 
     const startIdx = addParam(startDate);
     const endIdx = addParam(endDate);
+    const tiktokDateExpression = jakartaDateCast(tiktokDateBaseExpression('p'));
     whereClauses.push(
-      `(p.created_at AT TIME ZONE 'Asia/Jakarta') BETWEEN ${startIdx}::timestamptz AND ${endIdx}::timestamptz`
+      `${tiktokDateExpression} BETWEEN ${startIdx}::timestamptz AND ${endIdx}::timestamptz`
     );
 
     const whereSql = whereClauses.length ? whereClauses.join(' AND ') : '1=1';
