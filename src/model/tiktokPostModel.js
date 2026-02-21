@@ -309,9 +309,24 @@ export async function countPostsByClient(
 
   const normalizedClientId = client_id ? String(client_id).trim() : null;
   const normalizedRole = options.role ? String(options.role).trim().toLowerCase() : null;
+  const normalizedScope = options.scope ? String(options.scope).trim().toLowerCase() : null;
   const normalizedRegionalId = options.regionalId
     ? String(options.regionalId).trim().toUpperCase()
     : null;
+
+  let clientType = null;
+  if (normalizedClientId) {
+    const clientTypeRes = await query(
+      `SELECT client_type
+       FROM clients
+       WHERE LOWER(TRIM(client_id)) = LOWER($1)
+       LIMIT 1`,
+      [normalizedClientId]
+    );
+    clientType = clientTypeRes.rows[0]?.client_type
+      ? String(clientTypeRes.rows[0].client_type).trim().toLowerCase()
+      : null;
+  }
 
   const addDateFilter = (addParamFn) => {
     const jakartaColumn = jakartaDateCast(tiktokDateBaseExpression('p'));
@@ -346,7 +361,14 @@ export async function countPostsByClient(
     return filter;
   };
 
-  const shouldUseRoleFilter = Boolean(normalizedRole);
+  const shouldUseRoleFilter = Boolean(
+    normalizedRole &&
+      normalizedRole !== 'operator' &&
+      (
+        normalizedScope === 'direktorat' ||
+        (!normalizedScope && clientType === 'direktorat')
+      )
+  );
 
   const executeCount = async (useRoleFilter) => {
     const params = [];
