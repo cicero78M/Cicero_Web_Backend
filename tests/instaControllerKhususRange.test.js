@@ -58,7 +58,7 @@ test('falls back to range when today empty and days provided', async () => {
   const req = { query: { client_id: 'c1', days: '7' } };
   const res = {};
   await getInstaPostsKhusus(req, res);
-  expect(mockFindToday).toHaveBeenCalledWith('c1');
+  expect(mockFindToday).not.toHaveBeenCalled();
   expect(mockFindRange).toHaveBeenCalledWith('c1', {
     days: 7,
     startDate: undefined,
@@ -87,3 +87,35 @@ test('falls back to range when today empty and start/end provided', async () => 
   });
   expect(mockSendSuccess).toHaveBeenCalledWith(res, rangePosts);
 });
+
+test('allows access when query client_id differs only by case from token client_id', async () => {
+  const posts = [{ id: 10 }];
+  mockFindToday.mockResolvedValue(posts);
+  const req = { query: { client_id: 'KEDIRI' }, user: { client_id: 'kediri' } };
+  const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+  await getInstaPostsKhusus(req, res);
+  expect(res.status).not.toHaveBeenCalledWith(403);
+  expect(mockFindToday).toHaveBeenCalledWith('KEDIRI');
+  expect(mockSendSuccess).toHaveBeenCalledWith(res, posts);
+});
+
+test('allows access when query client_id has surrounding spaces after trim', async () => {
+  const posts = [{ id: 11 }];
+  mockFindToday.mockResolvedValue(posts);
+  const req = { query: { client_id: '  KEDIRI  ' }, user: { client_id: 'kediri' } };
+  const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+  await getInstaPostsKhusus(req, res);
+  expect(res.status).not.toHaveBeenCalledWith(403);
+  expect(mockFindToday).toHaveBeenCalledWith('KEDIRI');
+  expect(mockSendSuccess).toHaveBeenCalledWith(res, posts);
+});
+
+test('returns 403 when normalized client_id is different from token access', async () => {
+  const req = { query: { client_id: 'SURABAYA' }, user: { client_id: 'kediri' } };
+  const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+  await getInstaPostsKhusus(req, res);
+  expect(res.status).toHaveBeenCalledWith(403);
+  expect(res.json).toHaveBeenCalledWith({ success: false, message: 'client_id tidak diizinkan' });
+  expect(mockFindToday).not.toHaveBeenCalled();
+});
+
