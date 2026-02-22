@@ -19,6 +19,7 @@ const operatorAllowlist = [
   { path: '/dashboard/komplain/tiktok', type: 'exact' },
   { path: '/insta/rekap-likes', type: 'exact' },
   { path: '/insta/rapid-profile', type: 'exact' },
+  { path: '/insta/posts-khusus', type: 'exact' },
   { path: '/tiktok/rekap-komentar', type: 'exact' },
   { path: '/users', type: 'exact' },
   { path: '/users/create', type: 'exact' },
