@@ -24,6 +24,8 @@ describe('authRequired middleware', () => {
     router.post('/dashboard/komplain/insta', (req, res) => res.json({ success: true }));
     router.post('/dashboard/komplain/tiktok', (req, res) => res.json({ success: true }));
     router.get('/amplify/rekap', (req, res) => res.json({ success: true }));
+    router.get('/insta/posts-khusus', (req, res) => res.json({ success: true }));
+    router.get('/insta/posts-khusus-arsip', (req, res) => res.json({ success: true }));
     router.get('/amplify/rekap-khusus', (req, res) => res.json({ success: true }));
     router.get('/amplify-khusus/rekap', (req, res) => res.json({ success: true }));
     router.post('/link-reports', (req, res) => res.json({ success: true }));
@@ -91,6 +93,25 @@ describe('authRequired middleware', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
+  });
+
+  test('allows operator role on insta posts khusus route', async () => {
+    const token = jwt.sign({ user_id: 'o1', role: 'operator' }, process.env.JWT_SECRET);
+    const res = await request(app)
+      .get('/api/insta/posts-khusus')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
+  test('blocks operator role on similar insta path outside allowlist', async () => {
+    const token = jwt.sign({ user_id: 'o1', role: 'operator' }, process.env.JWT_SECRET);
+    const res = await request(app)
+      .get('/api/insta/posts-khusus-arsip')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
+    expect(res.body.success).toBe(false);
+    expect(res.body.reason).toBe('forbidden_operator_path');
   });
 
   test('allows operator role on amplify rekap route', async () => {
