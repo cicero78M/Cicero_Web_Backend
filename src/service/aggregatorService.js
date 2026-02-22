@@ -159,7 +159,45 @@ export async function buildAggregatorPayload(client, resolvedClientId, periode, 
     if (Array.isArray(tiktokPosts)) tiktokPosts = tiktokPosts.slice(0, limit);
   }
 
-  return { igProfile, igPosts, tiktokProfile, tiktokPosts };
+  const instagramLinks = Array.from(
+    new Set(
+      igPosts
+        .map((post) => String(post?.shortcode || "").trim())
+        .filter(Boolean)
+        .map((shortcode) => `https://www.instagram.com/p/${shortcode}/`)
+    )
+  );
+
+  const tiktokUsername = String(
+    tiktokProfile?.username || client?.client_tiktok || ""
+  )
+    .trim()
+    .replace(/^@+/, "");
+  const tiktokLinks = tiktokUsername
+    ? Array.from(
+        new Set(
+          tiktokPosts
+            .map((post) => String(post?.video_id || "").trim())
+            .filter(Boolean)
+            .map(
+              (videoId) =>
+                `https://www.tiktok.com/@${tiktokUsername}/video/${videoId}`
+            )
+        )
+      )
+    : [];
+
+  return {
+    igProfile,
+    igPosts,
+    tiktokProfile,
+    tiktokPosts,
+    // Disediakan konsisten untuk semua periode (harian/non-harian)
+    taskLinksToday: {
+      instagram: instagramLinks,
+      tiktok: tiktokLinks,
+    },
+  };
 }
 
 function mapInstagramProfile(profilePayload, fallbackUsername) {
