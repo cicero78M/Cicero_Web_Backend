@@ -43,6 +43,53 @@ function normalizeClientIdLower(value) {
   return normalized ? normalized.toLowerCase() : null;
 }
 
+function parsePositiveDays(value) {
+  if (value === undefined || value === null || String(value).trim() === "") {
+    return { value: undefined };
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    return {
+      error: "Parameter days harus berupa integer positif (>= 1)",
+    };
+  }
+
+  return { value: parsed };
+}
+
+function isValidDateString(value) {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return false;
+  }
+
+  const date = new Date(`${trimmed}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === trimmed;
+}
+
+function validateDateRange(startDate, endDate) {
+  if (startDate && !isValidDateString(startDate)) {
+    return { error: "Parameter start_date harus berformat YYYY-MM-DD" };
+  }
+
+  if (endDate && !isValidDateString(endDate)) {
+    return { error: "Parameter end_date harus berformat YYYY-MM-DD" };
+  }
+
+  if (startDate && endDate && startDate > endDate) {
+    return {
+      error: "Parameter tanggal tidak valid: start_date harus lebih kecil atau sama dengan end_date",
+    };
+  }
+
+  return { startDate, endDate };
+}
+
 export async function getInstaRekapLikes(req, res) {
   let client_id =
     req.query.client_id ||
@@ -691,9 +738,18 @@ export async function getInstagramUser(req, res) {
           .status(403)
           .json({ success: false, message: "client_id tidak diizinkan" });
       }
-      const days = req.query.days ? parseInt(req.query.days) : undefined;
+      const { value: days, error: daysError } = parsePositiveDays(req.query.days);
+      if (daysError) {
+        return res.status(400).json({ success: false, message: daysError });
+      }
+
       const startDate = req.query.start_date;
       const endDate = req.query.end_date;
+
+      const { error: dateError } = validateDateRange(startDate, endDate);
+      if (dateError) {
+        return res.status(400).json({ success: false, message: dateError });
+      }
 
       sendConsoleDebug({
         tag: "INSTA",

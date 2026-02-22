@@ -119,3 +119,72 @@ test('returns 403 when normalized client_id is different from token access', asy
   expect(mockFindToday).not.toHaveBeenCalled();
 });
 
+
+
+test('returns 400 when days is non numeric', async () => {
+  const req = { query: { client_id: 'c1', days: 'abc' } };
+  const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+  await getInstaPostsKhusus(req, res);
+  expect(res.status).toHaveBeenCalledWith(400);
+  expect(res.json).toHaveBeenCalledWith({
+    success: false,
+    message: 'Parameter days harus berupa integer positif (>= 1)',
+  });
+  expect(mockFindRange).not.toHaveBeenCalled();
+  expect(mockFindToday).not.toHaveBeenCalled();
+});
+
+test('returns 400 when days is zero', async () => {
+  const req = { query: { client_id: 'c1', days: '0' } };
+  const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+  await getInstaPostsKhusus(req, res);
+  expect(res.status).toHaveBeenCalledWith(400);
+  expect(res.json).toHaveBeenCalledWith({
+    success: false,
+    message: 'Parameter days harus berupa integer positif (>= 1)',
+  });
+  expect(mockFindRange).not.toHaveBeenCalled();
+});
+
+test('returns 400 when days is negative', async () => {
+  const req = { query: { client_id: 'c1', days: '-3' } };
+  const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+  await getInstaPostsKhusus(req, res);
+  expect(res.status).toHaveBeenCalledWith(400);
+  expect(res.json).toHaveBeenCalledWith({
+    success: false,
+    message: 'Parameter days harus berupa integer positif (>= 1)',
+  });
+  expect(mockFindRange).not.toHaveBeenCalled();
+});
+
+test('returns 400 when start_date format is invalid', async () => {
+  const req = { query: { client_id: 'c1', start_date: '2024/01/01' } };
+  const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+  await getInstaPostsKhusus(req, res);
+  expect(res.status).toHaveBeenCalledWith(400);
+  expect(res.json).toHaveBeenCalledWith({
+    success: false,
+    message: 'Parameter start_date harus berformat YYYY-MM-DD',
+  });
+  expect(mockFindRange).not.toHaveBeenCalled();
+});
+
+test('returns 400 when start_date is after end_date', async () => {
+  const req = {
+    query: {
+      client_id: 'c1',
+      start_date: '2024-02-10',
+      end_date: '2024-01-01',
+    },
+  };
+  const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+  await getInstaPostsKhusus(req, res);
+  expect(res.status).toHaveBeenCalledWith(400);
+  expect(res.json).toHaveBeenCalledWith({
+    success: false,
+    message:
+      'Parameter tanggal tidak valid: start_date harus lebih kecil atau sama dengan end_date',
+  });
+  expect(mockFindRange).not.toHaveBeenCalled();
+});

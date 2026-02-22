@@ -99,9 +99,9 @@ export async function getPostsByClientAndDateRange(
     'SELECT * FROM insta_post_khusus WHERE client_id = $1';
   const values = [client_id];
 
-  if (days) {
-    const safeDays = parseInt(days);
-    text += ` AND created_at >= NOW() - INTERVAL '${safeDays} days'`;
+  if (days !== undefined) {
+    values.push(days);
+    text += ` AND created_at >= NOW() - ($${values.length} * INTERVAL '1 day')`;
   } else {
     if (startDate) {
       values.push(startDate);
