@@ -653,21 +653,40 @@ export async function getInstagramUser(req, res) {
 
   export async function getInstaPostsKhusus(req, res) {
     try {
-      const client_id =
+      const requestedClientId =
         req.query.client_id ||
         req.user?.client_id ||
         req.headers["x-client-id"];
+      const client_id = normalizeClientId(requestedClientId);
       if (!client_id) {
         return res
           .status(400)
           .json({ success: false, message: "client_id wajib diisi" });
       }
-      if (req.user?.client_ids && !req.user.client_ids.includes(client_id)) {
+
+      const normalizedClientIdLower = normalizeClientIdLower(client_id);
+      const userClientIds = req.user?.client_ids
+        ? Array.isArray(req.user.client_ids)
+          ? req.user.client_ids
+          : [req.user.client_ids]
+        : [];
+      const userClientIdsLower = userClientIds
+        .map((userClientId) => normalizeClientIdLower(userClientId))
+        .filter(Boolean);
+
+      if (
+        req.user?.client_ids &&
+        !userClientIdsLower.includes(normalizedClientIdLower)
+      ) {
         return res
           .status(403)
           .json({ success: false, message: "client_id tidak diizinkan" });
       }
-      if (req.user?.client_id && req.user.client_id !== client_id) {
+
+      if (
+        req.user?.client_id &&
+        normalizeClientIdLower(req.user.client_id) !== normalizedClientIdLower
+      ) {
         return res
           .status(403)
           .json({ success: false, message: "client_id tidak diizinkan" });
