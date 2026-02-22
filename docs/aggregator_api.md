@@ -16,6 +16,69 @@ Mengambil gabungan profil dan daftar posting akun Instagram dan TikTok yang terh
 - **igPosts**: Array posting Instagram yang sudah dibatasi oleh `limit`.
 - **tiktokProfile**: Profil TikTok (bisa `null` bila tidak ada akun TikTok atau gagal diambil).
 - **tiktokPosts**: Array posting TikTok yang sudah dibatasi oleh `limit`.
+- **taskLinksToday.instagram[]**: Array URL Instagram siap-copy yang dibentuk dari setiap `shortcode` unik pada `igPosts` dengan format `https://www.instagram.com/p/{shortcode}/`.
+- **taskLinksToday.tiktok[]**: Array URL TikTok siap-copy yang dibentuk dari setiap `video_id` unik pada `tiktokPosts` dengan format `https://www.tiktok.com/@{username}/video/{video_id}`. Nilai `username` diprioritaskan dari `tiktokProfile.username`, lalu fallback ke `client.client_tiktok`.
+
+### Aturan Pembentukan URL `taskLinksToday`
+
+- **Instagram**
+  - Sumber data: `igPosts[].shortcode`.
+  - Hanya `shortcode` yang valid (non-kosong) yang dipakai.
+  - Duplikasi dibuang, lalu diubah menjadi URL: `https://www.instagram.com/p/{shortcode}/`.
+- **TikTok**
+  - Sumber data: `tiktokPosts[].video_id`.
+  - Hanya `video_id` yang valid (non-kosong) yang dipakai.
+  - Username diambil dari profil/client (`tiktokProfile.username` atau fallback `client.client_tiktok`) lalu dinormalisasi (tanpa awalan `@`).
+  - Duplikasi dibuang, lalu diubah menjadi URL: `https://www.tiktok.com/@{username}/video/{video_id}`.
+
+### Perilaku Saat Data Kosong
+
+- `taskLinksToday.instagram` dan `taskLinksToday.tiktok` **selalu array**, bukan `null`.
+- Jika tidak ada data valid untuk dibentuk (mis. tidak ada `shortcode`, tidak ada `video_id`, atau username TikTok tidak tersedia), backend mengembalikan `[]`.
+- Perilaku ini memastikan frontend dapat langsung melakukan pengecekan panjang array (`length`) untuk mengaktifkan/menonaktifkan tombol copy tanpa perlu guard tambahan terhadap `null`.
+
+### Contoh Response Lengkap (`GET /aggregator`)
+
+```json
+{
+  "success": true,
+  "data": {
+    "igProfile": {
+      "username": "ditlantas_polda",
+      "full_name": "Ditlantas Polda",
+      "biography": "Official Account",
+      "follower_count": 12345,
+      "following_count": 120,
+      "post_count": 456,
+      "profile_pic_url": "https://cdn.example.com/ig/profile.jpg"
+    },
+    "igPosts": [
+      {
+        "shortcode": "C8AbCdEf123",
+        "caption": "Konten IG 1"
+      }
+    ],
+    "tiktokProfile": {
+      "username": "ditlantas_polda",
+      "nickname": "Ditlantas Polda"
+    },
+    "tiktokPosts": [
+      {
+        "video_id": "7412345678901234567",
+        "description": "Konten TikTok 1"
+      }
+    ],
+    "taskLinksToday": {
+      "instagram": [
+        "https://www.instagram.com/p/C8AbCdEf123/"
+      ],
+      "tiktok": [
+        "https://www.tiktok.com/@ditlantas_polda/video/7412345678901234567"
+      ]
+    }
+  }
+}
+```
 
 ## Error Cases
 - `400 Bad Request` bila `client_id` atau header `x-client-id` tidak dikirim dan token tidak memiliki tepat satu `client_id`.
