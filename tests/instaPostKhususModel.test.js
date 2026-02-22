@@ -31,8 +31,8 @@ test('getPostsByClientAndDateRange supports days option', async () => {
   mockQuery.mockResolvedValueOnce({ rows: [] });
   await getPostsByClientAndDateRange('c1', { days: 7 });
   const sql = mockQuery.mock.calls[0][0];
-  expect(sql).toContain("created_at >= NOW() - INTERVAL '7 days'");
-  expect(mockQuery.mock.calls[0][1]).toEqual(['c1']);
+  expect(sql).toContain("created_at >= NOW() - ($2 * INTERVAL '1 day')");
+  expect(mockQuery.mock.calls[0][1]).toEqual(['c1', 7]);
 });
 
 test('getPostsByClientAndDateRange supports start and end dates', async () => {
