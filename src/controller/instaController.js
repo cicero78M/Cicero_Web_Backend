@@ -681,14 +681,14 @@ export async function getInstagramUser(req, res) {
         msg: `getInstaPostsKhusus ${client_id} ${days || ''} ${startDate || ''} ${endDate || ''}`,
       });
 
-      let posts = await instaPostKhususService.findTodayByClientId(client_id);
-      if (posts.length === 0 && (days || startDate || endDate)) {
-        posts = await instaPostKhususService.findByClientIdRange(client_id, {
-          days,
-          startDate,
-          endDate,
-        });
-      }
+      const hasDateFilter = Boolean(days || startDate || endDate);
+      const posts = hasDateFilter
+        ? await instaPostKhususService.findByClientIdRange(client_id, {
+            days,
+            startDate,
+            endDate,
+          })
+        : await instaPostKhususService.findTodayByClientId(client_id);
       sendSuccess(res, posts);
     } catch (err) {
     sendConsoleDebug({
