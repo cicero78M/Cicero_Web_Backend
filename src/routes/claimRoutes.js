@@ -11,5 +11,6 @@ const router = express.Router();
 router.post('/register', registerClaimCredentials); // body: { nrp, password }
 router.post('/user-data', getUserData); // body: { nrp, password }
 router.put('/update', updateUserData); // body: { nrp, password, ... }
+router.put('/edit', updateUserData); // backward-compatible alias for /claim/edit
 
 export default router;

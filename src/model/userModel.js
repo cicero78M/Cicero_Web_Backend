@@ -36,6 +36,14 @@ function buildNamePriorityCase(alias = 'u') {
 }
 
 const NAME_PRIORITY_CASE_U = buildNamePriorityCase('u');
+let hasUserSocialAccountsTableCache = null;
+
+async function hasUserSocialAccountsTable() {
+  if (hasUserSocialAccountsTableCache !== null) return hasUserSocialAccountsTableCache;
+  const { rows } = await query("SELECT to_regclass('public.user_social_accounts') AS table_name");
+  hasUserSocialAccountsTableCache = Boolean(rows[0]?.table_name);
+  return hasUserSocialAccountsTableCache;
+}
 
 async function addRole(userId, roleName) {
   const uid = normalizeUserId(userId);
@@ -791,6 +799,71 @@ export async function updateUserRolesUserId(oldUserId, newUserId) {
     await query('ROLLBACK');
     throw err;
   }
+}
+
+export async function replaceUserSocialAccounts(userId, platform, usernames = []) {
+  const uid = normalizeUserId(userId);
+  if (!(await hasUserSocialAccountsTable())) return;
+
+  const normalizedPlatform = String(platform || '').toLowerCase();
+  if (!['instagram', 'tiktok'].includes(normalizedPlatform)) {
+    throw new Error('platform tidak valid');
+  }
+
+  await query('BEGIN');
+  try {
+    await query(
+      `DELETE FROM user_social_accounts
+       WHERE user_id = $1 AND LOWER(platform) = LOWER($2)`,
+      [uid, normalizedPlatform]
+    );
+
+    for (let index = 0; index < usernames.length; index += 1) {
+      const username = usernames[index];
+      if (!username) continue;
+      await query(
+        `INSERT INTO user_social_accounts (user_id, platform, username, account_order, is_active)
+         VALUES ($1, $2, $3, $4, TRUE)`,
+        [uid, normalizedPlatform, username, index + 1]
+      );
+    }
+
+    await query('COMMIT');
+  } catch (err) {
+    await query('ROLLBACK');
+    throw err;
+  }
+}
+
+export async function findUserSocialAccounts(userId) {
+  const uid = normalizeUserId(userId);
+  if (!(await hasUserSocialAccountsTable())) {
+    const user = await findUserById(uid);
+    return {
+      instagram: user?.insta ? [user.insta] : [],
+      tiktok: user?.tiktok ? [user.tiktok] : [],
+    };
+  }
+
+  const { rows } = await query(
+    `SELECT platform, username
+     FROM user_social_accounts
+     WHERE user_id = $1 AND is_active = TRUE
+     ORDER BY platform ASC, account_order ASC, created_at ASC`,
+    [uid]
+  );
+
+  return rows.reduce(
+    (acc, row) => {
+      if (row.platform === 'instagram') {
+        acc.instagram.push(row.username);
+      } else if (row.platform === 'tiktok') {
+        acc.tiktok.push(row.username);
+      }
+      return acc;
+    },
+    { instagram: [], tiktok: [] }
+  );
 }
 
 export async function deleteUser(userId) {

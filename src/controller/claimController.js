@@ -49,6 +49,38 @@ function isClaimPasswordValid(password) {
   return hasLetter && hasDigit && hasPunctuation;
 }
 
+function toSocialAccountList(rawValue) {
+  if (rawValue === undefined) return undefined;
+  if (rawValue === null || rawValue === '') return [];
+  if (Array.isArray(rawValue)) return rawValue;
+  if (typeof rawValue === 'string') return [rawValue];
+  return null;
+}
+
+function normalizeSocialAccounts(rawValue, platform) {
+  const list = toSocialAccountList(rawValue);
+  if (list === undefined) return undefined;
+  if (list === null) return null;
+
+  const extractor = platform === 'instagram' ? extractInstagramUsername : extractTiktokUsername;
+  const normalized = [];
+  const seen = new Set();
+
+  for (const item of list) {
+    if (item === null || item === undefined || item === '') continue;
+    const username = extractor(String(item));
+    if (!username) return null;
+    const dedupeKey = platform === 'tiktok' ? username.replace(/^@/, '') : username;
+    if (dedupeKey === 'cicero_devs') return null;
+    if (!seen.has(dedupeKey)) {
+      seen.add(dedupeKey);
+      normalized.push(username);
+    }
+  }
+
+  return normalized;
+}
+
 async function verifyClaimCredentials(nrp, password) {
   const user = await userModel.findUserById(nrp);
   if (!user || !user.password_hash) return null;
@@ -154,6 +186,8 @@ export async function updateUserData(req, res, next) {
       desa,
       insta,
       tiktok,
+      instagram_accounts,
+      tiktok_accounts,
       whatsapp,
       email,
     } = req.body;
@@ -204,6 +238,23 @@ export async function updateUserData(req, res, next) {
             'Format username TikTok tidak valid. Gunakan tautan profil atau username seperti tiktok.com/@username atau @username.',
         });
       }
+    }
+
+    const normalizedInstagramAccounts = normalizeSocialAccounts(instagram_accounts, 'instagram');
+    if (normalizedInstagramAccounts === null) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Format instagram_accounts tidak valid. Isi array username/link Instagram yang valid.',
+      });
+    }
+
+    const normalizedTiktokAccounts = normalizeSocialAccounts(tiktok_accounts, 'tiktok');
+    if (normalizedTiktokAccounts === null) {
+      return res.status(400).json({
+        success: false,
+        message: 'Format tiktok_accounts tidak valid. Isi array username/link TikTok yang valid.',
+      });
     }
 
     let normalizedWhatsapp;
@@ -257,13 +308,60 @@ export async function updateUserData(req, res, next) {
       data.tiktok = ttUsername;
     }
 
+    let instagramAccountsPayload = normalizedInstagramAccounts;
+    if (insta !== undefined) {
+      instagramAccountsPayload = igUsername ? [igUsername, ...(normalizedInstagramAccounts || [])] : (normalizedInstagramAccounts || []);
+      instagramAccountsPayload = [...new Set(instagramAccountsPayload)];
+    }
+    if (instagramAccountsPayload?.length && insta === undefined) {
+      data.insta = instagramAccountsPayload[0];
+    }
+
+    let tiktokAccountsPayload = normalizedTiktokAccounts;
+    if (tiktok !== undefined) {
+      tiktokAccountsPayload = ttUsername ? [ttUsername, ...(normalizedTiktokAccounts || [])] : (normalizedTiktokAccounts || []);
+      const tiktokUniqueMap = new Map();
+      for (const username of tiktokAccountsPayload) {
+        tiktokUniqueMap.set(username.replace(/^@/, ''), username);
+      }
+      tiktokAccountsPayload = [...tiktokUniqueMap.values()];
+    }
+    if (tiktokAccountsPayload?.length && tiktok === undefined) {
+      data.tiktok = tiktokAccountsPayload[0];
+    }
+
     Object.keys(data).forEach((k) => data[k] === undefined && delete data[k]);
     const updated = await userModel.updateUser(nrp, data);
     if (!updated) {
       return res.status(404).json({ success: false, message: 'User tidak ditemukan' });
     }
-    sendSuccess(res, updated);
+
+    if (instagramAccountsPayload !== undefined) {
+      await userModel.replaceUserSocialAccounts(nrp, 'instagram', instagramAccountsPayload);
+    } else if (insta !== undefined) {
+      await userModel.replaceUserSocialAccounts(nrp, 'instagram', igUsername ? [igUsername] : []);
+    }
+
+    if (tiktokAccountsPayload !== undefined) {
+      await userModel.replaceUserSocialAccounts(nrp, 'tiktok', tiktokAccountsPayload);
+    } else if (tiktok !== undefined) {
+      await userModel.replaceUserSocialAccounts(nrp, 'tiktok', ttUsername ? [ttUsername] : []);
+    }
+
+    const userSocialAccounts = await userModel.findUserSocialAccounts(nrp);
+    const responseData = {
+      ...updated,
+      instagram_accounts: userSocialAccounts.instagram,
+      tiktok_accounts: userSocialAccounts.tiktok,
+    };
+    sendSuccess(res, responseData);
   } catch (err) {
+    if (err?.code === '23505') {
+      return res.status(409).json({
+        success: false,
+        message: 'Username Instagram/TikTok sudah digunakan akun lain.',
+      });
+    }
     next(err);
   }
 }
