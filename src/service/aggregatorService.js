@@ -4,8 +4,6 @@ import {
   findByRegionalId,
 } from "../model/clientModel.js";
 import * as instaProfileService from "./instaProfileService.js";
-import * as instaPostService from "./instaPostService.js";
-import * as tiktokPostService from "./tiktokPostService.js";
 import * as instaPostModel from "../model/instaPostModel.js";
 import * as tiktokPostModel from "../model/tiktokPostModel.js";
 import { fetchInstagramProfile } from "./instagramApi.js";
@@ -130,14 +128,17 @@ export async function resolveAggregatorClient(clientId, userRole, options = {}) 
 }
 
 export async function buildAggregatorPayload(client, resolvedClientId, periode, limit) {
+  const roleName = resolvedClientId;
+
   let igProfile = null;
   let igPosts = [];
   if (client.client_insta) {
     igProfile = await instaProfileService.findByUsername(client.client_insta);
-    igPosts =
-      periode === "harian"
-        ? await instaPostModel.getPostsTodayByClient(resolvedClientId)
-        : await instaPostService.findByClientId(resolvedClientId);
+    igPosts = await instaPostModel.getPostsByClientOrRole(
+      resolvedClientId,
+      roleName,
+      { periode }
+    );
     if (Array.isArray(igPosts)) igPosts = igPosts.slice(0, limit);
   }
 
@@ -152,10 +153,11 @@ export async function buildAggregatorPayload(client, resolvedClientId, periode, 
         msg: `fetchTiktokProfile error: ${err.message}`,
       });
     }
-    tiktokPosts =
-      periode === "harian"
-        ? await tiktokPostModel.getPostsTodayByClient(resolvedClientId)
-        : await tiktokPostService.findByClientId(resolvedClientId);
+    tiktokPosts = await tiktokPostModel.getPostsByClientOrRole(
+      resolvedClientId,
+      roleName,
+      { periode }
+    );
     if (Array.isArray(tiktokPosts)) tiktokPosts = tiktokPosts.slice(0, limit);
   }
 

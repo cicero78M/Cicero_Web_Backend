@@ -258,6 +258,47 @@ export async function getPostsByClientId(client_id) {
 
 export const findByClientId = getPostsByClientId;
 
+export async function getPostsByClientOrRole(client_id, role_name, { periode = 'harian' } = {}) {
+  const filters = [];
+  const params = [];
+
+  if (client_id) {
+    params.push(normalizeClientId(client_id));
+  }
+  if (role_name) {
+    params.push(String(role_name).trim().toLowerCase());
+  }
+
+  if (client_id && role_name) {
+    filters.push(
+      `(LOWER(TRIM(p.client_id)) = $1 OR LOWER(TRIM(pr.role_name)) = $2)`
+    );
+  } else if (client_id) {
+    filters.push(`LOWER(TRIM(p.client_id)) = $1`);
+  } else if (role_name) {
+    filters.push(`LOWER(TRIM(pr.role_name)) = $1`);
+  }
+
+  if (periode === 'harian') {
+    filters.push(
+      `${jakartaDateCast(tiktokDateBaseExpression('p'))}::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date`
+    );
+  }
+
+  const whereSql = filters.length ? filters.join(' AND ') : '1=1';
+
+  const res = await query(
+    `SELECT DISTINCT ON (p.video_id) p.*
+     FROM tiktok_post p
+     LEFT JOIN tiktok_post_roles pr ON pr.video_id = p.video_id
+     WHERE ${whereSql}
+     ORDER BY p.video_id, COALESCE(p.original_created_at, p.created_at) DESC`,
+    params
+  );
+
+  return res.rows;
+}
+
 export async function getPostsByClientAndDateRange(client_id, startDate, endDate) {
   if (!client_id) return [];
   if (!startDate || !endDate) return [];
