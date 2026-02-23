@@ -81,6 +81,16 @@ function normalizeSocialAccounts(rawValue, platform) {
   return normalized;
 }
 
+function findDuplicateSocialUsername(usernames = [], platform) {
+  const seen = new Set();
+  for (const username of usernames) {
+    const dedupeKey = platform === 'tiktok' ? username.replace(/^@/, '') : username;
+    if (seen.has(dedupeKey)) return username;
+    seen.add(dedupeKey);
+  }
+  return null;
+}
+
 async function verifyClaimCredentials(nrp, password) {
   const user = await userModel.findUserById(nrp);
   if (!user || !user.password_hash) return null;
@@ -311,7 +321,14 @@ export async function updateUserData(req, res, next) {
     let instagramAccountsPayload = normalizedInstagramAccounts;
     if (insta !== undefined) {
       instagramAccountsPayload = igUsername ? [igUsername, ...(normalizedInstagramAccounts || [])] : (normalizedInstagramAccounts || []);
-      instagramAccountsPayload = [...new Set(instagramAccountsPayload)];
+    }
+    const duplicateInstagramInput = findDuplicateSocialUsername(instagramAccountsPayload, 'instagram');
+    if (duplicateInstagramInput) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Terdeteksi duplikasi username Instagram pada input username 1/2. Gunakan username yang berbeda.',
+      });
     }
     if (instagramAccountsPayload?.length && insta === undefined) {
       data.insta = instagramAccountsPayload[0];
@@ -320,11 +337,14 @@ export async function updateUserData(req, res, next) {
     let tiktokAccountsPayload = normalizedTiktokAccounts;
     if (tiktok !== undefined) {
       tiktokAccountsPayload = ttUsername ? [ttUsername, ...(normalizedTiktokAccounts || [])] : (normalizedTiktokAccounts || []);
-      const tiktokUniqueMap = new Map();
-      for (const username of tiktokAccountsPayload) {
-        tiktokUniqueMap.set(username.replace(/^@/, ''), username);
-      }
-      tiktokAccountsPayload = [...tiktokUniqueMap.values()];
+    }
+    const duplicateTiktokInput = findDuplicateSocialUsername(tiktokAccountsPayload, 'tiktok');
+    if (duplicateTiktokInput) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Terdeteksi duplikasi username TikTok pada input username 1/2. Gunakan username yang berbeda.',
+      });
     }
     if (tiktokAccountsPayload?.length && tiktok === undefined) {
       data.tiktok = tiktokAccountsPayload[0];
