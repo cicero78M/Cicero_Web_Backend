@@ -242,6 +242,46 @@ export async function getPostsByClientId(clientId) {
   return res.rows;
 }
 
+export async function getPostsByClientOrRole(clientId, roleName, { periode = 'harian' } = {}) {
+  const filters = [];
+  const params = [];
+
+  if (clientId) {
+    params.push(clientId);
+  }
+  if (roleName) {
+    params.push(roleName);
+  }
+
+  if (clientId && roleName) {
+    filters.push(
+      `(LOWER(TRIM(p.client_id)) = LOWER($1) OR LOWER(TRIM(pr.role_name)) = LOWER($2))`
+    );
+  } else if (clientId) {
+    filters.push(`LOWER(TRIM(p.client_id)) = LOWER($1)`);
+  } else if (roleName) {
+    filters.push(`LOWER(TRIM(pr.role_name)) = LOWER($1)`);
+  }
+
+  if (periode === 'harian') {
+    filters.push(
+      `(COALESCE(p.original_created_at, p.created_at) AT TIME ZONE 'Asia/Jakarta')::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date`
+    );
+  }
+
+  const whereSql = filters.length > 0 ? filters.join(' AND ') : '1=1';
+  const res = await query(
+    `SELECT DISTINCT ON (p.shortcode) p.*
+     FROM insta_post p
+     LEFT JOIN insta_post_roles pr ON pr.shortcode = p.shortcode
+     WHERE ${whereSql}
+     ORDER BY p.shortcode, COALESCE(p.original_created_at, p.created_at) DESC`,
+    params
+  );
+
+  return res.rows;
+}
+
 export async function findByClientId(clientId) {
   return getPostsByClientId(clientId);
 }
