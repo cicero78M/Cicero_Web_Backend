@@ -131,19 +131,23 @@ export async function buildAggregatorPayload(client, resolvedClientId, periode, 
   const roleName = resolvedClientId;
 
   let igProfile = null;
-  let igPosts = [];
+  let igPosts = await instaPostModel.getPostsByClientOrRole(
+    resolvedClientId,
+    roleName,
+    { periode }
+  );
+  if (Array.isArray(igPosts)) igPosts = igPosts.slice(0, limit);
   if (client.client_insta) {
     igProfile = await instaProfileService.findByUsername(client.client_insta);
-    igPosts = await instaPostModel.getPostsByClientOrRole(
-      resolvedClientId,
-      roleName,
-      { periode }
-    );
-    if (Array.isArray(igPosts)) igPosts = igPosts.slice(0, limit);
   }
 
   let tiktokProfile = null;
-  let tiktokPosts = [];
+  let tiktokPosts = await tiktokPostModel.getPostsByClientOrRole(
+    resolvedClientId,
+    roleName,
+    { periode }
+  );
+  if (Array.isArray(tiktokPosts)) tiktokPosts = tiktokPosts.slice(0, limit);
   if (client.client_tiktok) {
     try {
       tiktokProfile = await fetchTiktokProfile(client.client_tiktok);
@@ -153,12 +157,6 @@ export async function buildAggregatorPayload(client, resolvedClientId, periode, 
         msg: `fetchTiktokProfile error: ${err.message}`,
       });
     }
-    tiktokPosts = await tiktokPostModel.getPostsByClientOrRole(
-      resolvedClientId,
-      roleName,
-      { periode }
-    );
-    if (Array.isArray(tiktokPosts)) tiktokPosts = tiktokPosts.slice(0, limit);
   }
 
   const instagramLinks = Array.from(
@@ -187,7 +185,14 @@ export async function buildAggregatorPayload(client, resolvedClientId, periode, 
             )
         )
       )
-    : [];
+    : Array.from(
+        new Set(
+          tiktokPosts
+            .map((post) => String(post?.video_id || "").trim())
+            .filter(Boolean)
+            .map((videoId) => `https://www.tiktok.com/video/${videoId}`)
+        )
+      );
 
   return {
     igProfile,
