@@ -588,8 +588,30 @@ export async function getRekapKomentarByClient(
     return rows;
   }
 
-  const { rows: taskLinkRows } = await query(
-    `SELECT DISTINCT p.video_id
+  const buildScopedQueryParams = (sqlText, values) => {
+    const usedParamIndexes = [
+      ...new Set(
+        Array.from(sqlText.matchAll(/\$(\d+)/g), (match) => Number(match[1]))
+      ),
+    ].sort((a, b) => a - b);
+
+    if (usedParamIndexes.length === 0) {
+      return { sqlText, params: [] };
+    }
+
+    const paramIndexMap = new Map(
+      usedParamIndexes.map((paramIndex, idx) => [paramIndex, idx + 1])
+    );
+    const scopedSqlText = sqlText.replace(/\$(\d+)/g, (_, paramIndexText) => {
+      const scopedIndex = paramIndexMap.get(Number(paramIndexText));
+      return `$${scopedIndex}`;
+    });
+    const scopedParams = usedParamIndexes.map((paramIndex) => values[paramIndex - 1]);
+
+    return { sqlText: scopedSqlText, params: scopedParams };
+  };
+
+  const taskLinksSql = `SELECT DISTINCT p.video_id
      FROM tiktok_post p
      ${postRegionalJoin}
      ${postRoleJoin}
@@ -597,8 +619,15 @@ export async function getRekapKomentarByClient(
        ${postRoleFilter}
        ${postRegionalFilter}
        AND ${postTanggalFilter}
-     ORDER BY p.video_id ASC`,
-    params
+     ORDER BY p.video_id ASC`;
+  const {
+    sqlText: scopedTaskLinksSql,
+    params: scopedTaskLinkParams,
+  } = buildScopedQueryParams(taskLinksSql, params);
+
+  const { rows: taskLinkRows } = await query(
+    scopedTaskLinksSql,
+    scopedTaskLinkParams
   );
 
   const taskLinksToday = taskLinkRows
