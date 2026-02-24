@@ -30,7 +30,7 @@ test('harian with specific date uses date filter', async () => {
   mockQuery.mockResolvedValueOnce({ rows: [] });
   mockQuery.mockResolvedValueOnce({ rows: [{ total_post: 0 }] });
   await getRekapLikesByClient('1', 'harian', '2023-10-05');
-  const expected = "p.created_at::date = $2::date";
+  const expected = "(COALESCE(p.original_created_at, p.created_at) AT TIME ZONE 'Asia/Jakarta')::date = $2::date";
   expect(mockQuery).toHaveBeenNthCalledWith(1, expect.stringContaining(expected), expect.any(Array));
   expectPriorityParams(mockQuery.mock.calls[0][1], ['1', '2023-10-05']);
 });
@@ -39,7 +39,7 @@ test('mingguan with date truncs week', async () => {
   mockQuery.mockResolvedValueOnce({ rows: [] });
   mockQuery.mockResolvedValueOnce({ rows: [{ total_post: 0 }] });
   await getRekapLikesByClient('1', 'mingguan', '2023-10-05');
-  const expected = "date_trunc('week', p.created_at) = date_trunc('week', $2::date)";
+  const expected = "date_trunc('week', (COALESCE(p.original_created_at, p.created_at) AT TIME ZONE 'Asia/Jakarta')) = date_trunc('week', $2::date)";
   expect(mockQuery).toHaveBeenNthCalledWith(1, expect.stringContaining(expected), expect.any(Array));
   expectPriorityParams(mockQuery.mock.calls[0][1], ['1', '2023-10-05']);
 });
@@ -48,7 +48,7 @@ test('bulanan converts month string', async () => {
   mockQuery.mockResolvedValueOnce({ rows: [] });
   mockQuery.mockResolvedValueOnce({ rows: [{ total_post: 0 }] });
   await getRekapLikesByClient('1', 'bulanan', '2023-10');
-  const expected = "date_trunc('month', p.created_at AT TIME ZONE 'Asia/Jakarta') = date_trunc('month', $2::date)";
+  const expected = "date_trunc('month', (COALESCE(p.original_created_at, p.created_at) AT TIME ZONE 'Asia/Jakarta')) = date_trunc('month', $2::date)";
   expect(mockQuery).toHaveBeenNthCalledWith(1, expect.stringContaining(expected), expect.any(Array));
   expectPriorityParams(mockQuery.mock.calls[0][1], ['1', '2023-10-01']);
 });
@@ -65,7 +65,7 @@ test('date range uses between filter', async () => {
   mockQuery.mockResolvedValueOnce({ rows: [] });
   mockQuery.mockResolvedValueOnce({ rows: [{ total_post: 0 }] });
   await getRekapLikesByClient('1', 'harian', undefined, '2023-10-01', '2023-10-07');
-  const expected = "(p.created_at AT TIME ZONE 'Asia/Jakarta')::date BETWEEN $2::date AND $3::date";
+  const expected = "(COALESCE(p.original_created_at, p.created_at) AT TIME ZONE 'Asia/Jakarta')::date BETWEEN $2::date AND $3::date";
   expect(mockQuery).toHaveBeenNthCalledWith(1, expect.stringContaining(expected), expect.any(Array));
   expectPriorityParams(mockQuery.mock.calls[0][1], ['1', '2023-10-01', '2023-10-07']);
 });
