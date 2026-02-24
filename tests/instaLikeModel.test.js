@@ -16,6 +16,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   mockQuery.mockReset();
+  mockQuery.mockResolvedValue({ rows: [] });
 });
 
 const PRIORITY_UPPER = PRIORITY_USER_NAMES.map(name => name.toUpperCase());

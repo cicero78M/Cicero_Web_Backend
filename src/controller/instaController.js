@@ -244,7 +244,7 @@ export async function getInstaRekapLikes(req, res) {
     }
 
     sendConsoleDebug({ tag: "INSTA", msg: `getInstaRekapLikes ${client_id} ${periode} ${tanggal || ''} ${startDate || ''} ${endDate || ''} ${roleLower || ''} ${scopeLower || ''} ${regionalId || ''}` });
-    const { rows, totalKonten } = await getRekapLikesByClient(
+    const { rows, totalKonten, taskLinksToday } = await getRekapLikesByClient(
       client_id,
       periode,
       tanggal,
@@ -254,7 +254,7 @@ export async function getInstaRekapLikes(req, res) {
       rekapOptions
     );
 
-    const payload = formatLikesRecapResponse(rows, totalKonten);
+    const payload = formatLikesRecapResponse(rows, totalKonten, taskLinksToday);
 
     res.json({
       success: true,

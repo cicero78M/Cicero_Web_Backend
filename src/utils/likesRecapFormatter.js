@@ -6,14 +6,27 @@
  *
  * @param {Array<Object>} rowsInput
  * @param {number} totalPostsInput
+ * @param {Object} [taskLinksTodayInput]
  * @returns {Object}
  */
-export function formatLikesRecapResponse(rowsInput, totalPostsInput) {
+export function formatLikesRecapResponse(rowsInput, totalPostsInput, taskLinksTodayInput) {
   const rows = Array.isArray(rowsInput) ? rowsInput : [];
   const totalPostsNumber = Number.isFinite(Number(totalPostsInput))
     ? Number(totalPostsInput)
     : 0;
   const totalPosts = totalPostsNumber > 0 ? totalPostsNumber : 0;
+
+  const taskLinksToday = {
+    platform:
+      typeof taskLinksTodayInput?.platform === 'string' && taskLinksTodayInput.platform
+        ? taskLinksTodayInput.platform
+        : 'instagram',
+    links: Array.isArray(taskLinksTodayInput?.links)
+      ? taskLinksTodayInput.links.filter(
+          (link) => typeof link === 'string' && link.trim().length > 0
+        )
+      : [],
+  };
 
   const perRowHeight = 36;
   const minChartHeight = 320;
@@ -237,5 +250,6 @@ export function formatLikesRecapResponse(rowsInput, totalPostsInput) {
     insights,
     statusLegend,
     noUsernameUsersDetails,
+    taskLinksToday,
   };
 }

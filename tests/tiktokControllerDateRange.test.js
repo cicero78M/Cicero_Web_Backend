@@ -111,7 +111,35 @@ test('scope direktorat forwards post role+client merge options', async () => {
       userRoleFilter: 'ditintelkam',
       includePostRoleFilter: true,
       postRoleFilterMode: 'include_client_or_role',
-      regionalId: 'JATIM'
+      userRegionalId: 'JATIM',
+      postRegionalId: 'JATIM',
+      includeTaskLinks: true
+    })
+  );
+});
+
+
+test('returns taskLinksToday when model provides recap meta', async () => {
+  mockGetRekap.mockResolvedValue({
+    rows: [{ username: 'alice', jumlah_komentar: 1, total_konten: 2 }],
+    totalKonten: 2,
+    taskLinksToday: {
+      platform: 'tiktok',
+      links: ['https://www.tiktok.com/video/1234567890']
+    }
+  });
+  const req = { query: { client_id: 'DITINTELKAM' }, headers: {} };
+  const json = jest.fn();
+  const res = { json, status: jest.fn().mockReturnThis() };
+
+  await getTiktokRekapKomentar(req, res);
+
+  expect(json).toHaveBeenCalledWith(
+    expect.objectContaining({
+      taskLinksToday: {
+        platform: 'tiktok',
+        links: ['https://www.tiktok.com/video/1234567890']
+      }
     })
   );
 });

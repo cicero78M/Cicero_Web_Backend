@@ -235,19 +235,32 @@ export async function getTiktokRekapKomentar(req, res) {
       roleForQuery = resolvedRole;
     }
 
-    const data = await getRekapKomentarByClient(
+    const rekapResult = await getRekapKomentarByClient(
       client_id,
       periode,
       tanggal,
       startDate,
       endDate,
       roleForQuery,
-      rekapOptions || {}
+      {
+        ...(rekapOptions || {}),
+        includeTaskLinks: true,
+      }
     );
-    const totalPosts = Array.isArray(data) && data.length > 0
-      ? data[0]?.total_konten
-      : 0;
-    const payload = formatTiktokCommentRecapResponse(data, totalPosts);
+    const rekapRows = Array.isArray(rekapResult)
+      ? rekapResult
+      : rekapResult?.rows || [];
+    const totalPosts = Array.isArray(rekapResult)
+      ? (rekapRows.length > 0 ? rekapRows[0]?.total_konten : 0)
+      : rekapResult?.totalKonten;
+    const taskLinksToday = Array.isArray(rekapResult)
+      ? undefined
+      : rekapResult?.taskLinksToday;
+    const payload = formatTiktokCommentRecapResponse(
+      rekapRows,
+      totalPosts,
+      taskLinksToday
+    );
     const usersWithComments = payload.data
       .filter((u) => u.jumlah_komentar > 0)
       .map((u) => u.username);
