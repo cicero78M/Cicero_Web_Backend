@@ -358,7 +358,7 @@ export async function getRekapKomentarByClient(
   }
 
   const postDateField =
-    "((COALESCE(p.original_created_at, p.created_at) AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')";
+    "((CASE WHEN p.source_type = 'manual_input' THEN p.created_at ELSE COALESCE(p.original_created_at, p.created_at) END AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')";
   const commentDateField = postDateField;
   const commentTanggalFilter = tanggalFilter.replaceAll(
     "__DATE_FIELD__",
