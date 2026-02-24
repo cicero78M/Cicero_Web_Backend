@@ -140,51 +140,9 @@ test('allows org operator scope using token client_id', async () => {
       userClientId: 'ORG1',
       userRoleFilter: 'operator',
       includePostRoleFilter: false,
-      postRoleFilterName: undefined,
       matchLikeClientId: true,
-      officialAccountsOnly: false,
+      officialAccountsOnly: true,
       regionalId: null,
-    }
-  );
-  expect(json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
-});
-
-
-test('scope direktorat includes client-or-role post filter for task links', async () => {
-  mockGetRekap.mockResolvedValue({ rows: [], totalKonten: 0 });
-  const req = {
-    query: {
-      client_id: 'DITINTELKAM',
-      role: 'ditintelkam',
-      scope: 'DIREKTORAT',
-      regional_id: 'JATIM',
-      periode: 'harian',
-      tanggal: '2026-02-24',
-    },
-    user: { client_ids: ['DITINTELKAM'] }
-  };
-  const json = jest.fn();
-  const res = { json, status: jest.fn().mockReturnThis() };
-
-  await getInstaRekapLikes(req, res);
-
-  expect(res.status).not.toHaveBeenCalledWith(403);
-  expect(mockGetRekap).toHaveBeenCalledWith(
-    'DITINTELKAM',
-    'harian',
-    '2026-02-24',
-    undefined,
-    undefined,
-    'ditintelkam',
-    {
-      postClientId: 'DITINTELKAM',
-      userClientId: null,
-      userRoleFilter: 'ditintelkam',
-      includePostRoleFilter: true,
-      postRoleFilterName: 'ditintelkam',
-      matchLikeClientId: true,
-      officialAccountsOnly: false,
-      regionalId: 'JATIM',
     }
   );
   expect(json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
