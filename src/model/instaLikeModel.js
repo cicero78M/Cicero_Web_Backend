@@ -346,7 +346,10 @@ export async function getRekapLikesByClient(
   const sharedRoleParamIdx = hasSharedRoleParam ? addParam(resolvedUserRole) : null;
 
   const buildTanggalFilter = addParamFn => {
-    const postDateBase = "COALESCE(p.original_created_at, p.created_at)";
+    const postDateBase = `CASE
+      WHEN p.source_type = 'manual_input' THEN p.created_at
+      ELSE COALESCE(p.original_created_at, p.created_at)
+    END`;
     const postDateJakarta = `(${postDateBase} AT TIME ZONE 'Asia/Jakarta')`;
     let filter =
       `${postDateJakarta}::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date`;

@@ -89,3 +89,29 @@ test('non-direktorat scope still uses postClientFilter normally', async () => {
   const params = mockQuery.mock.calls[1][1];
   expect(params).toEqual(expect.arrayContaining(['POLRESXYZ']));
 });
+
+test('comment recap date filter uses manual_input created_at before original_created_at', async () => {
+  mockQuery.mockResolvedValueOnce({ rows: [{ client_type: 'direktorat' }] });
+  mockQuery.mockResolvedValueOnce({ rows: [] });
+
+  await getRekapKomentarByClient(
+    'DITINTELKAM',
+    'harian',
+    '2026-02-24',
+    undefined,
+    undefined,
+    'ditintelkam',
+    {
+      postClientId: 'DITINTELKAM',
+      userClientId: null,
+      userRoleFilter: 'ditintelkam',
+      includePostRoleFilter: true,
+      postRoleFilterMode: 'include_client_or_role',
+    }
+  );
+
+  const sql = mockQuery.mock.calls[1][0];
+  expect(sql).toContain("CASE WHEN p.source_type = 'manual_input' THEN p.created_at");
+  expect(sql).toContain("ELSE COALESCE(p.original_created_at, p.created_at)");
+});
+
