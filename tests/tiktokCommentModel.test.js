@@ -98,3 +98,37 @@ test('getRekapKomentarByClient orders nama by priority list', async () => {
   expect(sql).toContain('CASE WHEN');
   expect(sql).toContain('UPPER(u.nama)');
 });
+
+
+test('getRekapKomentarByClient can include task links metadata when requested', async () => {
+  mockClientType();
+  mockQuery.mockResolvedValueOnce({
+    rows: [{ user_id: 'u1', username: 'alice', jumlah_komentar: '1', total_konten: '2' }]
+  });
+  mockQuery.mockResolvedValueOnce({ rows: [{ video_id: 'v100' }, { video_id: 'v200' }] });
+
+  const result = await getRekapKomentarByClient(
+    'POLRES',
+    'harian',
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    { includeTaskLinks: true }
+  );
+
+  expect(mockQuery).toHaveBeenCalledTimes(3);
+  expect(result).toEqual(
+    expect.objectContaining({
+      totalKonten: 2,
+      taskLinksToday: {
+        platform: 'tiktok',
+        links: [
+          'https://www.tiktok.com/video/v100',
+          'https://www.tiktok.com/video/v200'
+        ]
+      }
+    })
+  );
+  expect(result.rows[0].jumlah_komentar).toBe(1);
+});

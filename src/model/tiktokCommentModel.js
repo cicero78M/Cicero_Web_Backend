@@ -279,6 +279,7 @@ export async function getRekapKomentarByClient(
   const regionalIdOverride = hasOption('regionalId')
     ? options.regionalId
     : undefined;
+  const includeTaskLinks = Boolean(options.includeTaskLinks);
   const usesOverrides = [
     postClientIdOverride,
     userClientIdOverride,
@@ -583,5 +584,38 @@ export async function getRekapKomentarByClient(
     user.jumlah_komentar = parseInt(user.jumlah_komentar, 10);
   }
 
-  return rows;
+  if (!includeTaskLinks) {
+    return rows;
+  }
+
+  const { rows: taskLinkRows } = await query(
+    `SELECT DISTINCT p.video_id
+     FROM tiktok_post p
+     ${postRegionalJoin}
+     ${postRoleJoin}
+     WHERE ${postClientFilter}
+       ${postRoleFilter}
+       ${postRegionalFilter}
+       AND ${postTanggalFilter}
+     ORDER BY p.video_id ASC`,
+    params
+  );
+
+  const taskLinksToday = taskLinkRows
+    .map((row) => String(row?.video_id || '').trim())
+    .filter(Boolean)
+    .map((videoId) => `https://www.tiktok.com/video/${videoId}`);
+
+  const totalKonten = rows.length > 0
+    ? parseInt(rows[0]?.total_konten || '0', 10)
+    : 0;
+
+  return {
+    rows,
+    totalKonten,
+    taskLinksToday: {
+      platform: 'tiktok',
+      links: taskLinksToday,
+    },
+  };
 }

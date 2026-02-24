@@ -10,7 +10,7 @@ export async function getDitbinmasLikes(req, res) {
 
   try {
     sendConsoleDebug({ tag: "LIKES", msg: `getDitbinmasLikes ${periode} ${tanggal || ''} ${startDate || ''} ${endDate || ''}` });
-    const { rows, totalKonten } = await getRekapLikesByClient(
+    const { rows, totalKonten, taskLinksToday } = await getRekapLikesByClient(
       "ditbinmas",
       periode,
       tanggal,
@@ -19,7 +19,7 @@ export async function getDitbinmasLikes(req, res) {
       "ditbinmas"
     );
 
-    const payload = formatLikesRecapResponse(rows, totalKonten);
+    const payload = formatLikesRecapResponse(rows, totalKonten, taskLinksToday);
 
     res.json({
       success: true,

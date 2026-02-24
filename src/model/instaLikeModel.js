@@ -567,8 +567,7 @@ export async function getRekapLikesByClient(
     user.jumlah_like = parseInt(user.jumlah_like, 10);
   }
 
-  const { rows: postRows } = await query(
-    `WITH posts AS (
+  const postsCteSql = `WITH posts AS (
       SELECT p.shortcode
       FROM insta_post p
       ${postRegionalJoinPosts}
@@ -579,11 +578,33 @@ export async function getRekapLikesByClient(
         ${postRegionalFilterPosts}
         ${postOfficialFilterPosts}
         AND ${postTanggalFilter}
-    )
+    )`;
+
+  const { rows: postRows } = await query(
+    `${postsCteSql}
     SELECT COUNT(DISTINCT shortcode) AS total_post FROM posts`,
     postParams
   );
   const totalKonten = parseInt(postRows[0]?.total_post || '0', 10);
 
-  return { rows, totalKonten };
+  const { rows: taskLinkRows } = await query(
+    `${postsCteSql}
+    SELECT DISTINCT shortcode
+     FROM posts
+     ORDER BY shortcode ASC`,
+    postParams
+  );
+  const taskLinksToday = taskLinkRows
+    .map((row) => String(row?.shortcode || '').trim())
+    .filter(Boolean)
+    .map((shortcode) => `https://www.instagram.com/p/${shortcode}`);
+
+  return {
+    rows,
+    totalKonten,
+    taskLinksToday: {
+      platform: 'instagram',
+      links: taskLinksToday,
+    },
+  };
 }

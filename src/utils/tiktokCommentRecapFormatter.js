@@ -6,15 +6,28 @@
  *
  * @param {Array<Object>} rowsInput
  * @param {number} totalPostsInput
+ * @param {Object} [taskLinksTodayInput]
  * @returns {Object}
  */
-export function formatTiktokCommentRecapResponse(rowsInput, totalPostsInput) {
+export function formatTiktokCommentRecapResponse(rowsInput, totalPostsInput, taskLinksTodayInput) {
   const rows = Array.isArray(rowsInput) ? rowsInput : [];
   const totalPostsFromRows = rows.length > 0 ? Number(rows[0]?.total_konten) : 0;
   const totalPostsNumber = Number.isFinite(Number(totalPostsInput))
     ? Number(totalPostsInput)
     : totalPostsFromRows;
   const totalPosts = totalPostsNumber > 0 ? totalPostsNumber : 0;
+
+  const taskLinksToday = {
+    platform:
+      typeof taskLinksTodayInput?.platform === 'string' && taskLinksTodayInput.platform
+        ? taskLinksTodayInput.platform
+        : 'tiktok',
+    links: Array.isArray(taskLinksTodayInput?.links)
+      ? taskLinksTodayInput.links.filter(
+          (link) => typeof link === 'string' && link.trim().length > 0
+        )
+      : [],
+  };
 
   const perRowHeight = 36;
   const minChartHeight = 320;
@@ -240,5 +253,6 @@ export function formatTiktokCommentRecapResponse(rowsInput, totalPostsInput) {
     insights,
     statusLegend,
     noUsernameUsersDetails,
+    taskLinksToday,
   };
 }
