@@ -46,7 +46,7 @@ test('getRekapKomentarByClient keeps comment period based on post date even if c
   const sql = mockQuery.mock.calls[1][0];
   expect(sql).toContain('valid_comments AS (');
   expect(sql).toContain('total_posts AS (');
-  const createdAtMatches = sql.match(/\(\(p\.created_at AT TIME ZONE 'UTC'\) AT TIME ZONE 'Asia\/Jakarta'\)/g) || [];
+  const createdAtMatches = sql.match(/COALESCE\(p\.original_created_at, p\.created_at\)/g) || [];
   expect(createdAtMatches.length).toBeGreaterThanOrEqual(2);
   expect(sql).not.toContain("((c.updated_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')");
 });
@@ -78,7 +78,7 @@ test('ditbinmas recap counts only ditbinmas-scoped posts and respects tanggal fi
   expect(mockQuery).toHaveBeenCalledTimes(2);
   const sql = mockQuery.mock.calls[1][0];
   expect(sql).toContain('pr.video_id IS NOT NULL');
-  expect(sql).toContain('p.created_at AT TIME ZONE');
+  expect(sql).toContain('COALESCE(p.original_created_at, p.created_at)');
   expect(sql).toContain('::date = $1::date');
   const params = mockQuery.mock.calls[1][1];
   expect(params).toEqual(expect.arrayContaining(['2024-02-10', 'ditbinmas']));
