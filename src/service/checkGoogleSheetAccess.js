@@ -1,5 +1,3 @@
-import fetch from 'node-fetch';
-
 /**
  * Cek status akses Google Sheet CSV, kembalikan pesan error jika tidak bisa diakses publik.
  * @param {string} sheetUrl - Link Google Sheet (bisa format edit atau export csv)
