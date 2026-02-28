@@ -39,6 +39,7 @@
     "nodemailer": "^6.9.11",
     "p-queue": "^7.4.1",
     "pg": "^8.16.0",
+    "pg-protocol": "1.10.3",
     "rabbitmq": "^0.0.2",
     "redis": "^4.6.7",
     "sequelize": "^6.32.1",
@@ -70,5 +71,8 @@
   "bugs": {
     "url": "https://github.com/cicero78M/Cicero_Web_Backend/issues"
   },
-  "homepage": "https://github.com/cicero78M/Cicero_Web_Backend#readme"
+  "homepage": "https://github.com/cicero78M/Cicero_Web_Backend#readme",
+  "overrides": {
+    "pg-protocol": "1.10.3"
+  }
 }
