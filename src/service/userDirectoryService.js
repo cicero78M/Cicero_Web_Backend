@@ -57,6 +57,35 @@ function filterByRegionalId(users, regionalId) {
   );
 }
 
+function isOrgClient(client) {
+  return String(client?.client_type || '').trim().toLowerCase() === 'org';
+}
+
+function isSatIntelkamDivision(divisi) {
+  if (!divisi) return false;
+  const normalized = String(divisi).trim().toLowerCase().replace(/\s+/g, ' ');
+  return normalized.includes('sat intelkam') || normalized.includes('satintelkam');
+}
+
+async function shouldApplySatikFilter({
+  scope,
+  role,
+  targetClientId,
+}) {
+  if (scope !== 'org') return false;
+  if (role !== 'ditintelkam') return false;
+  if (!targetClientId) return false;
+
+  const targetClient = await findClientById(targetClientId);
+  if (!targetClient || !isOrgClient(targetClient)) return false;
+
+  return targetClient.switch_satik === true;
+}
+
+function applySatikFilter(users) {
+  return users.filter((user) => isSatIntelkamDivision(user?.divisi));
+}
+
 function selectClientIdForOperator(requestedClientId, tokenClientIds) {
   const normalizedTokenIds = tokenClientIds.map((id) => id.toLowerCase());
 
@@ -151,8 +180,16 @@ export async function getUserDirectoryUsers({
   }
 
   const filteredUsers = filterByRegionalId(users, regionalId);
+  const satikEnabled = await shouldApplySatikFilter({
+    scope: normalizedScope,
+    role: normalizedRole,
+    targetClientId: resolvedClientId,
+  });
+
+  const scopedUsers = satikEnabled ? applySatikFilter(filteredUsers) : filteredUsers;
+
   return {
-    users: filteredUsers,
+    users: scopedUsers,
     clientId: resolvedClientId,
     role: normalizedRole,
     scope: normalizedScope,
