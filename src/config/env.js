@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import { cleanEnv, str, port, bool, num } from 'envalid';
+import { cleanEnv, str, port, bool, num } from 'envalid/dist/index.js';
 
 dotenv.config();
 
