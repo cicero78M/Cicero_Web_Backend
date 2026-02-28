@@ -1,5 +1,4 @@
 import axios from 'axios';
-import fetch from 'node-fetch';
 import { env } from '../config/env.js';
 
 const RAPIDAPI_KEY = env.RAPIDAPI_KEY;
