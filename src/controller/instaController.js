@@ -183,12 +183,14 @@ export async function getInstaRekapLikes(req, res) {
     "bidhumas",
     "ditsamapta",
   ];
+  const isOrgDirectorateScope =
+    scopeLower === "org" && directorateRoles.includes(roleLower);
   const usesStandardPayload = Boolean(requestedScope || req.query.role);
 
   if (!usesStandardPayload && roleLower === "ditbinmas") {
     client_id = "ditbinmas";
   }
-  if (isOrgOperatorScope && req.user?.client_id) {
+  if ((isOrgOperatorScope || isOrgDirectorateScope) && req.user?.client_id) {
     client_id = req.user.client_id;
   }
 
@@ -255,6 +257,11 @@ export async function getInstaRekapLikes(req, res) {
       let matchLikeClientId = true;
 
       let officialAccountsOnly = false;
+      let tokenClient = null;
+
+      if (resolvedScope === "org") {
+        tokenClient = await clientModel.findById(tokenClientId);
+      }
 
       let postRoleFilterName;
       if (
@@ -300,19 +307,22 @@ export async function getInstaRekapLikes(req, res) {
         if (resolvedRole === "operator") {
           userRoleFilter = "operator";
           if (officialOnlyFlag) {
-            const tokenClient = await clientModel.findById(tokenClientId);
             officialAccountsOnly =
               tokenClient?.client_type?.toLowerCase() === "org";
           }
         } else if (directorateRoles.includes(resolvedRole)) {
-          postClientId = client_id;
-          userClientId = client_id;
+          client_id = tokenClientId;
+          postClientId = tokenClientId;
+          userClientId = tokenClientId;
           userRoleFilter = resolvedRole;
           includePostRoleFilter = false;
           postRoleFilterName = undefined;
           matchLikeClientId = false;
 
-          const targetClient = await clientModel.findById(userClientId);
+          const targetClient =
+            tokenClient && userClientId === tokenClientId
+              ? tokenClient
+              : await clientModel.findById(userClientId);
           if (
             shouldEnableSatikFilter({
               scope: resolvedScope,
