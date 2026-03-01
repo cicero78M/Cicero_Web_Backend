@@ -275,7 +275,7 @@ export async function getInstaRekapLikes(req, res) {
               tokenClient?.client_type?.toLowerCase() === "org";
           }
         } else if (directorateRoles.includes(resolvedRole)) {
-          postClientId = resolvedRole;
+          postClientId = client_id;
           userClientId = client_id;
           userRoleFilter = resolvedRole;
           includePostRoleFilter = false;
