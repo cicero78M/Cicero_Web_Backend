@@ -43,10 +43,11 @@ test('accepts tanggal_mulai and tanggal_selesai', async () => {
       periode: 'harian',
       tanggal_mulai: '2024-01-01',
       tanggal_selesai: '2024-01-31'
-    }
+    },
+    user: { client_id: 'c1' }
   };
   const json = jest.fn();
-  const res = { json };
+  const res = { json, status: jest.fn().mockReturnThis() };
   await getInstaRekapLikes(req, res);
   expect(mockGetRekap).toHaveBeenCalledWith(
     'c1',
@@ -161,7 +162,7 @@ test('scope direktorat includes client-or-role post filter for task links', asyn
       periode: 'harian',
       tanggal: '2026-02-24',
     },
-    user: { client_ids: ['DITINTELKAM'] }
+    user: { client_ids: ['DITINTELKAM'], client_id: 'DITINTELKAM' }
   };
   const json = jest.fn();
   const res = { json, status: jest.fn().mockReturnThis() };
@@ -185,6 +186,7 @@ test('scope direktorat includes client-or-role post filter for task links', asyn
       matchLikeClientId: true,
       officialAccountsOnly: false,
       regionalId: 'JATIM',
+      satikDivisionMode: undefined,
     }
   );
   expect(json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
@@ -253,7 +255,7 @@ test('scope org ditintelkam enables satik filter when switch_satik is string tru
       tanggal: '2026-03-01',
       regional_id: 'JATIM',
     },
-    user: { client_ids: ['NGAWI'] },
+    user: { client_ids: ['NGAWI'], client_id: 'NGAWI' },
   };
   const json = jest.fn();
   const res = { json, status: jest.fn().mockReturnThis() };
@@ -272,8 +274,8 @@ test('scope org ditintelkam enables satik filter when switch_satik is string tru
       postClientId: 'NGAWI',
       userClientId: 'NGAWI',
       userRoleFilter: 'ditintelkam',
-      includePostRoleFilter: true,
-      postRoleFilterName: 'ditintelkam',
+      includePostRoleFilter: false,
+      postRoleFilterName: undefined,
       matchLikeClientId: false,
       officialAccountsOnly: false,
       regionalId: 'JATIM',
@@ -295,7 +297,7 @@ test('scope org ditbinmas follows tiktok comments flow (role-scoped post client)
       tanggal: '2026-03-01',
       regional_id: 'JATIM',
     },
-    user: { client_ids: ['NGAWI'] },
+    user: { client_ids: ['NGAWI'], client_id: 'NGAWI' },
   };
   const json = jest.fn();
   const res = { json, status: jest.fn().mockReturnThis() };
@@ -311,7 +313,7 @@ test('scope org ditbinmas follows tiktok comments flow (role-scoped post client)
     undefined,
     'ditbinmas',
     {
-      postClientId: 'ditbinmas',
+      postClientId: 'NGAWI',
       userClientId: 'NGAWI',
       userRoleFilter: 'ditbinmas',
       includePostRoleFilter: false,
@@ -322,5 +324,101 @@ test('scope org ditbinmas follows tiktok comments flow (role-scoped post client)
       satikDivisionMode: undefined,
     }
   );
+  expect(json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+});
+
+test('rejects org ditbinmas request when client_id is not in token scope', async () => {
+  const req = {
+    query: {
+      client_id: 'DITBINMAS',
+      role: 'ditbinmas',
+      scope: 'org',
+    },
+    user: { client_ids: ['PRESISI_ORG'], client_id: 'PRESISI_ORG' },
+  };
+  const json = jest.fn();
+  const res = { json, status: jest.fn().mockReturnThis() };
+
+  await getInstaRekapLikes(req, res);
+
+  expect(res.status).toHaveBeenCalledWith(403);
+  expect(json).toHaveBeenCalledWith({ success: false, message: 'client_id tidak diizinkan' });
+  expect(mockGetRekap).not.toHaveBeenCalled();
+});
+
+test('org operator ignores query client_id and uses token client_id', async () => {
+  mockGetRekap.mockResolvedValue({ rows: [], totalKonten: 0 });
+  const req = {
+    query: {
+      client_id: 'OTHER_ORG',
+      role: 'operator',
+      scope: 'org',
+    },
+    user: { client_id: 'TOKEN_ORG', client_ids: ['TOKEN_ORG'] },
+  };
+  const json = jest.fn();
+  const res = { json, status: jest.fn().mockReturnThis() };
+
+  await getInstaRekapLikes(req, res);
+
+  expect(res.status).not.toHaveBeenCalledWith(403);
+  expect(mockGetRekap).toHaveBeenCalledWith(
+    'TOKEN_ORG',
+    'harian',
+    undefined,
+    undefined,
+    undefined,
+    'operator',
+    {
+      postClientId: 'TOKEN_ORG',
+      userClientId: 'TOKEN_ORG',
+      userRoleFilter: 'operator',
+      includePostRoleFilter: false,
+      postRoleFilterName: undefined,
+      matchLikeClientId: true,
+      officialAccountsOnly: false,
+      regionalId: null,
+      satikDivisionMode: undefined,
+    }
+  );
+  expect(json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+});
+
+test('scope direktorat enforces explicit role-client mapping', async () => {
+  const req = {
+    query: {
+      client_id: 'DITINTELKAM',
+      role: 'ditbinmas',
+      scope: 'direktorat',
+    },
+    user: { client_ids: ['DITINTELKAM'], client_id: 'DITINTELKAM' },
+  };
+  const json = jest.fn();
+  const res = { json, status: jest.fn().mockReturnThis() };
+
+  await getInstaRekapLikes(req, res);
+
+  expect(res.status).toHaveBeenCalledWith(403);
+  expect(json).toHaveBeenCalledWith({ success: false, message: 'client_id tidak diizinkan' });
+  expect(mockGetRekap).not.toHaveBeenCalled();
+});
+
+test('scope direktorat allows matching role-client mapping', async () => {
+  mockGetRekap.mockResolvedValue({ rows: [], totalKonten: 0 });
+  const req = {
+    query: {
+      client_id: 'DITBINMAS',
+      role: 'ditbinmas',
+      scope: 'direktorat',
+    },
+    user: { client_ids: ['DITBINMAS'], client_id: 'DITBINMAS' },
+  };
+  const json = jest.fn();
+  const res = { json, status: jest.fn().mockReturnThis() };
+
+  await getInstaRekapLikes(req, res);
+
+  expect(res.status).not.toHaveBeenCalledWith(403);
+  expect(mockGetRekap).toHaveBeenCalled();
   expect(json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
 });
