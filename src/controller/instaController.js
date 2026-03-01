@@ -255,6 +255,11 @@ export async function getInstaRekapLikes(req, res) {
       let matchLikeClientId = true;
 
       let officialAccountsOnly = false;
+      let tokenClient = null;
+
+      if (resolvedScope === "org") {
+        tokenClient = await clientModel.findById(tokenClientId);
+      }
 
       let postRoleFilterName;
       if (
@@ -300,13 +305,20 @@ export async function getInstaRekapLikes(req, res) {
         if (resolvedRole === "operator") {
           userRoleFilter = "operator";
           if (officialOnlyFlag) {
-            const tokenClient = await clientModel.findById(tokenClientId);
             officialAccountsOnly =
               tokenClient?.client_type?.toLowerCase() === "org";
           }
         } else if (directorateRoles.includes(resolvedRole)) {
-          postClientId = client_id;
-          userClientId = client_id;
+          const isOrgClientLogin =
+            tokenClient?.client_type?.toLowerCase() === "org";
+
+          if (isOrgClientLogin) {
+            postClientId = tokenClientId;
+            userClientId = tokenClientId;
+          } else {
+            postClientId = client_id;
+            userClientId = client_id;
+          }
           userRoleFilter = resolvedRole;
           includePostRoleFilter = false;
           postRoleFilterName = undefined;
