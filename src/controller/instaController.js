@@ -41,7 +41,7 @@ function shouldEnableSatikFilter({
   }
 
   const clientType = String(targetClient.client_type || '').toLowerCase();
-  return clientType === 'org' && targetClient.switch_satik === true;
+  return clientType === 'direktorat' && targetClient.switch_satik === true;
 }
 
 function normalizeInstagramUsername(value) {
@@ -238,7 +238,7 @@ export async function getInstaRekapLikes(req, res) {
             targetClient,
           })
         ) {
-          rekapOptions.satikDivisionMode = 'include_only';
+          rekapOptions.satikDivisionMode = 'org_include_only';
         }
       } else if (resolvedScope === "org") {
         if (resolvedRole === "operator") {
