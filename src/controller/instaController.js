@@ -273,7 +273,7 @@ export async function getInstaRekapLikes(req, res) {
               targetClient,
             })
           ) {
-            rekapOptions.satikDivisionMode = 'org_include_only';
+            rekapOptions.satikDivisionMode = 'include_only';
           }
         }
       }

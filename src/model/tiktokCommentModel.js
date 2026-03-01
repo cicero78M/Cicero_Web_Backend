@@ -492,14 +492,20 @@ export async function getRekapKomentarByClient(
       : `${userWhere} AND ${regionalFilter}`;
   }
 
-  if (satikDivisionModeOverride === 'org_include_only') {
+  if (satikDivisionModeOverride === 'org_include_only' || satikDivisionModeOverride === 'include_only') {
     const satikDivisionFilter =
       "LOWER(REGEXP_REPLACE(COALESCE(u.divisi, ''), '\\s+', ' ', 'g')) IN ('sat intel', 'satintel', 'sat intelkam', 'satintelkam')";
-    const satikScopedFilter =
-      `LOWER(COALESCE(cl.client_type, '')) <> 'org' OR (${satikDivisionFilter})`;
-    userWhere = userWhere === "1=1"
-      ? satikScopedFilter
-      : `${userWhere} AND (${satikScopedFilter})`;
+    if (satikDivisionModeOverride === 'include_only') {
+      userWhere = userWhere === "1=1"
+        ? satikDivisionFilter
+        : `${userWhere} AND (${satikDivisionFilter})`;
+    } else {
+      const satikScopedFilter =
+        `LOWER(COALESCE(cl.client_type, '')) <> 'org' OR (${satikDivisionFilter})`;
+      userWhere = userWhere === "1=1"
+        ? satikScopedFilter
+        : `${userWhere} AND (${satikScopedFilter})`;
+    }
   }
 
   let postRoleJoin = "";
