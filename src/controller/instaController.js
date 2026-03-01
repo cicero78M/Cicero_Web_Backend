@@ -309,22 +309,18 @@ export async function getInstaRekapLikes(req, res) {
               tokenClient?.client_type?.toLowerCase() === "org";
           }
         } else if (directorateRoles.includes(resolvedRole)) {
-          const isOrgClientLogin =
-            tokenClient?.client_type?.toLowerCase() === "org";
-
-          if (isOrgClientLogin) {
-            postClientId = tokenClientId;
-            userClientId = tokenClientId;
-          } else {
-            postClientId = client_id;
-            userClientId = client_id;
-          }
+          client_id = tokenClientId;
+          postClientId = tokenClientId;
+          userClientId = tokenClientId;
           userRoleFilter = resolvedRole;
           includePostRoleFilter = false;
           postRoleFilterName = undefined;
           matchLikeClientId = false;
 
-          const targetClient = await clientModel.findById(userClientId);
+          const targetClient =
+            tokenClient && userClientId === tokenClientId
+              ? tokenClient
+              : await clientModel.findById(userClientId);
           if (
             shouldEnableSatikFilter({
               scope: resolvedScope,
