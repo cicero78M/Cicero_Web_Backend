@@ -188,14 +188,12 @@ export async function getInstaRekapLikes(req, res) {
     normalizeClientIdLower(req.user.client_id) === normalizedClientIdLower;
   const hasClientIdsAccess =
     idsLower.includes(normalizedClientIdLower) ||
-    matchesTokenClient ||
-    roleLower === normalizedClientIdLower;
+    matchesTokenClient;
 
   if (req.user?.client_ids) {
     if (
       !idsLower.includes(normalizedClientIdLower) &&
-      !matchesTokenClient &&
-      roleLower !== normalizedClientIdLower
+      !matchesTokenClient
     ) {
       return res
         .status(403)
@@ -205,7 +203,6 @@ export async function getInstaRekapLikes(req, res) {
   if (
     req.user?.client_id &&
     normalizeClientIdLower(req.user.client_id) !== normalizedClientIdLower &&
-    roleLower !== normalizedClientIdLower &&
     !hasClientIdsAccess
   ) {
     return res
@@ -228,6 +225,13 @@ export async function getInstaRekapLikes(req, res) {
         return res
           .status(400)
           .json({ success: false, message: "scope tidak valid" });
+      }
+      const tokenClientId = normalizeClientId(req.user?.client_id);
+      if (!tokenClientId) {
+        return res.status(400).json({
+          success: false,
+          message: "client_id pengguna tidak ditemukan",
+        });
       }
 
       let postClientId = client_id;
@@ -258,16 +262,13 @@ export async function getInstaRekapLikes(req, res) {
           rekapOptions.satikDivisionMode = 'org_include_only';
         }
       } else if (resolvedScope === "org") {
-        if (resolvedRole === "operator") {
-          const tokenClientId = req.user?.client_id;
-          if (!tokenClientId) {
-            return res.status(400).json({
-              success: false,
-              message: "client_id pengguna tidak ditemukan",
-            });
-          }
+        const isCrossOrgDirectorateRole = directorateRoles.includes(resolvedRole);
+        if (!isCrossOrgDirectorateRole) {
           postClientId = tokenClientId;
           userClientId = tokenClientId;
+        }
+
+        if (resolvedRole === "operator") {
           userRoleFilter = "operator";
           if (officialOnlyFlag) {
             const tokenClient = await clientModel.findById(tokenClientId);
