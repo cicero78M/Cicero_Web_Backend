@@ -277,6 +277,7 @@ export async function getRekapLikesByClient(
     matchLikeClientId = true,
     officialAccountsOnly = false,
     regionalId = null,
+    satikDivisionMode = null,
   } = options;
   const normalizedRegionalId = regionalId
     ? String(regionalId).trim().toUpperCase()
@@ -507,6 +508,16 @@ export async function getRekapLikesByClient(
     userWhere = userWhere === '1=1'
       ? regionalFilter
       : `${userWhere} AND ${regionalFilter}`;
+  }
+
+  if (satikDivisionMode === 'org_include_only') {
+    const satikDivisionFilter =
+      "LOWER(REGEXP_REPLACE(COALESCE(u.divisi, ''), '\\s+', ' ', 'g')) IN ('sat intel', 'satintel', 'sat intelkam', 'satintelkam')";
+    const satikScopedFilter =
+      `LOWER(COALESCE(c.client_type, '')) <> 'org' OR (${satikDivisionFilter})`;
+    userWhere = userWhere === '1=1'
+      ? satikScopedFilter
+      : `${userWhere} AND (${satikScopedFilter})`;
   }
 
   
