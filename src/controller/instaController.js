@@ -275,9 +275,11 @@ export async function getInstaRekapLikes(req, res) {
               tokenClient?.client_type?.toLowerCase() === "org";
           }
         } else if (directorateRoles.includes(resolvedRole)) {
-          postClientId = resolvedRole;
+          postClientId = client_id;
           userClientId = client_id;
           userRoleFilter = resolvedRole;
+          includePostRoleFilter = true;
+          postRoleFilterName = resolvedRole;
           matchLikeClientId = false;
 
           const targetClient = await clientModel.findById(userClientId);
@@ -382,12 +384,6 @@ export async function getInstagramPostsFiltered(req, res) {
     const scopeLower = requestedScope
       ? String(requestedScope).toLowerCase()
       : null;
-    const directorateRoles = [
-      "ditbinmas",
-      "ditlantas",
-      "bidhumas",
-      "ditsamapta",
-    ];
     const usesStandardPayload = Boolean(requestedScope || req.query.role);
 
     if (!usesStandardPayload && roleLower === "ditbinmas") {
@@ -450,8 +446,6 @@ export async function getInstagramPostsFiltered(req, res) {
             });
           }
           client_id = tokenClientId;
-        } else if (directorateRoles.includes(resolvedRole)) {
-          client_id = resolvedRole;
         }
       }
 
