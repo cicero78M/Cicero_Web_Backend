@@ -512,7 +512,7 @@ export async function getRekapLikesByClient(
 
   if (satikDivisionMode === 'org_include_only' || satikDivisionMode === 'include_only') {
     const satikDivisionFilter =
-      "LOWER(REGEXP_REPLACE(COALESCE(u.divisi, ''), '\\s+', ' ', 'g')) IN ('sat intel', 'satintel', 'sat intelkam', 'satintelkam')";
+      "REGEXP_REPLACE(LOWER(COALESCE(u.divisi, '')), '[^a-z0-9]+', '', 'g') IN ('satintel', 'satintelkam')";
     if (satikDivisionMode === 'include_only') {
       userWhere = userWhere === '1=1'
         ? satikDivisionFilter

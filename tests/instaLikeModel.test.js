@@ -212,3 +212,26 @@ test('harian date filter uses manual_input created_at fallback for post date', a
   expect(sql).toContain("ELSE COALESCE(p.original_created_at, p.created_at)");
 });
 
+
+test('satik include_only filters users by sat intel / sat intelkam division', async () => {
+  mockQuery.mockResolvedValueOnce({ rows: [] });
+  mockQuery.mockResolvedValueOnce({ rows: [{ total_post: 0 }] });
+  await getRekapLikesByClient(
+    'NGAWI',
+    'harian',
+    '2026-03-01',
+    undefined,
+    undefined,
+    'ditintelkam',
+    {
+      postClientId: 'ditintelkam',
+      userClientId: 'NGAWI',
+      userRoleFilter: 'ditintelkam',
+      matchLikeClientId: false,
+      satikDivisionMode: 'include_only',
+    }
+  );
+
+  const sql = mockQuery.mock.calls[0][0];
+  expect(sql).toContain("REGEXP_REPLACE(LOWER(COALESCE(u.divisi, '')), '[^a-z0-9]+', '', 'g') IN ('satintel', 'satintelkam')");
+});
