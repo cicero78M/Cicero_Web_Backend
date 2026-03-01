@@ -183,12 +183,14 @@ export async function getInstaRekapLikes(req, res) {
     "bidhumas",
     "ditsamapta",
   ];
+  const isOrgDirectorateScope =
+    scopeLower === "org" && directorateRoles.includes(roleLower);
   const usesStandardPayload = Boolean(requestedScope || req.query.role);
 
   if (!usesStandardPayload && roleLower === "ditbinmas") {
     client_id = "ditbinmas";
   }
-  if (isOrgOperatorScope && req.user?.client_id) {
+  if ((isOrgOperatorScope || isOrgDirectorateScope) && req.user?.client_id) {
     client_id = req.user.client_id;
   }
 
