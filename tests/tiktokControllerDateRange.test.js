@@ -1,13 +1,16 @@
 import { jest } from '@jest/globals';
 
 const mockGetRekap = jest.fn();
+const mockFindClientById = jest.fn();
 jest.unstable_mockModule('../src/model/tiktokCommentModel.js', () => ({
   getRekapKomentarByClient: mockGetRekap,
   deleteCommentsByVideoId: jest.fn(),
 }));
 jest.unstable_mockModule('../src/service/tiktokCommentService.js', () => ({}));
 jest.unstable_mockModule('../src/service/tiktokPostService.js', () => ({}));
-jest.unstable_mockModule('../src/service/clientService.js', () => ({}));
+jest.unstable_mockModule('../src/service/clientService.js', () => ({
+  findClientById: mockFindClientById,
+}));
 jest.unstable_mockModule('../src/utils/response.js', () => ({ sendSuccess: jest.fn() }));
 jest.unstable_mockModule('../src/service/tiktokApi.js', () => ({
   fetchTiktokProfile: jest.fn(),
@@ -24,6 +27,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   mockGetRekap.mockReset();
+  mockFindClientById.mockReset();
 });
 
 test('accepts tanggal_mulai and tanggal_selesai', async () => {
@@ -78,6 +82,7 @@ test('returns user comment summaries with counts', async () => {
 
 test('scope direktorat forwards post role+client merge options', async () => {
   mockGetRekap.mockResolvedValue([]);
+  mockFindClientById.mockResolvedValue({ client_type: 'direktorat', switch_satik: true });
   const req = {
     query: {
       client_id: 'DITINTELKAM',
@@ -113,7 +118,52 @@ test('scope direktorat forwards post role+client merge options', async () => {
       postRoleFilterMode: 'include_client_or_role',
       userRegionalId: 'JATIM',
       postRegionalId: 'JATIM',
-      includeTaskLinks: true
+      includeTaskLinks: true,
+      satikDivisionMode: 'org_include_only',
+    })
+  );
+});
+
+
+test('scope org ditintelkam enables satik filter for org client without switch_satik', async () => {
+  mockGetRekap.mockResolvedValue([]);
+  mockFindClientById.mockResolvedValue({ client_type: 'org', switch_satik: false });
+  const req = {
+    query: {
+      client_id: 'NGAWI',
+      periode: 'harian',
+      tanggal: '2026-03-01',
+      role: 'ditintelkam',
+      scope: 'ORG',
+      regional_id: 'JATIM'
+    },
+    user: {
+      client_id: 'NGAWI',
+      role: 'ditintelkam'
+    },
+    headers: {}
+  };
+  const json = jest.fn();
+  const res = { json, status: jest.fn().mockReturnThis() };
+
+  await getTiktokRekapKomentar(req, res);
+
+  expect(mockGetRekap).toHaveBeenCalledWith(
+    'NGAWI',
+    'harian',
+    '2026-03-01',
+    undefined,
+    undefined,
+    'ditintelkam',
+    expect.objectContaining({
+      postClientId: 'ditintelkam',
+      userClientId: 'NGAWI',
+      userRoleFilter: 'ditintelkam',
+      includePostRoleFilter: false,
+      userRegionalId: 'JATIM',
+      postRegionalId: 'JATIM',
+      includeTaskLinks: true,
+      satikDivisionMode: 'include_only',
     })
   );
 });
