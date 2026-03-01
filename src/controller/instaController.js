@@ -278,8 +278,8 @@ export async function getInstaRekapLikes(req, res) {
           postClientId = client_id;
           userClientId = client_id;
           userRoleFilter = resolvedRole;
-          includePostRoleFilter = true;
-          postRoleFilterName = resolvedRole;
+          includePostRoleFilter = false;
+          postRoleFilterName = undefined;
           matchLikeClientId = false;
 
           const targetClient = await clientModel.findById(userClientId);

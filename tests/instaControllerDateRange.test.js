@@ -284,7 +284,7 @@ test('scope org ditintelkam enables satik filter when switch_satik is string tru
 });
 
 
-test('scope org ditbinmas keeps post scope on requested client_id', async () => {
+test('scope org ditbinmas follows tiktok comments flow (role-scoped post client)', async () => {
   mockGetRekap.mockResolvedValue({ rows: [], totalKonten: 0 });
   const req = {
     query: {
@@ -311,11 +311,11 @@ test('scope org ditbinmas keeps post scope on requested client_id', async () => 
     undefined,
     'ditbinmas',
     {
-      postClientId: 'NGAWI',
+      postClientId: 'ditbinmas',
       userClientId: 'NGAWI',
       userRoleFilter: 'ditbinmas',
-      includePostRoleFilter: true,
-      postRoleFilterName: 'ditbinmas',
+      includePostRoleFilter: false,
+      postRoleFilterName: undefined,
       matchLikeClientId: false,
       officialAccountsOnly: false,
       regionalId: 'JATIM',
