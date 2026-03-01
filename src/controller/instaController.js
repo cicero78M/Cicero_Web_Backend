@@ -25,6 +25,27 @@ function parseOfficialOnlyFlag(value) {
   return ["true", "1", "yes", "y"].includes(normalized);
 }
 
+function shouldEnableSatikFilter({
+  scope,
+  role,
+  targetClient,
+}) {
+  const normalizedScope = String(scope || '').toLowerCase();
+  if (!['org', 'direktorat'].includes(normalizedScope)) {
+    return false;
+  }
+  if (String(role || '').toLowerCase() !== 'ditintelkam') {
+    return false;
+  }
+  if (!targetClient) {
+    return false;
+  }
+
+  const expectedClientType = normalizedScope;
+  const clientType = String(targetClient.client_type || '').toLowerCase();
+  return clientType === expectedClientType && targetClient.switch_satik === true;
+}
+
 function normalizeInstagramUsername(value) {
   const normalizedHandle = normalizeHandleValue(value);
   return normalizedHandle ? normalizedHandle.replace(/^@/, "") : "";
@@ -210,6 +231,17 @@ export async function getInstaRekapLikes(req, res) {
         userRoleFilter = resolvedRole;
         includePostRoleFilter = true;
         postRoleFilterName = resolvedRole;
+
+        const targetClient = await clientModel.findById(postClientId);
+        if (
+          shouldEnableSatikFilter({
+            scope: resolvedScope,
+            role: resolvedRole,
+            targetClient,
+          })
+        ) {
+          rekapOptions.satikDivisionMode = 'org_include_only';
+        }
       } else if (resolvedScope === "org") {
         if (resolvedRole === "operator") {
           const tokenClientId = req.user?.client_id;
@@ -232,6 +264,17 @@ export async function getInstaRekapLikes(req, res) {
           userClientId = req.user?.client_id || client_id;
           userRoleFilter = resolvedRole;
           matchLikeClientId = false;
+
+          const targetClient = await clientModel.findById(userClientId);
+          if (
+            shouldEnableSatikFilter({
+              scope: resolvedScope,
+              role: resolvedRole,
+              targetClient,
+            })
+          ) {
+            rekapOptions.satikDivisionMode = 'include_only';
+          }
         }
       }
 
@@ -244,6 +287,7 @@ export async function getInstaRekapLikes(req, res) {
         matchLikeClientId,
         officialAccountsOnly,
         regionalId,
+        satikDivisionMode: rekapOptions.satikDivisionMode,
       };
       roleForQuery = resolvedRole;
     }

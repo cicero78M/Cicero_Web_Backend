@@ -27,6 +27,28 @@ function normalizeClientIdLower(value) {
   return normalized ? normalized.toLowerCase() : null;
 }
 
+
+function shouldEnableSatikFilter({
+  scope,
+  role,
+  targetClient,
+}) {
+  const normalizedScope = String(scope || '').toLowerCase();
+  if (!['org', 'direktorat'].includes(normalizedScope)) {
+    return false;
+  }
+  if (String(role || '').toLowerCase() !== 'ditintelkam') {
+    return false;
+  }
+  if (!targetClient) {
+    return false;
+  }
+
+  const expectedClientType = normalizedScope;
+  const clientType = String(targetClient.client_type || '').toLowerCase();
+  return clientType === expectedClientType && targetClient.switch_satik === true;
+}
+
 export function normalizeTikTokUsername(value) {
   if (typeof value !== 'string') {
     return null;
@@ -203,6 +225,16 @@ export async function getTiktokRekapKomentar(req, res) {
         // 1) post dengan client_id yang sama (termasuk input manual), dan
         // 2) post yang ditandai ke role direktorat di tiktok_post_roles.
         // Ini menjaga kompatibilitas data akun resmi sekaligus post manual per-client.
+        const targetClient = await clientService.findClientById(postClientId);
+        if (
+          shouldEnableSatikFilter({
+            scope: resolvedScope,
+            role: resolvedRole,
+            targetClient,
+          })
+        ) {
+          rekapOptions.satikDivisionMode = 'org_include_only';
+        }
       } else if (resolvedScope === 'org') {
         if (resolvedRole === 'operator') {
           const tokenClientId = req.user?.client_id;
@@ -219,6 +251,17 @@ export async function getTiktokRekapKomentar(req, res) {
           postClientId = resolvedRole;
           userClientId = req.user?.client_id || client_id;
           userRoleFilter = resolvedRole;
+
+          const targetClient = await clientService.findClientById(userClientId);
+          if (
+            shouldEnableSatikFilter({
+              scope: resolvedScope,
+              role: resolvedRole,
+              targetClient,
+            })
+          ) {
+            rekapOptions.satikDivisionMode = 'include_only';
+          }
         }
       }
 
@@ -231,6 +274,7 @@ export async function getTiktokRekapKomentar(req, res) {
           resolvedScope === 'direktorat' ? 'include_client_or_role' : undefined,
         userRegionalId: regionalId,
         postRegionalId: regionalId,
+        satikDivisionMode: rekapOptions.satikDivisionMode,
       };
       roleForQuery = resolvedRole;
     }
