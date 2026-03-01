@@ -30,7 +30,8 @@ function shouldEnableSatikFilter({
   role,
   targetClient,
 }) {
-  if (String(scope || '').toLowerCase() !== 'direktorat') {
+  const normalizedScope = String(scope || '').toLowerCase();
+  if (!['org', 'direktorat'].includes(normalizedScope)) {
     return false;
   }
   if (String(role || '').toLowerCase() !== 'ditintelkam') {
@@ -40,8 +41,9 @@ function shouldEnableSatikFilter({
     return false;
   }
 
+  const expectedClientType = normalizedScope;
   const clientType = String(targetClient.client_type || '').toLowerCase();
-  return clientType === 'direktorat' && targetClient.switch_satik === true;
+  return clientType === expectedClientType && targetClient.switch_satik === true;
 }
 
 function normalizeInstagramUsername(value) {
@@ -262,6 +264,17 @@ export async function getInstaRekapLikes(req, res) {
           userClientId = req.user?.client_id || client_id;
           userRoleFilter = resolvedRole;
           matchLikeClientId = false;
+
+          const targetClient = await clientModel.findById(userClientId);
+          if (
+            shouldEnableSatikFilter({
+              scope: resolvedScope,
+              role: resolvedRole,
+              targetClient,
+            })
+          ) {
+            rekapOptions.satikDivisionMode = 'org_include_only';
+          }
         }
       }
 
