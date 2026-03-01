@@ -278,6 +278,8 @@ export async function getInstaRekapLikes(req, res) {
           postClientId = resolvedRole;
           userClientId = client_id;
           userRoleFilter = resolvedRole;
+          includePostRoleFilter = false;
+          postRoleFilterName = undefined;
           matchLikeClientId = false;
 
           const targetClient = await clientModel.findById(userClientId);
@@ -382,12 +384,6 @@ export async function getInstagramPostsFiltered(req, res) {
     const scopeLower = requestedScope
       ? String(requestedScope).toLowerCase()
       : null;
-    const directorateRoles = [
-      "ditbinmas",
-      "ditlantas",
-      "bidhumas",
-      "ditsamapta",
-    ];
     const usesStandardPayload = Boolean(requestedScope || req.query.role);
 
     if (!usesStandardPayload && roleLower === "ditbinmas") {
@@ -450,8 +446,6 @@ export async function getInstagramPostsFiltered(req, res) {
             });
           }
           client_id = tokenClientId;
-        } else if (directorateRoles.includes(resolvedRole)) {
-          client_id = resolvedRole;
         }
       }
 
