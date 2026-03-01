@@ -327,12 +327,16 @@ test('scope org ditbinmas follows tiktok comments flow (role-scoped post client)
   expect(json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
 });
 
-test('rejects org ditbinmas request when client_id is not in token scope', async () => {
+test('org ditbinmas ignores query client_id and uses token client_id', async () => {
+  mockGetRekap.mockResolvedValue({ rows: [], totalKonten: 0 });
+  mockFindClientById.mockResolvedValueOnce({ client_type: 'org' });
   const req = {
     query: {
       client_id: 'DITBINMAS',
       role: 'ditbinmas',
       scope: 'org',
+      periode: 'harian',
+      tanggal: '2026-03-01',
     },
     user: { client_ids: ['PRESISI_ORG'], client_id: 'PRESISI_ORG' },
   };
@@ -341,9 +345,27 @@ test('rejects org ditbinmas request when client_id is not in token scope', async
 
   await getInstaRekapLikes(req, res);
 
-  expect(res.status).toHaveBeenCalledWith(403);
-  expect(json).toHaveBeenCalledWith({ success: false, message: 'client_id tidak diizinkan' });
-  expect(mockGetRekap).not.toHaveBeenCalled();
+  expect(res.status).not.toHaveBeenCalledWith(403);
+  expect(mockGetRekap).toHaveBeenCalledWith(
+    'PRESISI_ORG',
+    'harian',
+    '2026-03-01',
+    undefined,
+    undefined,
+    'ditbinmas',
+    {
+      postClientId: 'PRESISI_ORG',
+      userClientId: 'PRESISI_ORG',
+      userRoleFilter: 'ditbinmas',
+      includePostRoleFilter: false,
+      postRoleFilterName: undefined,
+      matchLikeClientId: false,
+      officialAccountsOnly: false,
+      regionalId: null,
+      satikDivisionMode: undefined,
+    }
+  );
+  expect(json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
 });
 
 test('org operator ignores query client_id and uses token client_id', async () => {
