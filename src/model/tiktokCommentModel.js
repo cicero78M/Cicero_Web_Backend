@@ -279,6 +279,9 @@ export async function getRekapKomentarByClient(
   const regionalIdOverride = hasOption('regionalId')
     ? options.regionalId
     : undefined;
+  const satikDivisionModeOverride = hasOption('satikDivisionMode')
+    ? options.satikDivisionMode
+    : undefined;
   const includeTaskLinks = Boolean(options.includeTaskLinks);
   const usesOverrides = [
     postClientIdOverride,
@@ -290,6 +293,7 @@ export async function getRekapKomentarByClient(
     userRegionalIdOverride,
     postRegionalIdOverride,
     regionalIdOverride,
+    satikDivisionModeOverride,
   ].some((value) => value !== undefined);
 
   let clientType = null;
@@ -486,6 +490,16 @@ export async function getRekapKomentarByClient(
     userWhere = userWhere === "1=1"
       ? regionalFilter
       : `${userWhere} AND ${regionalFilter}`;
+  }
+
+  if (satikDivisionModeOverride === 'org_include_only') {
+    const satikDivisionFilter =
+      "LOWER(REGEXP_REPLACE(COALESCE(u.divisi, ''), '\\s+', ' ', 'g')) IN ('sat intel', 'satintel', 'sat intelkam', 'satintelkam')";
+    const satikScopedFilter =
+      `LOWER(COALESCE(cl.client_type, '')) <> 'org' OR (${satikDivisionFilter})`;
+    userWhere = userWhere === "1=1"
+      ? satikScopedFilter
+      : `${userWhere} AND (${satikScopedFilter})`;
   }
 
   let postRoleJoin = "";
