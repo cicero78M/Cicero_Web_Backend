@@ -406,6 +406,40 @@ test('org operator ignores query client_id and uses token client_id', async () =
   expect(json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
 });
 
+
+test('org ditbinmas uses x-client-id when token has no client_id', async () => {
+  mockGetRekap.mockResolvedValue({ rows: [], totalKonten: 0 });
+  mockFindClientById.mockResolvedValueOnce({ client_type: 'org' });
+  const req = {
+    query: {
+      client_id: 'DITBINMAS',
+      role: 'ditbinmas',
+      scope: 'org',
+      periode: 'harian',
+      tanggal: '2026-03-01',
+    },
+    headers: { 'x-client-id': 'NGAWI' },
+    user: { client_ids: ['NGAWI'] },
+  };
+  const json = jest.fn();
+  const res = { json, status: jest.fn().mockReturnThis() };
+
+  await getInstaRekapLikes(req, res);
+
+  expect(res.status).not.toHaveBeenCalledWith(403);
+  expect(mockGetRekap).toHaveBeenCalledWith(
+    'NGAWI',
+    'harian',
+    '2026-03-01',
+    undefined,
+    undefined,
+    'ditbinmas',
+    expect.objectContaining({
+      postClientId: 'NGAWI',
+      userClientId: 'NGAWI',
+    })
+  );
+});
 test('scope direktorat enforces explicit role-client mapping', async () => {
   const req = {
     query: {

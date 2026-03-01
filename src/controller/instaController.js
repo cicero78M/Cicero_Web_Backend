@@ -183,6 +183,8 @@ export async function getInstaRekapLikes(req, res) {
     "bidhumas",
     "ditsamapta",
   ];
+  const authenticatedClientId =
+    req.user?.client_id || req.headers?.["x-client-id"] || null;
   const isOrgDirectorateScope =
     scopeLower === "org" && directorateRoles.includes(roleLower);
   const usesStandardPayload = Boolean(requestedScope || req.query.role);
@@ -190,8 +192,8 @@ export async function getInstaRekapLikes(req, res) {
   if (!usesStandardPayload && roleLower === "ditbinmas") {
     client_id = "ditbinmas";
   }
-  if ((isOrgOperatorScope || isOrgDirectorateScope) && req.user?.client_id) {
-    client_id = req.user.client_id;
+  if ((isOrgOperatorScope || isOrgDirectorateScope) && authenticatedClientId) {
+    client_id = authenticatedClientId;
   }
 
   const normalizedClientId = normalizeClientId(client_id);
@@ -242,7 +244,7 @@ export async function getInstaRekapLikes(req, res) {
           .status(400)
           .json({ success: false, message: "scope tidak valid" });
       }
-      const tokenClientId = normalizeClientId(req.user?.client_id);
+      const tokenClientId = normalizeClientId(authenticatedClientId);
       if (!tokenClientId) {
         return res.status(400).json({
           success: false,
