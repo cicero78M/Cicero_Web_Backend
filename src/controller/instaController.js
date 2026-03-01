@@ -261,7 +261,7 @@ export async function getInstaRekapLikes(req, res) {
           }
         } else if (directorateRoles.includes(resolvedRole)) {
           postClientId = resolvedRole;
-          userClientId = req.user?.client_id || client_id;
+          userClientId = client_id;
           userRoleFilter = resolvedRole;
           matchLikeClientId = false;
 

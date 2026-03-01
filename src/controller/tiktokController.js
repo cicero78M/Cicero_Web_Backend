@@ -249,7 +249,7 @@ export async function getTiktokRekapKomentar(req, res) {
           userRoleFilter = 'operator';
         } else if (directorateRoles.includes(resolvedRole)) {
           postClientId = resolvedRole;
-          userClientId = req.user?.client_id || client_id;
+          userClientId = client_id;
           userRoleFilter = resolvedRole;
 
           const targetClient = await clientService.findClientById(userClientId);
