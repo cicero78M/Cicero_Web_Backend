@@ -338,7 +338,7 @@ test('org ditbinmas ignores query client_id and uses token client_id', async () 
       periode: 'harian',
       tanggal: '2026-03-01',
     },
-    user: { client_ids: ['PRESISI_ORG'], client_id: 'PRESISI_ORG' },
+    user: { client_ids: ['DITBINMAS', 'PRESISI_ORG'], client_id: 'PRESISI_ORG' },
   };
   const json = jest.fn();
   const res = { json, status: jest.fn().mockReturnThis() };
