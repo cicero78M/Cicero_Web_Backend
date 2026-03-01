@@ -269,15 +269,57 @@ test('scope org ditintelkam enables satik filter when switch_satik is string tru
     undefined,
     'ditintelkam',
     {
-      postClientId: 'ditintelkam',
+      postClientId: 'NGAWI',
       userClientId: 'NGAWI',
       userRoleFilter: 'ditintelkam',
-      includePostRoleFilter: false,
-      postRoleFilterName: undefined,
+      includePostRoleFilter: true,
+      postRoleFilterName: 'ditintelkam',
       matchLikeClientId: false,
       officialAccountsOnly: false,
       regionalId: 'JATIM',
       satikDivisionMode: 'include_only',
+    }
+  );
+  expect(json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+});
+
+
+test('scope org ditbinmas keeps post scope on requested client_id', async () => {
+  mockGetRekap.mockResolvedValue({ rows: [], totalKonten: 0 });
+  const req = {
+    query: {
+      client_id: 'NGAWI',
+      role: 'ditbinmas',
+      scope: 'ORG',
+      periode: 'harian',
+      tanggal: '2026-03-01',
+      regional_id: 'JATIM',
+    },
+    user: { client_ids: ['NGAWI'] },
+  };
+  const json = jest.fn();
+  const res = { json, status: jest.fn().mockReturnThis() };
+
+  await getInstaRekapLikes(req, res);
+
+  expect(res.status).not.toHaveBeenCalledWith(403);
+  expect(mockGetRekap).toHaveBeenCalledWith(
+    'NGAWI',
+    'harian',
+    '2026-03-01',
+    undefined,
+    undefined,
+    'ditbinmas',
+    {
+      postClientId: 'NGAWI',
+      userClientId: 'NGAWI',
+      userRoleFilter: 'ditbinmas',
+      includePostRoleFilter: true,
+      postRoleFilterName: 'ditbinmas',
+      matchLikeClientId: false,
+      officialAccountsOnly: false,
+      regionalId: 'JATIM',
+      satikDivisionMode: undefined,
     }
   );
   expect(json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
