@@ -239,3 +239,46 @@ test('returns user like summaries', async () => {
     })
   );
 });
+
+
+test('scope org ditintelkam enables satik filter when switch_satik is string true', async () => {
+  mockGetRekap.mockResolvedValue({ rows: [], totalKonten: 0 });
+  mockFindClientById.mockResolvedValueOnce({ client_type: 'org', switch_satik: 'true' });
+  const req = {
+    query: {
+      client_id: 'NGAWI',
+      role: 'ditintelkam',
+      scope: 'ORG',
+      periode: 'harian',
+      tanggal: '2026-03-01',
+      regional_id: 'JATIM',
+    },
+    user: { client_ids: ['NGAWI'] },
+  };
+  const json = jest.fn();
+  const res = { json, status: jest.fn().mockReturnThis() };
+
+  await getInstaRekapLikes(req, res);
+
+  expect(res.status).not.toHaveBeenCalledWith(403);
+  expect(mockGetRekap).toHaveBeenCalledWith(
+    'NGAWI',
+    'harian',
+    '2026-03-01',
+    undefined,
+    undefined,
+    'ditintelkam',
+    {
+      postClientId: 'ditintelkam',
+      userClientId: 'NGAWI',
+      userRoleFilter: 'ditintelkam',
+      includePostRoleFilter: false,
+      postRoleFilterName: undefined,
+      matchLikeClientId: false,
+      officialAccountsOnly: false,
+      regionalId: 'JATIM',
+      satikDivisionMode: 'include_only',
+    }
+  );
+  expect(json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+});

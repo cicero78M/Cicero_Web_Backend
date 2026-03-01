@@ -25,6 +25,17 @@ function parseOfficialOnlyFlag(value) {
   return ["true", "1", "yes", "y"].includes(normalized);
 }
 
+function isSatikSwitchEnabled(value) {
+  if (value === true) return true;
+  if (typeof value === 'string') {
+    return ['true', '1', 'yes', 'y', 't'].includes(value.trim().toLowerCase());
+  }
+  if (typeof value === 'number') {
+    return value === 1;
+  }
+  return false;
+}
+
 function shouldEnableSatikFilter({
   scope,
   role,
@@ -43,7 +54,7 @@ function shouldEnableSatikFilter({
 
   const expectedClientType = normalizedScope;
   const clientType = String(targetClient.client_type || '').toLowerCase();
-  return clientType === expectedClientType && targetClient.switch_satik === true;
+  return clientType === expectedClientType && isSatikSwitchEnabled(targetClient.switch_satik);
 }
 
 function normalizeInstagramUsername(value) {
