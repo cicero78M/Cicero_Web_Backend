@@ -52,9 +52,13 @@ function shouldEnableSatikFilter({
     return false;
   }
 
-  const expectedClientType = normalizedScope;
   const clientType = String(targetClient.client_type || '').toLowerCase();
-  return clientType === expectedClientType && isSatikSwitchEnabled(targetClient.switch_satik);
+
+  if (normalizedScope === 'org') {
+    return clientType === 'org';
+  }
+
+  return clientType === 'direktorat' && isSatikSwitchEnabled(targetClient.switch_satik);
 }
 
 function normalizeInstagramUsername(value) {
