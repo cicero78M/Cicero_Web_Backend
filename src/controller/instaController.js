@@ -41,7 +41,7 @@ function shouldEnableSatikFilter({
   }
 
   const clientType = String(targetClient.client_type || '').toLowerCase();
-  return clientType === 'direktorat' && targetClient.switch_satik === true;
+  return clientType === 'org' && targetClient.switch_satik === true;
 }
 
 function normalizeInstagramUsername(value) {
