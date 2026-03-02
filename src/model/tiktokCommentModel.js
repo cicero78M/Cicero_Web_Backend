@@ -249,6 +249,10 @@ export async function getRekapKomentarByClient(
   role,
   options = {}
 ) {
+  void periode;
+  void tanggal;
+  void start_date;
+  void end_date;
   const roleLower = typeof role === 'string' ? role.toLowerCase() : null;
   const hasOption = (key) =>
     Object.prototype.hasOwnProperty.call(options, key);
@@ -331,38 +335,11 @@ export async function getRekapKomentarByClient(
   const userRegionalParamIdx = normalizedUserRegionalId
     ? addParam(normalizedUserRegionalId)
     : null;
-  let tanggalFilter =
+  const tanggalFilter =
     "__DATE_FIELD__::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date";
-  const weekNowJakartaExpression = "date_trunc('week', NOW() AT TIME ZONE 'Asia/Jakarta')";
-  if (start_date && end_date) {
-    const startIdx = addParam(start_date);
-    const endIdx = addParam(end_date);
-    tanggalFilter = `(__DATE_FIELD__)::date BETWEEN $${startIdx}::date AND $${endIdx}::date`;
-  } else if (periode === "semua") {
-    tanggalFilter = "1=1";
-  } else if (periode === "mingguan") {
-    if (tanggal) {
-      const idx = addParam(tanggal);
-      tanggalFilter = `date_trunc('week', __DATE_FIELD__) = date_trunc('week', $${idx}::date)`;
-    } else {
-      tanggalFilter = `date_trunc('week', __DATE_FIELD__) = ${weekNowJakartaExpression}`;
-    }
-  } else if (periode === "bulanan") {
-    if (tanggal) {
-      const monthDate = tanggal.length === 7 ? `${tanggal}-01` : tanggal;
-      const idx = addParam(monthDate);
-      tanggalFilter = `date_trunc('month', __DATE_FIELD__) = date_trunc('month', $${idx}::date)`;
-    } else {
-      tanggalFilter =
-        "date_trunc('month', __DATE_FIELD__) = date_trunc('month', NOW() AT TIME ZONE 'Asia/Jakarta')";
-    }
-  } else if (tanggal) {
-    const idx = addParam(tanggal);
-    tanggalFilter = `__DATE_FIELD__::date = $${idx}::date`;
-  }
 
   const postDateField =
-    "((CASE WHEN p.source_type = 'manual_input' THEN p.created_at ELSE COALESCE(p.original_created_at, p.created_at) END AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Jakarta')";
+    "(p.created_at AT TIME ZONE 'Asia/Jakarta')";
   const commentDateField = postDateField;
   const commentTanggalFilter = tanggalFilter.replaceAll(
     "__DATE_FIELD__",

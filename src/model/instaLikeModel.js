@@ -252,6 +252,10 @@ export async function getRekapLikesByClient(
   options = {}
 ) {
   const roleLower = role ? role.toLowerCase() : null;
+  void periode;
+  void tanggal;
+  void start_date;
+  void end_date;
   const hasCustomPostClientId = Object.prototype.hasOwnProperty.call(
     options,
     "postClientId"
@@ -346,48 +350,13 @@ export async function getRekapLikesByClient(
     String(resolvedUserRole).toLowerCase() === String(resolvedPostRoleName).toLowerCase();
   const sharedRoleParamIdx = hasSharedRoleParam ? addParam(resolvedUserRole) : null;
 
-  const buildTanggalFilter = addParamFn => {
-    const postDateBase = `CASE
-      WHEN p.source_type = 'manual_input' THEN p.created_at
-      ELSE COALESCE(p.original_created_at, p.created_at)
-    END`;
-    const postDateJakarta = `(${postDateBase} AT TIME ZONE 'Asia/Jakarta')`;
-    let filter =
-      `${postDateJakarta}::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date`;
-    if (start_date && end_date) {
-      const startIdx = addParamFn(start_date);
-      const endIdx = addParamFn(end_date);
-      filter =
-        `${postDateJakarta}::date BETWEEN $${startIdx}::date AND $${endIdx}::date`;
-    } else if (periode === 'bulanan') {
-      if (tanggal) {
-        const monthDate = tanggal.length === 7 ? `${tanggal}-01` : tanggal;
-        const idx = addParamFn(monthDate);
-        filter =
-          `date_trunc('month', ${postDateJakarta}) = date_trunc('month', $${idx}::date)`;
-      } else {
-        filter =
-          `date_trunc('month', ${postDateJakarta}) = date_trunc('month', NOW() AT TIME ZONE 'Asia/Jakarta')`;
-      }
-    } else if (periode === 'mingguan') {
-      if (tanggal) {
-        const idx = addParamFn(tanggal);
-        filter =
-          `date_trunc('week', ${postDateJakarta}) = date_trunc('week', $${idx}::date)`;
-      } else {
-        filter = `date_trunc('week', ${postDateJakarta}) = date_trunc('week', NOW() AT TIME ZONE 'Asia/Jakarta')`;
-      }
-    } else if (periode === 'semua') {
-      filter = '1=1';
-    } else if (tanggal) {
-      const idx = addParamFn(tanggal);
-      filter = `${postDateJakarta}::date = $${idx}::date`;
-    }
-    return filter;
+  const buildTanggalFilter = () => {
+    const postDateJakarta = `(p.created_at AT TIME ZONE 'Asia/Jakarta')`;
+    return `${postDateJakarta}::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date`;
   };
 
-  const tanggalFilter = buildTanggalFilter(addParam);
-  const postTanggalFilter = buildTanggalFilter(addPostParam);
+  const tanggalFilter = buildTanggalFilter();
+  const postTanggalFilter = buildTanggalFilter();
 
   const buildPostFilters = (
     addParamFn,
