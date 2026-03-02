@@ -67,6 +67,17 @@ function isSatIntelkamDivision(divisi) {
   return normalized.includes('sat intelkam') || normalized.includes('satintelkam');
 }
 
+function isSatikSwitchEnabled(value) {
+  if (value === true) return true;
+  if (typeof value === 'string') {
+    return ['true', '1', 'yes', 'y', 't'].includes(value.trim().toLowerCase());
+  }
+  if (typeof value === 'number') {
+    return value === 1;
+  }
+  return false;
+}
+
 async function shouldApplySatikFilter({
   scope,
   role,
@@ -79,7 +90,7 @@ async function shouldApplySatikFilter({
   const targetClient = await findClientById(targetClientId);
   if (!targetClient || !isOrgClient(targetClient)) return false;
 
-  return targetClient.switch_satik === true;
+  return isSatikSwitchEnabled(targetClient.switch_satik);
 }
 
 function applySatikFilter(users) {
