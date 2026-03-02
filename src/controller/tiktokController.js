@@ -58,7 +58,7 @@ function shouldEnableSatikFilter({
   const clientType = String(targetClient.client_type || '').toLowerCase();
 
   if (normalizedScope === 'org') {
-    return clientType === 'org';
+    return clientType === 'org' && isSatikSwitchEnabled(targetClient.switch_satik);
   }
 
   return clientType === 'direktorat' && isSatikSwitchEnabled(targetClient.switch_satik);
