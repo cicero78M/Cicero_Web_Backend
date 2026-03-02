@@ -10,6 +10,10 @@ import {
 } from '../service/tiktokApi.js';
 import * as profileCache from '../service/profileCacheService.js';
 import { formatTiktokCommentRecapResponse } from '../utils/tiktokCommentRecapFormatter.js';
+import {
+  validateDateRange,
+  validateTanggalFilter,
+} from '../utils/dateFilterValidation.js';
 
 const TIKTOK_PROFILE_URL_REGEX =
   /^https?:\/\/(www\.)?tiktok\.com\/@([A-Za-z0-9._]+)\/?(\?.*)?$/i;
@@ -205,6 +209,17 @@ export async function getTiktokRekapKomentar(req, res) {
     return res
       .status(403)
       .json({ success: false, message: 'client_id tidak diizinkan' });
+  }
+
+
+  const { error: tanggalError } = validateTanggalFilter(tanggal, periode);
+  if (tanggalError) {
+    return res.status(400).json({ success: false, message: tanggalError });
+  }
+
+  const { error: dateRangeError } = validateDateRange(startDate, endDate);
+  if (dateRangeError) {
+    return res.status(400).json({ success: false, message: dateRangeError });
   }
 
   try {

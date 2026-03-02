@@ -16,6 +16,10 @@ import { sendSuccess } from "../utils/response.js";
 import { sendConsoleDebug } from "../middleware/debugHandler.js";
 import { formatLikesRecapResponse } from "../utils/likesRecapFormatter.js";
 import { normalizeHandleValue } from "../utils/handleNormalizer.js";
+import {
+  validateDateRange,
+  validateTanggalFilter,
+} from "../utils/dateFilterValidation.js";
 import * as clientModel from "../model/clientModel.js";
 
 function parseOfficialOnlyFlag(value) {
@@ -121,38 +125,6 @@ function parsePositiveDays(value) {
   return { value: parsed };
 }
 
-function isValidDateString(value) {
-  if (typeof value !== "string") {
-    return false;
-  }
-
-  const trimmed = value.trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    return false;
-  }
-
-  const date = new Date(`${trimmed}T00:00:00.000Z`);
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === trimmed;
-}
-
-function validateDateRange(startDate, endDate) {
-  if (startDate && !isValidDateString(startDate)) {
-    return { error: "Parameter start_date harus berformat YYYY-MM-DD" };
-  }
-
-  if (endDate && !isValidDateString(endDate)) {
-    return { error: "Parameter end_date harus berformat YYYY-MM-DD" };
-  }
-
-  if (startDate && endDate && startDate > endDate) {
-    return {
-      error: "Parameter tanggal tidak valid: start_date harus lebih kecil atau sama dengan end_date",
-    };
-  }
-
-  return { startDate, endDate };
-}
-
 export async function getInstaRekapLikes(req, res) {
   let client_id =
     req.query.client_id ||
@@ -225,6 +197,16 @@ export async function getInstaRekapLikes(req, res) {
     return res
       .status(403)
       .json({ success: false, message: "client_id tidak diizinkan" });
+  }
+
+  const { error: tanggalError } = validateTanggalFilter(tanggal, periode);
+  if (tanggalError) {
+    return res.status(400).json({ success: false, message: tanggalError });
+  }
+
+  const { error: dateRangeError } = validateDateRange(startDate, endDate);
+  if (dateRangeError) {
+    return res.status(400).json({ success: false, message: dateRangeError });
   }
 
   try {
