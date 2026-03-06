@@ -249,10 +249,6 @@ export async function getRekapKomentarByClient(
   role,
   options = {}
 ) {
-  void periode;
-  void tanggal;
-  void start_date;
-  void end_date;
   const roleLower = typeof role === 'string' ? role.toLowerCase() : null;
   const hasOption = (key) =>
     Object.prototype.hasOwnProperty.call(options, key);
@@ -335,20 +331,44 @@ export async function getRekapKomentarByClient(
   const userRegionalParamIdx = normalizedUserRegionalId
     ? addParam(normalizedUserRegionalId)
     : null;
-  const tanggalFilter =
-    "__DATE_FIELD__::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date";
+  const buildTanggalFilter = (addParamFn, dateField) => {
+    const nowJakarta = "(NOW() AT TIME ZONE 'Asia/Jakarta')";
+    let filter = `${dateField}::date = ${nowJakarta}::date`;
+
+    if (start_date && end_date) {
+      const startIdx = addParamFn(start_date);
+      const endIdx = addParamFn(end_date);
+      filter = `${dateField}::date BETWEEN $${startIdx}::date AND $${endIdx}::date`;
+    } else if (periode === 'semua') {
+      filter = '1=1';
+    } else if (periode === 'mingguan') {
+      if (tanggal) {
+        const tanggalIdx = addParamFn(tanggal);
+        filter = `date_trunc('week', ${dateField}) = date_trunc('week', $${tanggalIdx}::date)`;
+      } else {
+        filter = `date_trunc('week', ${dateField}) = date_trunc('week', ${nowJakarta})`;
+      }
+    } else if (periode === 'bulanan') {
+      if (tanggal) {
+        const monthDate = tanggal.length === 7 ? `${tanggal}-01` : tanggal;
+        const monthIdx = addParamFn(monthDate);
+        filter = `date_trunc('month', ${dateField}) = date_trunc('month', $${monthIdx}::date)`;
+      } else {
+        filter = `date_trunc('month', ${dateField}) = date_trunc('month', ${nowJakarta})`;
+      }
+    } else if (tanggal) {
+      const tanggalIdx = addParamFn(tanggal);
+      filter = `${dateField}::date = $${tanggalIdx}::date`;
+    }
+
+    return filter;
+  };
 
   const postDateField =
-    "(p.created_at AT TIME ZONE 'Asia/Jakarta')";
+    "(CASE WHEN p.source_type = 'manual_input' THEN p.created_at ELSE COALESCE(p.original_created_at, p.created_at) END AT TIME ZONE 'Asia/Jakarta')";
   const commentDateField = postDateField;
-  const commentTanggalFilter = tanggalFilter.replaceAll(
-    "__DATE_FIELD__",
-    commentDateField
-  );
-  const postTanggalFilter = tanggalFilter.replaceAll(
-    "__DATE_FIELD__",
-    postDateField
-  );
+  const commentTanggalFilter = buildTanggalFilter(addParam, commentDateField);
+  const postTanggalFilter = buildTanggalFilter(addParam, postDateField);
 
   let resolvedPostClientId = postClientIdOverride;
   let resolvedUserClientId = userClientIdOverride;
