@@ -252,10 +252,6 @@ export async function getRekapLikesByClient(
   options = {}
 ) {
   const roleLower = role ? role.toLowerCase() : null;
-  void periode;
-  void tanggal;
-  void start_date;
-  void end_date;
   const hasCustomPostClientId = Object.prototype.hasOwnProperty.call(
     options,
     "postClientId"
@@ -350,13 +346,42 @@ export async function getRekapLikesByClient(
     String(resolvedUserRole).toLowerCase() === String(resolvedPostRoleName).toLowerCase();
   const sharedRoleParamIdx = hasSharedRoleParam ? addParam(resolvedUserRole) : null;
 
-  const buildTanggalFilter = () => {
-    const postDateJakarta = `(p.created_at AT TIME ZONE 'Asia/Jakarta')`;
-    return `${postDateJakarta}::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date`;
+  const buildTanggalFilter = (addParamFn) => {
+    const postDateExpr = `COALESCE(p.created_at, p.original_created_at)`;
+    const postDateJakarta = `(${postDateExpr} AT TIME ZONE 'Asia/Jakarta')`;
+    let filter = `${postDateJakarta}::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date`;
+
+    if (start_date && end_date) {
+      const startIdx = addParamFn(start_date);
+      const endIdx = addParamFn(end_date);
+      filter = `${postDateJakarta}::date BETWEEN $${startIdx}::date AND $${endIdx}::date`;
+    } else if (periode === 'semua') {
+      filter = '1=1';
+    } else if (periode === 'mingguan') {
+      if (tanggal) {
+        const tanggalIdx = addParamFn(tanggal);
+        filter = `date_trunc('week', ${postDateJakarta}) = date_trunc('week', $${tanggalIdx}::date)`;
+      } else {
+        filter = `date_trunc('week', ${postDateJakarta}) = date_trunc('week', NOW() AT TIME ZONE 'Asia/Jakarta')`;
+      }
+    } else if (periode === 'bulanan') {
+      if (tanggal) {
+        const monthDate = tanggal.length === 7 ? `${tanggal}-01` : tanggal;
+        const monthIdx = addParamFn(monthDate);
+        filter = `date_trunc('month', ${postDateJakarta}) = date_trunc('month', $${monthIdx}::date)`;
+      } else {
+        filter = `date_trunc('month', ${postDateJakarta}) = date_trunc('month', NOW() AT TIME ZONE 'Asia/Jakarta')`;
+      }
+    } else if (tanggal) {
+      const tanggalIdx = addParamFn(tanggal);
+      filter = `${postDateJakarta}::date = $${tanggalIdx}::date`;
+    }
+
+    return filter;
   };
 
-  const tanggalFilter = buildTanggalFilter();
-  const postTanggalFilter = buildTanggalFilter();
+  const tanggalFilter = buildTanggalFilter(addParam);
+  const postTanggalFilter = buildTanggalFilter(addPostParam);
 
   const buildPostFilters = (
     addParamFn,
