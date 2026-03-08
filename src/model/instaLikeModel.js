@@ -465,7 +465,12 @@ export async function getRekapLikesByClient(
 
   let userWhere = '1=1';
   let likeCountsSelect = `
-    SELECT username, client_id, COUNT(DISTINCT shortcode) AS jumlah_like
+    SELECT
+      username,
+      client_id,
+      COUNT(DISTINCT shortcode) AS jumlah_like,
+      ARRAY_AGG(DISTINCT shortcode ORDER BY shortcode)
+        FILTER (WHERE shortcode IS NOT NULL) AS completed_task_shortcodes
     FROM valid_likes
     GROUP BY username, client_id
   `;
@@ -479,7 +484,11 @@ export async function getRekapLikesByClient(
   if (userClientParamIdx === null || !matchLikeClientId) {
     likeJoin = "lower(replace(trim(u.insta), '@', '')) = lc.username";
     likeCountsSelect = `
-      SELECT username, COUNT(DISTINCT shortcode) AS jumlah_like
+      SELECT
+        username,
+        COUNT(DISTINCT shortcode) AS jumlah_like,
+        ARRAY_AGG(DISTINCT shortcode ORDER BY shortcode)
+          FILTER (WHERE shortcode IS NOT NULL) AS completed_task_shortcodes
       FROM valid_likes
       GROUP BY username
     `;
@@ -565,7 +574,8 @@ export async function getRekapLikesByClient(
       u.client_id,
       c.nama AS client_name,
       c.regional_id AS regional_id,
-      COALESCE(lc.jumlah_like, 0) AS jumlah_like
+      COALESCE(lc.jumlah_like, 0) AS jumlah_like,
+      COALESCE(lc.completed_task_shortcodes, ARRAY[]::text[]) AS completed_task_shortcodes
     FROM "user" u
     JOIN clients c ON c.client_id = u.client_id
     LEFT JOIN like_counts lc
@@ -578,10 +588,6 @@ export async function getRekapLikesByClient(
       jumlah_like DESC,
       UPPER(u.nama) ASC
   `, likeParams);
-
-  for (const user of rows) {
-    user.jumlah_like = parseInt(user.jumlah_like, 10);
-  }
 
   const postsCteSql = `WITH posts AS (
       SELECT p.shortcode
@@ -614,6 +620,32 @@ export async function getRekapLikesByClient(
     .map((row) => String(row?.shortcode || '').trim())
     .filter(Boolean)
     .map((shortcode) => `https://www.instagram.com/p/${shortcode}`);
+
+  const allTaskShortcodes = taskLinkRows
+    .map((row) => String(row?.shortcode || '').trim())
+    .filter(Boolean);
+
+  for (const user of rows) {
+    user.jumlah_like = parseInt(user.jumlah_like, 10);
+
+    const completedTaskShortcodes = Array.isArray(user.completed_task_shortcodes)
+      ? user.completed_task_shortcodes
+          .map((shortcode) => String(shortcode || '').trim())
+          .filter(Boolean)
+      : [];
+    const usernameValue = typeof user.username === 'string' ? user.username.trim() : '';
+    const canBuildPendingTasks = Boolean(usernameValue);
+    const completedSet = new Set(completedTaskShortcodes);
+    const pendingTaskShortcodes = canBuildPendingTasks
+      ? allTaskShortcodes.filter((shortcode) => !completedSet.has(shortcode))
+      : [];
+
+    user.completed_task_shortcodes = completedTaskShortcodes;
+    user.pending_task_shortcodes = pendingTaskShortcodes;
+    user.pending_task_links = canBuildPendingTasks
+      ? pendingTaskShortcodes.map((shortcode) => `https://www.instagram.com/p/${shortcode}`)
+      : [];
+  }
 
   return {
     rows,
