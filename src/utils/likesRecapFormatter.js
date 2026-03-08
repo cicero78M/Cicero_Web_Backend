@@ -4,6 +4,13 @@
  * This adds UX-friendly metadata such as progress percentages, status labels,
  * insight summaries, and chart helper data while keeping backward compatible fields.
  *
+ * Row contract (`data[]`) includes final fields for kolom "cek link":
+ * - `pendingTaskLinks` {string[]} daftar link task yang belum dikerjakan.
+ * - `pendingTaskCount` {number} jumlah item pada `pendingTaskLinks`.
+ * - `copyPayload` {string} gabungan newline dari `pendingTaskLinks`.
+ * Untuk status `sudah`, formatter selalu mengembalikan
+ * `pendingTaskLinks=[]`, `pendingTaskCount=0`, dan `copyPayload=''`.
+ *
  * @param {Array<Object>} rowsInput
  * @param {number} totalPostsInput
  * @param {Object} [taskLinksTodayInput]
@@ -105,6 +112,18 @@ export function formatLikesRecapResponse(rowsInput, totalPostsInput, taskLinksTo
       badges.push("❗ Username Instagram belum tersedia.");
     }
 
+    const pendingTaskLinks = status === "sudah"
+      ? []
+      : (Array.isArray(user?.pending_task_links)
+          ? user.pending_task_links
+              .filter((link) => typeof link === "string")
+              .map((link) => link.trim())
+              .filter((link) => link.length > 0)
+          : []);
+
+    const pendingTaskCount = pendingTaskLinks.length;
+    const copyPayload = pendingTaskCount > 0 ? pendingTaskLinks.join("\n") : "";
+
     const processedUser = {
       ...user,
       username: hasUsername ? trimmedUsername : user?.username ?? null,
@@ -115,6 +134,9 @@ export function formatLikesRecapResponse(rowsInput, totalPostsInput, taskLinksTo
       missingLikes,
       status,
       badges,
+      pendingTaskLinks,
+      pendingTaskCount,
+      copyPayload,
     };
 
     processedRows.push(processedUser);
