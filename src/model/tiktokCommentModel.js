@@ -569,7 +569,11 @@ export async function getRekapKomentarByClient(
         AND ${postTanggalFilter}
     ),
     comment_counts AS (
-      SELECT username, COUNT(DISTINCT video_id) AS jumlah_komentar
+      SELECT
+        username,
+        COUNT(DISTINCT video_id) AS jumlah_komentar,
+        ARRAY_AGG(DISTINCT video_id ORDER BY video_id)
+          FILTER (WHERE video_id IS NOT NULL) AS completed_video_ids
       FROM valid_comments
       GROUP BY username
     )
@@ -583,6 +587,7 @@ export async function getRekapKomentarByClient(
       cl.nama AS client_name,
       cl.regional_id,
       COALESCE(cc.jumlah_komentar, 0) AS jumlah_komentar,
+      COALESCE(cc.completed_video_ids, ARRAY[]::text[]) AS completed_video_ids,
       tp.total_konten
     FROM "user" u
     JOIN clients cl ON cl.client_id = u.client_id
@@ -600,10 +605,6 @@ export async function getRekapKomentarByClient(
   );
   for (const user of rows) {
     user.jumlah_komentar = parseInt(user.jumlah_komentar, 10);
-  }
-
-  if (!includeTaskLinks) {
-    return rows;
   }
 
   const buildScopedQueryParams = (sqlText, values) => {
@@ -652,6 +653,34 @@ export async function getRekapKomentarByClient(
     .map((row) => String(row?.video_id || '').trim())
     .filter(Boolean)
     .map((videoId) => `https://www.tiktok.com/video/${videoId}`);
+
+  const allTaskVideoIds = taskLinkRows
+    .map((row) => String(row?.video_id || '').trim())
+    .filter(Boolean);
+
+  for (const user of rows) {
+    const completedVideoIds = Array.isArray(user.completed_video_ids)
+      ? user.completed_video_ids
+          .map((videoId) => String(videoId || '').trim())
+          .filter(Boolean)
+      : [];
+    const usernameValue = typeof user.username === 'string' ? user.username.trim() : '';
+    const canBuildPendingTasks = Boolean(usernameValue);
+    const completedSet = new Set(completedVideoIds);
+    const pendingVideoIds = canBuildPendingTasks
+      ? allTaskVideoIds.filter((videoId) => !completedSet.has(videoId))
+      : [];
+
+    user.completed_video_ids = completedVideoIds;
+    user.pending_video_ids = pendingVideoIds;
+    user.pending_task_links = canBuildPendingTasks
+      ? pendingVideoIds.map((videoId) => `https://www.tiktok.com/video/${videoId}`)
+      : [];
+  }
+
+  if (!includeTaskLinks) {
+    return rows;
+  }
 
   const totalKonten = rows.length > 0
     ? parseInt(rows[0]?.total_konten || '0', 10)
