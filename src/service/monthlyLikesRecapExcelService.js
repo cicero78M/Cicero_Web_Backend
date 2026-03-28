@@ -4,6 +4,7 @@ import XLSX from 'xlsx';
 import { hariIndo } from '../utils/constants.js';
 import { getNamaPriorityIndex } from '../utils/sqlPriority.js';
 import { getRekapLikesByClient } from '../model/instaLikeModel.js';
+import { formatDateWIB, formatTimeWIB } from '../utils/dateTimeJakarta.js';
 
 const RANK_ORDER = [
   'KOMISARIS BESAR POLISI',
@@ -34,7 +35,7 @@ export async function saveMonthlyLikesRecapExcel(clientId) {
 
   const formatIso = (d) => d.toISOString().slice(0, 10);
   const formatDisplay = (d) =>
-    new Date(d).toLocaleDateString('id-ID', {
+    formatDateWIB(new Date(d), {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
@@ -188,8 +189,8 @@ export async function saveMonthlyLikesRecapExcel(clientId) {
   await mkdir(exportDir, { recursive: true });
 
   const hari = hariIndo[endDate.getDay()];
-  const tanggal = endDate.toLocaleDateString('id-ID');
-  const jam = now.toLocaleTimeString('id-ID', { hour12: false });
+  const tanggal = formatDateWIB(endDate);
+  const jam = formatTimeWIB(now);
   const dateSafe = tanggal.replace(/\//g, '-');
   const timeSafe = jam.replace(/[:.]/g, '-');
   const formattedClient = (clientId || '')
