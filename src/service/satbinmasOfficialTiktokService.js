@@ -17,6 +17,7 @@ import {
   upsertTiktokAccountSnapshot,
   upsertTiktokPostsSnapshot,
 } from "../model/tiktokSnapshotModel.js";
+import { getJakartaDayRange } from "../utils/dateTimeJakarta.js";
 
 function createError(message, statusCode) {
   const error = new Error(message);
@@ -214,11 +215,7 @@ export async function syncSatbinmasOfficialTiktokSecUidForOrgClients(
 }
 
 function getTodayRange() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { start, end };
+  return getJakartaDayRange(new Date());
 }
 
 function normalizeCaption(post) {

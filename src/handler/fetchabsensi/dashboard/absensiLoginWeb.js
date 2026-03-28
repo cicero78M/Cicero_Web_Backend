@@ -1,38 +1,29 @@
 import { query } from '../../../db/index.js';
 import { getWebLoginCountsByActor } from '../../../model/loginLogModel.js';
 import { getGreeting } from '../../../utils/utilsHelper.js';
-import { formatDateWIB } from '../../../utils/dateTimeJakarta.js';
+import {
+  formatDateWIB,
+  getJakartaDayRange,
+  getJakartaMonthRange,
+  getJakartaWeekRange,
+} from '../../../utils/dateTimeJakarta.js';
 
 const numberFormatter = new Intl.NumberFormat('id-ID');
 
 function startOfDay(date) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  return d;
+  return getJakartaDayRange(date).start;
 }
 
 function endOfDay(date) {
-  const d = new Date(date);
-  d.setHours(23, 59, 59, 999);
-  return d;
+  return new Date(getJakartaDayRange(date).end.getTime() - 1);
 }
 
 function startOfMonth(date) {
-  const d = new Date(date);
-  d.setDate(1);
-  return startOfDay(d);
+  return getJakartaMonthRange(date).start;
 }
 
 function endOfMonth(date) {
-  const d = new Date(date);
-  d.setMonth(d.getMonth() + 1, 0);
-  return endOfDay(d);
-}
-
-function addDays(date, days) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
+  return new Date(getJakartaMonthRange(date).end.getTime() - 1);
 }
 
 function resolveRange({ mode, startTime, endTime }) {
@@ -49,14 +40,13 @@ function resolveRange({ mode, startTime, endTime }) {
   }
 
   if (!start && !end) {
-    const now = new Date();
     if (normalizedMode === 'mingguan') {
-      const day = now.getDay() === 0 ? 6 : now.getDay() - 1;
-      start = startOfDay(addDays(now, -day));
-      end = endOfDay(addDays(start, 6));
+      const weeklyRange = getJakartaWeekRange(new Date());
+      start = weeklyRange.start;
+      end = new Date(weeklyRange.end.getTime() - 1);
     } else {
-      start = startOfDay(now);
-      end = endOfDay(now);
+      start = startOfDay(new Date());
+      end = endOfDay(new Date());
     }
   } else {
     start = start ? startOfDay(start) : startOfDay(end);
