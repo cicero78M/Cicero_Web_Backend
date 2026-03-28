@@ -2,6 +2,7 @@ import * as clientModel from '../model/clientModel.js';
 import * as satbinmasOfficialAccountModel from '../model/satbinmasOfficialAccountModel.js';
 import * as satbinmasOfficialMediaModel from '../model/satbinmasOfficialMediaModel.js';
 import { fetchInstagramPosts } from './instaRapidService.js';
+import { getJakartaDayRange } from '../utils/dateTimeJakarta.js';
 
 const RAPIDAPI_FETCH_DELAY_MS = 1500;
 
@@ -164,11 +165,7 @@ function normalizeInstagramMedia(account, post, takenAt, fetchDate) {
 }
 
 function getTodayRange() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { start, end };
+  return getJakartaDayRange(new Date());
 }
 
 async function fetchMediaForClient(client, usernameFilter = null, delayMs = RAPIDAPI_FETCH_DELAY_MS) {
