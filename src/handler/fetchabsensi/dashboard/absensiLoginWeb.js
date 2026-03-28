@@ -2,13 +2,49 @@ import { query } from '../../../db/index.js';
 import { getWebLoginCountsByActor } from '../../../model/loginLogModel.js';
 import { getGreeting } from '../../../utils/utilsHelper.js';
 import {
-  formatDateWIB,
   getJakartaDayRange,
   getJakartaMonthRange,
   getJakartaWeekRange,
 } from '../../../utils/dateTimeJakarta.js';
 
 const numberFormatter = new Intl.NumberFormat('id-ID');
+const dateFormatter = new Intl.DateTimeFormat('id-ID', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  timeZone: 'Asia/Jakarta',
+});
+const monthFormatter = new Intl.DateTimeFormat('id-ID', {
+  month: 'long',
+  year: 'numeric',
+  timeZone: 'Asia/Jakarta',
+});
+const monthYearValidationFormatter = new Intl.DateTimeFormat('id-ID', {
+  month: '2-digit',
+  year: 'numeric',
+  timeZone: 'Asia/Jakarta',
+});
+
+function validateDateFormatConsistency(date) {
+  const formatTarget = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(formatTarget.getTime())) {
+    throw new Error('Tanggal tidak valid untuk formatter Asia/Jakarta');
+  }
+
+  const dateParts = dateFormatter.formatToParts(formatTarget);
+  const monthLabelParts = monthFormatter.formatToParts(formatTarget);
+  const monthValidationParts = monthYearValidationFormatter.formatToParts(formatTarget);
+
+  const dateMonth = dateParts.find((part) => part.type === 'month')?.value;
+  const dateYear = dateParts.find((part) => part.type === 'year')?.value;
+  const monthValidation = monthValidationParts.find((part) => part.type === 'month')?.value;
+  const monthYear = monthValidationParts.find((part) => part.type === 'year')?.value;
+  const monthLabel = monthLabelParts.find((part) => part.type === 'month')?.value;
+
+  if (dateMonth !== monthValidation || dateYear !== monthYear || !monthLabel) {
+    throw new Error('Formatter tanggal tidak konsisten pada timezone Asia/Jakarta');
+  }
+}
 
 function startOfDay(date) {
   return getJakartaDayRange(date).start;
@@ -68,11 +104,13 @@ function resolveMonthlyRange({ startTime, endTime }) {
 }
 
 function formatDate(date) {
-  return formatDateWIB(date);
+  validateDateFormatConsistency(date);
+  return dateFormatter.format(date);
 }
 
 function formatMonthYear(date) {
-  return formatDateWIB(date, { month: 'long', year: 'numeric' });
+  validateDateFormatConsistency(date);
+  return monthFormatter.format(date);
 }
 
 function formatNumber(value) {
