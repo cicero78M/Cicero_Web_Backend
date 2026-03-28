@@ -1,6 +1,7 @@
 import { getUsersSocialByClient } from "../../../model/userModel.js";
 import { findClientById } from "../../../service/clientService.js";
 import { formatNama, getGreeting, sortDivisionKeys } from "../../../utils/utilsHelper.js";
+import { formatDateWIB, formatTimeWIB } from '../../../utils/dateTimeJakarta.js';
 
 const formatUsername = (value) => {
   const trimmed = String(value || "").trim();
@@ -32,13 +33,13 @@ export async function absensiUpdateDataUsername(clientId, roleFlag = null) {
 
   const salam = getGreeting();
   const now = new Date();
-  const hari = now.toLocaleDateString("id-ID", { weekday: "long" });
-  const tanggal = now.toLocaleDateString("id-ID", {
+  const hari = formatDateWIB(now, { weekday: "long" });
+  const tanggal = formatDateWIB(now, {
     day: "2-digit",
     month: "long",
     year: "numeric",
   });
-  const jam = now.toLocaleTimeString("id-ID", {
+  const jam = formatTimeWIB(now, {
     hour: "2-digit",
     minute: "2-digit",
   });

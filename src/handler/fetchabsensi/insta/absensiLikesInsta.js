@@ -17,6 +17,7 @@ import {
 import { getClientInfo } from "../../../service/instagram/instagramReport.js";
 import { computeDitbinmasLikesStats } from "./ditbinmasLikesUtils.js";
 import { sortUsersByPositionRankAndName } from "../../../utils/sortingHelper.js";
+import { formatDateWIB, formatTimeWIB } from '../../../utils/dateTimeJakarta.js';
 
 // Use the comprehensive sorting function from sortingHelper
 const sortUsersByRankAndName = sortUsersByPositionRankAndName;
@@ -81,8 +82,8 @@ export async function absensiLikes(client_id, opts = {}) {
   const roleFlag = opts.roleFlag;
   const now = new Date();
   const hari = hariIndo[now.getDay()];
-  const tanggal = now.toLocaleDateString("id-ID");
-  const jam = now.toLocaleTimeString("id-ID", { hour12: false });
+  const tanggal = formatDateWIB(now);
+  const jam = formatTimeWIB(now);
 
   const { nama: clientNama, clientType } = await getClientInfo(client_id);
   const allowedRoles = ["ditbinmas", "ditlantas", "bidhumas"];
@@ -333,8 +334,8 @@ export async function absensiLikesPerKonten(client_id, opts = {}) {
   const { clientFilter } = opts;
   const now = new Date();
   const hari = hariIndo[now.getDay()];
-  const tanggal = now.toLocaleDateString("id-ID");
-  const jam = now.toLocaleTimeString("id-ID", { hour12: false });
+  const tanggal = formatDateWIB(now);
+  const jam = formatTimeWIB(now);
 
   const { nama: clientNama } = await getClientInfo(client_id);
   const users = await getUsersByClient(client_id);
@@ -487,8 +488,8 @@ export async function absensiLikesDitbinmasSimple(clientId = "DITBINMAS") {
   const roleName = targetClientId.toLowerCase();
   const now = new Date();
   const hari = hariIndo[now.getDay()];
-  const tanggal = now.toLocaleDateString("id-ID");
-  const jam = now.toLocaleTimeString("id-ID", { hour12: false });
+  const tanggal = formatDateWIB(now);
+  const jam = formatTimeWIB(now);
 
   let shortcodes;
   try {
@@ -603,8 +604,8 @@ export async function absensiLikesDitbinmasReport(clientId = "DITBINMAS") {
   const roleName = targetClientId.toLowerCase();
   const now = new Date();
   const hari = hariIndo[now.getDay()];
-  const tanggal = now.toLocaleDateString("id-ID");
-  const jam = now.toLocaleTimeString("id-ID", { hour12: false });
+  const tanggal = formatDateWIB(now);
+  const jam = formatTimeWIB(now);
   const { nama: clientName } = await getClientInfo(targetClientId);
 
   let shortcodes;

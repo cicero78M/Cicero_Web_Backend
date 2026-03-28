@@ -3,6 +3,7 @@ import { getShortcodesTodayByClient } from "../../../model/instaPostModel.js";
 import { getReportsTodayByClient } from "../../../model/linkReportModel.js";
 import { hariIndo } from "../../../utils/constants.js";
 import { getGreeting } from "../../../utils/utilsHelper.js";
+import { formatDateWIB, formatTimeWIB } from '../../../utils/dateTimeJakarta.js';
 
 async function getClientName(clientId) {
   const { rows } = await query(
@@ -36,8 +37,8 @@ export async function rekapLink(clientId) {
     list.youtube.length;
   const now = new Date();
   const hari = hariIndo[now.getDay()];
-  const tanggal = now.toLocaleDateString("id-ID");
-  const jam = now.toLocaleTimeString("id-ID", { hour12: false });
+  const tanggal = formatDateWIB(now);
+  const jam = formatTimeWIB(now);
   const salam = getGreeting();
   const clientName = await getClientName(clientId);
   const kontenLinks = shortcodes.map((sc) => `https://www.instagram.com/p/${sc}`);

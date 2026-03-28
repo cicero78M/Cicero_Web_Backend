@@ -1,9 +1,9 @@
 import { query } from '../../../db/index.js';
 import { getWebLoginCountsByActor } from '../../../model/loginLogModel.js';
 import { getGreeting } from '../../../utils/utilsHelper.js';
+import { formatDateWIB } from '../../../utils/dateTimeJakarta.js';
 
 const numberFormatter = new Intl.NumberFormat('id-ID');
-const monthFormatter = new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' });
 
 function startOfDay(date) {
   const d = new Date(date);
@@ -78,13 +78,11 @@ function resolveMonthlyRange({ startTime, endTime }) {
 }
 
 function formatDate(date) {
-  return new Date(date).toLocaleDateString('id-ID', {
-    timeZone: 'Asia/Jakarta',
-  });
+  return formatDateWIB(date);
 }
 
 function formatMonthYear(date) {
-  return monthFormatter.format(new Date(date));
+  return formatDateWIB(date, { month: 'long', year: 'numeric' });
 }
 
 function formatNumber(value) {
