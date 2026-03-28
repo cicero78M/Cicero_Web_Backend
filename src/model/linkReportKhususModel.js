@@ -145,7 +145,7 @@ export async function getReportsTodayByClient(client_id, roleFlag = null) {
   const res = await query(
     `SELECT r.* FROM link_report_khusus r
      ${joinClause}
-     WHERE ${whereClause} AND r.created_at::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date
+     WHERE ${whereClause} AND (r.created_at AT TIME ZONE 'Asia/Jakarta')::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date
      ORDER BY r.created_at ASC`,
     [client_id]
   );
@@ -165,7 +165,7 @@ export async function getReportsTodayByShortcode(client_id, shortcode, roleFlag 
     `SELECT r.* FROM link_report_khusus r
      ${joinClause}
      WHERE ${whereClause}
-       AND r.created_at::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date
+       AND (r.created_at AT TIME ZONE 'Asia/Jakarta')::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date
      ORDER BY r.created_at ASC`,
     [client_id, shortcode]
   );
@@ -182,8 +182,8 @@ export async function getRekapLinkByClient(
     userClientId: userClientIdOverride = null,
     userRoleFilter = null
   } = options;
-  let dateFilterPost = "p.created_at::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date";
-  let dateFilterReport = "r.created_at::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date";
+  let dateFilterPost = "(p.created_at AT TIME ZONE 'Asia/Jakarta')::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date";
+  let dateFilterReport = "(r.created_at AT TIME ZONE 'Asia/Jakarta')::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date";
   const params = [client_id];
   if (periode === 'semua') {
     dateFilterPost = '1=1';
@@ -191,26 +191,26 @@ export async function getRekapLinkByClient(
   } else if (periode === 'mingguan') {
     if (tanggal) {
       params.push(tanggal);
-      dateFilterPost = "date_trunc('week', p.created_at) = date_trunc('week', $2::date)";
-      dateFilterReport = "date_trunc('week', r.created_at) = date_trunc('week', $2::date)";
+      dateFilterPost = "date_trunc('week', p.created_at AT TIME ZONE 'Asia/Jakarta') = date_trunc('week', $2::timestamp AT TIME ZONE 'Asia/Jakarta')";
+      dateFilterReport = "date_trunc('week', r.created_at AT TIME ZONE 'Asia/Jakarta') = date_trunc('week', $2::timestamp AT TIME ZONE 'Asia/Jakarta')";
     } else {
-      dateFilterPost = "date_trunc('week', p.created_at) = date_trunc('week', NOW())";
-      dateFilterReport = "date_trunc('week', r.created_at) = date_trunc('week', NOW())";
+      dateFilterPost = "date_trunc('week', p.created_at AT TIME ZONE 'Asia/Jakarta') = date_trunc('week', NOW() AT TIME ZONE 'Asia/Jakarta')";
+      dateFilterReport = "date_trunc('week', r.created_at AT TIME ZONE 'Asia/Jakarta') = date_trunc('week', NOW() AT TIME ZONE 'Asia/Jakarta')";
     }
   } else if (periode === 'bulanan') {
     if (tanggal) {
       const monthDate = tanggal.length === 7 ? `${tanggal}-01` : tanggal;
       params.push(monthDate);
-      dateFilterPost = "date_trunc('month', p.created_at AT TIME ZONE 'Asia/Jakarta') = date_trunc('month', $2::date)";
-      dateFilterReport = "date_trunc('month', r.created_at AT TIME ZONE 'Asia/Jakarta') = date_trunc('month', $2::date)";
+      dateFilterPost = "date_trunc('month', p.created_at AT TIME ZONE 'Asia/Jakarta') = date_trunc('month', $2::timestamp AT TIME ZONE 'Asia/Jakarta')";
+      dateFilterReport = "date_trunc('month', r.created_at AT TIME ZONE 'Asia/Jakarta') = date_trunc('month', $2::timestamp AT TIME ZONE 'Asia/Jakarta')";
     } else {
       dateFilterPost = "date_trunc('month', p.created_at AT TIME ZONE 'Asia/Jakarta') = date_trunc('month', NOW() AT TIME ZONE 'Asia/Jakarta')";
       dateFilterReport = "date_trunc('month', r.created_at AT TIME ZONE 'Asia/Jakarta') = date_trunc('month', NOW() AT TIME ZONE 'Asia/Jakarta')";
     }
   } else if (tanggal) {
     params.push(tanggal);
-    dateFilterPost = 'p.created_at::date = $2::date';
-    dateFilterReport = 'r.created_at::date = $2::date';
+    dateFilterPost = "(p.created_at AT TIME ZONE 'Asia/Jakarta')::date = ($2::timestamp AT TIME ZONE 'Asia/Jakarta')::date";
+    dateFilterReport = "(r.created_at AT TIME ZONE 'Asia/Jakarta')::date = ($2::timestamp AT TIME ZONE 'Asia/Jakarta')::date";
   }
 
   const { rows: postRows } = await query(
