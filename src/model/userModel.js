@@ -835,6 +835,38 @@ export async function replaceUserSocialAccounts(userId, platform, usernames = []
   }
 }
 
+export async function findSocialUsernameConflict(userId, platform, usernames = []) {
+  const uid = normalizeUserId(userId);
+  if (!(await hasUserSocialAccountsTable())) return null;
+
+  const normalizedPlatform = String(platform || '').toLowerCase();
+  if (!['instagram', 'tiktok'].includes(normalizedPlatform)) {
+    throw new Error('platform tidak valid');
+  }
+
+  const normalizedUsernames = usernames
+    .filter((username) => username !== null && username !== undefined && username !== '')
+    .map((username) => String(username).trim())
+    .filter((username) => username.length > 0);
+
+  if (normalizedUsernames.length === 0) return null;
+
+  const { rows } = await query(
+    `SELECT platform, username, user_id
+     FROM user_social_accounts
+     WHERE user_id <> $1
+       AND is_active = TRUE
+       AND LOWER(platform) = LOWER($2)
+       AND LOWER(username) = ANY($3::text[])
+     ORDER BY created_at ASC
+     LIMIT 1`,
+    [uid, normalizedPlatform, normalizedUsernames.map((username) => username.toLowerCase())]
+  );
+
+  if (!rows.length) return null;
+  return rows[0];
+}
+
 export async function findUserSocialAccounts(userId) {
   const uid = normalizeUserId(userId);
   if (!(await hasUserSocialAccountsTable())) {
