@@ -11,6 +11,7 @@ const validationErrorCodes = {
   invalidTiktokFormat: 'CLAIM_INVALID_TIKTOK_FORMAT',
   usernameBlocked: 'CLAIM_USERNAME_BLOCKED',
   duplicateUsernameInput: 'CLAIM_DUPLICATE_USERNAME_INPUT',
+  socialUsernameConflict: 'CLAIM_SOCIAL_USERNAME_CONFLICT',
 };
 
 function isConnectionError(err) {
@@ -413,14 +414,78 @@ export async function updateUserData(req, res, next) {
     }
 
     if (instagramAccountsPayload !== undefined) {
+      const instagramConflict = await userModel.findSocialUsernameConflict(
+        nrp,
+        'instagram',
+        instagramAccountsPayload
+      );
+      if (instagramConflict) {
+        return res.status(409).json({
+          success: false,
+          error_code: validationErrorCodes.socialUsernameConflict,
+          message: 'Username social media sudah digunakan akun lain.',
+          conflict: {
+            platform: instagramConflict.platform,
+            username: instagramConflict.username,
+          },
+        });
+      }
       await userModel.replaceUserSocialAccounts(nrp, 'instagram', instagramAccountsPayload);
     } else if (insta !== undefined) {
+      const instagramConflict = await userModel.findSocialUsernameConflict(
+        nrp,
+        'instagram',
+        igUsername ? [igUsername] : []
+      );
+      if (instagramConflict) {
+        return res.status(409).json({
+          success: false,
+          error_code: validationErrorCodes.socialUsernameConflict,
+          message: 'Username social media sudah digunakan akun lain.',
+          conflict: {
+            platform: instagramConflict.platform,
+            username: instagramConflict.username,
+          },
+        });
+      }
       await userModel.replaceUserSocialAccounts(nrp, 'instagram', igUsername ? [igUsername] : []);
     }
 
     if (tiktokAccountsPayload !== undefined) {
+      const tiktokConflict = await userModel.findSocialUsernameConflict(
+        nrp,
+        'tiktok',
+        tiktokAccountsPayload
+      );
+      if (tiktokConflict) {
+        return res.status(409).json({
+          success: false,
+          error_code: validationErrorCodes.socialUsernameConflict,
+          message: 'Username social media sudah digunakan akun lain.',
+          conflict: {
+            platform: tiktokConflict.platform,
+            username: tiktokConflict.username,
+          },
+        });
+      }
       await userModel.replaceUserSocialAccounts(nrp, 'tiktok', tiktokAccountsPayload);
     } else if (tiktok !== undefined) {
+      const tiktokConflict = await userModel.findSocialUsernameConflict(
+        nrp,
+        'tiktok',
+        ttUsername ? [ttUsername] : []
+      );
+      if (tiktokConflict) {
+        return res.status(409).json({
+          success: false,
+          error_code: validationErrorCodes.socialUsernameConflict,
+          message: 'Username social media sudah digunakan akun lain.',
+          conflict: {
+            platform: tiktokConflict.platform,
+            username: tiktokConflict.username,
+          },
+        });
+      }
       await userModel.replaceUserSocialAccounts(nrp, 'tiktok', ttUsername ? [ttUsername] : []);
     }
 
