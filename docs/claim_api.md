@@ -23,9 +23,13 @@ Dokumen ini merangkum endpoint claim data berbasis NRP dan password (tanpa OTP e
   - Kontak: `whatsapp`, `email`
   - Sosial: `insta`, `tiktok`
 - **Aturan validasi tambahan:**
-  - `whatsapp` akan dinormalisasi ke format numerik (contoh `0812...` → `62812...`) dan minimal 8 digit.
+  - `whatsapp` dinormalisasi menjadi **digits-only** (semua karakter non-angka dihapus) dengan panjang minimal 8 digit.
   - `email` akan dinormalisasi ke lowercase dan harus sesuai format email.
   - `insta` dan `tiktok` menerima username atau URL profil, lalu dinormalisasi ke username.
+  - Contoh normalisasi WhatsApp terbaru:
+    - `0812-3456-7890` → `081234567890`
+    - `+62 812 3456 7890` → `6281234567890`
+    - `62.812.34` → **ditolak** (kurang dari 8 digit setelah normalisasi)
 - **Format response error validasi (konsisten):**
   ```json
   {
