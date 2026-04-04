@@ -26,6 +26,53 @@ Dokumen ini merangkum endpoint claim data berbasis NRP dan password (tanpa OTP e
   - `whatsapp` akan dinormalisasi ke format numerik (contoh `0812...` → `62812...`) dan minimal 8 digit.
   - `email` akan dinormalisasi ke lowercase dan harus sesuai format email.
   - `insta` dan `tiktok` menerima username atau URL profil, lalu dinormalisasi ke username.
+- **Format response error validasi (konsisten):**
+  ```json
+  {
+    "success": false,
+    "error_code": "CLAIM_INVALID_EMAIL_FORMAT",
+    "field": "email",
+    "message": "Format email tidak valid."
+  }
+  ```
+
+### Daftar `error_code` Validasi Claim Update
+| `error_code` | `field` | Kapan muncul |
+|---|---|---|
+| `CLAIM_INVALID_WHATSAPP_FORMAT` | `whatsapp` | Nomor WhatsApp tidak valid / digit kurang dari batas minimum. |
+| `CLAIM_INVALID_EMAIL_FORMAT` | `email` | Format email tidak valid. |
+| `CLAIM_INVALID_INSTAGRAM_FORMAT` | `insta`, `instagram_accounts` | Format username/link Instagram tidak valid. |
+| `CLAIM_INVALID_TIKTOK_FORMAT` | `tiktok`, `tiktok_accounts` | Format username/link TikTok tidak valid. |
+| `CLAIM_USERNAME_BLOCKED` | `insta`, `tiktok`, `instagram_accounts`, `tiktok_accounts` | Username `cicero_devs` tidak diperbolehkan. |
+| `CLAIM_DUPLICATE_USERNAME_INPUT` | `instagram_accounts`, `tiktok_accounts` | Terdeteksi duplikasi username pada input sosial akun. |
+
+### Contoh Payload Berhasil (Update)
+```json
+{
+  "success": true,
+  "message": "OK",
+  "data": {
+    "user_id": "12345678",
+    "nama": "Budi",
+    "insta": "budi.cicero",
+    "tiktok": "@budi.cicero",
+    "instagram_accounts": ["budi.cicero", "budi_backup"],
+    "tiktok_accounts": ["@budi.cicero", "@budi.backup"],
+    "whatsapp": "6281234567890",
+    "email": "budi@mail.com"
+  }
+}
+```
+
+### Contoh Payload Gagal (Validasi)
+```json
+{
+  "success": false,
+  "error_code": "CLAIM_USERNAME_BLOCKED",
+  "field": "instagram_accounts",
+  "message": "Username cicero_devs tidak diperbolehkan."
+}
+```
 - **Catatan:** Kredensial yang sama dipakai sebagai autentikasi update; mekanisme OTP email sudah dihapus.
 
 ## Login User Setelah Claim
