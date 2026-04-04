@@ -4,8 +4,26 @@ import { sendSuccess } from '../utils/response.js';
 import { normalizeEmail, normalizeUserId } from '../utils/utilsHelper.js';
 import { normalizeWhatsappNumber, minPhoneDigitLength } from '../utils/waHelper.js';
 
+const validationErrorCodes = {
+  invalidWhatsappFormat: 'CLAIM_INVALID_WHATSAPP_FORMAT',
+  invalidEmailFormat: 'CLAIM_INVALID_EMAIL_FORMAT',
+  invalidInstagramFormat: 'CLAIM_INVALID_INSTAGRAM_FORMAT',
+  invalidTiktokFormat: 'CLAIM_INVALID_TIKTOK_FORMAT',
+  usernameBlocked: 'CLAIM_USERNAME_BLOCKED',
+  duplicateUsernameInput: 'CLAIM_DUPLICATE_USERNAME_INPUT',
+};
+
 function isConnectionError(err) {
   return err && err.code === 'ECONNREFUSED';
+}
+
+function sendValidationError(res, { errorCode, field, message }) {
+  return res.status(400).json({
+    success: false,
+    error_code: errorCode,
+    field,
+    message,
+  });
 }
 
 function isValidEmailFormat(value) {
@@ -71,7 +89,6 @@ function normalizeSocialAccounts(rawValue, platform) {
     const username = extractor(String(item));
     if (!username) return null;
     const dedupeKey = platform === 'tiktok' ? username.replace(/^@/, '') : username;
-    if (dedupeKey === 'cicero_devs') return null;
     if (!seen.has(dedupeKey)) {
       seen.add(dedupeKey);
       normalized.push(username);
@@ -87,6 +104,14 @@ function findDuplicateSocialUsername(usernames = [], platform) {
     const dedupeKey = platform === 'tiktok' ? username.replace(/^@/, '') : username;
     if (seen.has(dedupeKey)) return username;
     seen.add(dedupeKey);
+  }
+  return null;
+}
+
+function findBlockedSocialUsername(usernames = [], platform) {
+  for (const username of usernames) {
+    const dedupeKey = platform === 'tiktok' ? username.replace(/^@/, '') : username;
+    if (dedupeKey === 'cicero_devs') return username;
   }
   return null;
 }
@@ -230,8 +255,9 @@ export async function updateUserData(req, res, next) {
     if (insta !== undefined) {
       igUsername = extractInstagramUsername(insta);
       if (igUsername === null) {
-        return res.status(400).json({
-          success: false,
+        return sendValidationError(res, {
+          errorCode: validationErrorCodes.invalidInstagramFormat,
+          field: 'insta',
           message:
             'Format username Instagram tidak valid. Gunakan tautan profil atau username seperti instagram.com/username atau @username.',
         });
@@ -242,8 +268,9 @@ export async function updateUserData(req, res, next) {
     if (tiktok !== undefined) {
       ttUsername = extractTiktokUsername(tiktok);
       if (ttUsername === null) {
-        return res.status(400).json({
-          success: false,
+        return sendValidationError(res, {
+          errorCode: validationErrorCodes.invalidTiktokFormat,
+          field: 'tiktok',
           message:
             'Format username TikTok tidak valid. Gunakan tautan profil atau username seperti tiktok.com/@username atau @username.',
         });
@@ -252,17 +279,18 @@ export async function updateUserData(req, res, next) {
 
     const normalizedInstagramAccounts = normalizeSocialAccounts(instagram_accounts, 'instagram');
     if (normalizedInstagramAccounts === null) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'Format instagram_accounts tidak valid. Isi array username/link Instagram yang valid.',
+      return sendValidationError(res, {
+        errorCode: validationErrorCodes.invalidInstagramFormat,
+        field: 'instagram_accounts',
+        message: 'Format instagram_accounts tidak valid. Isi array username/link Instagram yang valid.',
       });
     }
 
     const normalizedTiktokAccounts = normalizeSocialAccounts(tiktok_accounts, 'tiktok');
     if (normalizedTiktokAccounts === null) {
-      return res.status(400).json({
-        success: false,
+      return sendValidationError(res, {
+        errorCode: validationErrorCodes.invalidTiktokFormat,
+        field: 'tiktok_accounts',
         message: 'Format tiktok_accounts tidak valid. Isi array username/link TikTok yang valid.',
       });
     }
@@ -274,8 +302,9 @@ export async function updateUserData(req, res, next) {
       } else {
         const digits = String(whatsapp).replace(/\D/g, '');
         if (digits.length < minPhoneDigitLength) {
-          return res.status(400).json({
-            success: false,
+          return sendValidationError(res, {
+            errorCode: validationErrorCodes.invalidWhatsappFormat,
+            field: 'whatsapp',
             message: 'Nomor telepon tidak valid. Masukkan minimal 8 digit angka.',
           });
         }
@@ -290,8 +319,9 @@ export async function updateUserData(req, res, next) {
       } else {
         normalizedEmail = normalizeEmail(email);
         if (!isValidEmailFormat(normalizedEmail)) {
-          return res.status(400).json({
-            success: false,
+          return sendValidationError(res, {
+            errorCode: validationErrorCodes.invalidEmailFormat,
+            field: 'email',
             message: 'Format email tidak valid.',
           });
         }
@@ -307,13 +337,21 @@ export async function updateUserData(req, res, next) {
     }
     if (insta !== undefined) {
       if (igUsername === 'cicero_devs') {
-        return res.status(400).json({ success: false, message: 'username instagram tidak valid' });
+        return sendValidationError(res, {
+          errorCode: validationErrorCodes.usernameBlocked,
+          field: 'insta',
+          message: 'Username cicero_devs tidak diperbolehkan.',
+        });
       }
       data.insta = igUsername;
     }
     if (tiktok !== undefined) {
       if (ttUsername && ttUsername.replace(/^@/, '') === 'cicero_devs') {
-        return res.status(400).json({ success: false, message: 'username tiktok tidak valid' });
+        return sendValidationError(res, {
+          errorCode: validationErrorCodes.usernameBlocked,
+          field: 'tiktok',
+          message: 'Username cicero_devs tidak diperbolehkan.',
+        });
       }
       data.tiktok = ttUsername;
     }
@@ -323,9 +361,18 @@ export async function updateUserData(req, res, next) {
       instagramAccountsPayload = igUsername ? [igUsername, ...(normalizedInstagramAccounts || [])] : (normalizedInstagramAccounts || []);
     }
     const duplicateInstagramInput = findDuplicateSocialUsername(instagramAccountsPayload, 'instagram');
+    const blockedInstagramInput = findBlockedSocialUsername(instagramAccountsPayload, 'instagram');
+    if (blockedInstagramInput) {
+      return sendValidationError(res, {
+        errorCode: validationErrorCodes.usernameBlocked,
+        field: 'instagram_accounts',
+        message: 'Username cicero_devs tidak diperbolehkan.',
+      });
+    }
     if (duplicateInstagramInput) {
-      return res.status(400).json({
-        success: false,
+      return sendValidationError(res, {
+        errorCode: validationErrorCodes.duplicateUsernameInput,
+        field: 'instagram_accounts',
         message:
           'Terdeteksi duplikasi username Instagram pada input username 1/2. Gunakan username yang berbeda.',
       });
@@ -339,9 +386,18 @@ export async function updateUserData(req, res, next) {
       tiktokAccountsPayload = ttUsername ? [ttUsername, ...(normalizedTiktokAccounts || [])] : (normalizedTiktokAccounts || []);
     }
     const duplicateTiktokInput = findDuplicateSocialUsername(tiktokAccountsPayload, 'tiktok');
+    const blockedTiktokInput = findBlockedSocialUsername(tiktokAccountsPayload, 'tiktok');
+    if (blockedTiktokInput) {
+      return sendValidationError(res, {
+        errorCode: validationErrorCodes.usernameBlocked,
+        field: 'tiktok_accounts',
+        message: 'Username cicero_devs tidak diperbolehkan.',
+      });
+    }
     if (duplicateTiktokInput) {
-      return res.status(400).json({
-        success: false,
+      return sendValidationError(res, {
+        errorCode: validationErrorCodes.duplicateUsernameInput,
+        field: 'tiktok_accounts',
         message:
           'Terdeteksi duplikasi username TikTok pada input username 1/2. Gunakan username yang berbeda.',
       });
