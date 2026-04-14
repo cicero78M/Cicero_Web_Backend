@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import * as userModel from '../model/userModel.js';
+import * as claimPasswordResetModel from '../model/claimPasswordResetModel.js';
 import { sendClaimPasswordResetEmail } from '../service/emailService.js';
 import { sendTelegramAdminMessage } from '../service/telegramService.js';
 import { sendSuccess } from '../utils/response.js';
@@ -587,12 +588,19 @@ export async function requestClaimPasswordReset(req, res, next) {
       const token = jwt.sign(
         {
           type: 'claim_password_reset',
-          nrp,
-          email,
+          user_id: user.user_id,
         },
         getClaimResetSecret(),
         { expiresIn: '15m' }
       );
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+      await claimPasswordResetModel.createResetRequest({
+        userId: user.user_id,
+        deliveryTarget: email,
+        resetToken: token,
+        expiresAt,
+      });
 
       if (smtpEnabled) {
         try {
@@ -689,7 +697,15 @@ export async function confirmClaimPasswordReset(req, res, next) {
       });
     }
 
-    if (payload?.type !== 'claim_password_reset' || !payload?.nrp) {
+    if (payload?.type !== 'claim_password_reset' || !payload?.user_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token reset password tidak valid atau sudah kedaluwarsa.',
+      });
+    }
+
+    const resetRecord = await claimPasswordResetModel.findActiveByToken(token);
+    if (!resetRecord || String(resetRecord.user_id) !== String(payload.user_id)) {
       return res.status(400).json({
         success: false,
         message: 'Token reset password tidak valid atau sudah kedaluwarsa.',
@@ -697,13 +713,15 @@ export async function confirmClaimPasswordReset(req, res, next) {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const updatedUser = await userModel.setClaimCredentials(payload.nrp, { passwordHash });
+    const updatedUser = await userModel.setClaimCredentials(payload.user_id, { passwordHash });
     if (!updatedUser) {
       return res.status(400).json({
         success: false,
         message: 'Token reset password tidak valid atau sudah kedaluwarsa.',
       });
     }
+
+    await claimPasswordResetModel.markTokenUsed(token);
 
     return sendSuccess(res, {
       message: 'Password berhasil diperbarui.',
