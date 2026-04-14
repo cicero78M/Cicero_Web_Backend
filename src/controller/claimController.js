@@ -1,6 +1,9 @@
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import * as userModel from '../model/userModel.js';
+import { sendClaimPasswordResetEmail } from '../service/emailService.js';
+import { sendTelegramAdminMessage } from '../service/telegramService.js';
 import { sendSuccess } from '../utils/response.js';
 import { normalizeEmail, normalizeUserId } from '../utils/utilsHelper.js';
 import { normalizeWhatsappNumber, minPhoneDigitLength } from '../utils/waHelper.js';
@@ -71,12 +74,47 @@ function isClaimPasswordValid(password) {
 
 const claimPasswordResetMessage =
   'Permintaan reset password tidak valid. Periksa kembali data yang dimasukkan.';
+const claimPasswordResetNeutralMessage =
+  'Jika data valid dan terdaftar, instruksi reset password akan dikirim melalui kanal yang tersedia.';
 
 function getClaimResetSecret() {
   if (!process.env.JWT_SECRET) {
     throw new Error('JWT_SECRET belum diset');
   }
   return process.env.JWT_SECRET;
+}
+
+function isSmtpEnabled() {
+  const requiredSmtpEnv = [
+    process.env.SMTP_HOST,
+    process.env.SMTP_PORT,
+    process.env.SMTP_USER,
+    process.env.SMTP_PASS,
+    process.env.SMTP_FROM,
+  ];
+
+  return requiredSmtpEnv.every((value) => typeof value === 'string' && value.trim() !== '');
+}
+
+function maskEmail(email) {
+  const [localPart, domainPart] = String(email || '').split('@');
+  if (!localPart || !domainPart) return 'invalid-email';
+  const visibleLocal = localPart.length <= 2 ? `${localPart[0] || '*'}*` : `${localPart.slice(0, 2)}***`;
+  return `${visibleLocal}@${domainPart}`;
+}
+
+function obfuscateNrp(nrp) {
+  const text = String(nrp || '');
+  if (text.length <= 3) return '***';
+  return `${text.slice(0, 2)}***${text.slice(-1)}`;
+}
+
+function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex').slice(0, 12);
+}
+
+function logClaimPasswordReset(payload) {
+  console.info(JSON.stringify({ event: 'claim_password_reset_request', ...payload }));
 }
 
 function toSocialAccountList(rawValue) {
@@ -523,6 +561,7 @@ export async function requestClaimPasswordReset(req, res, next) {
     const { nrp: rawNrp, email: rawEmail } = req.body;
     const nrp = normalizeUserId(rawNrp);
     const email = normalizeEmail(rawEmail);
+    const smtpEnabled = isSmtpEnabled();
 
     if (!nrp || !email) {
       return res.status(400).json({
@@ -542,26 +581,72 @@ export async function requestClaimPasswordReset(req, res, next) {
     }
 
     const normalizedUserEmail = normalizeEmail(user?.email || '');
-    if (!user || !normalizedUserEmail || normalizedUserEmail !== email) {
-      return res.status(400).json({
-        success: false,
-        message: claimPasswordResetMessage,
+    const accountMatched = Boolean(user && normalizedUserEmail && normalizedUserEmail === email);
+
+    if (accountMatched) {
+      const token = jwt.sign(
+        {
+          type: 'claim_password_reset',
+          nrp,
+          email,
+        },
+        getClaimResetSecret(),
+        { expiresIn: '15m' }
+      );
+
+      if (smtpEnabled) {
+        try {
+          await sendClaimPasswordResetEmail(email, token, {
+            nrp,
+            expiryMinutes: 15,
+          });
+          logClaimPasswordReset({
+            outcome: 'delivered_email',
+            delivery_channel: 'smtp',
+            smtp_enabled: true,
+            nrp_masked: obfuscateNrp(nrp),
+            email_masked: maskEmail(email),
+            token_fingerprint: hashToken(token),
+          });
+        } catch (err) {
+          logClaimPasswordReset({
+            outcome: 'email_send_failed_fallback_telegram',
+            delivery_channel: 'smtp_to_telegram_fallback',
+            smtp_enabled: true,
+            nrp_masked: obfuscateNrp(nrp),
+            email_masked: maskEmail(email),
+            token_fingerprint: hashToken(token),
+            error: err?.message || 'unknown_error',
+          });
+          await sendTelegramAdminMessage(
+            `⚠️ CLAIM reset fallback (SMTP gagal)\nNRP: ${nrp}\nEmail: ${email}\nToken: ${token}`
+          );
+        }
+      } else {
+        await sendTelegramAdminMessage(
+          `⚠️ CLAIM reset manual flow (SMTP nonaktif)\nNRP: ${nrp}\nEmail: ${email}\nToken: ${token}`
+        );
+        logClaimPasswordReset({
+          outcome: 'delivered_admin_telegram',
+          delivery_channel: 'telegram_admin',
+          smtp_enabled: false,
+          nrp_masked: obfuscateNrp(nrp),
+          email_masked: maskEmail(email),
+          token_fingerprint: hashToken(token),
+        });
+      }
+    } else {
+      logClaimPasswordReset({
+        outcome: 'account_not_found_or_mismatch',
+        delivery_channel: 'none',
+        smtp_enabled: smtpEnabled,
+        nrp_masked: obfuscateNrp(nrp),
+        email_masked: maskEmail(email),
       });
     }
 
-    const token = jwt.sign(
-      {
-        type: 'claim_password_reset',
-        nrp,
-        email,
-      },
-      getClaimResetSecret(),
-      { expiresIn: '15m' }
-    );
-
     return sendSuccess(res, {
-      message: 'Token reset password berhasil dibuat.',
-      token,
+      message: claimPasswordResetNeutralMessage,
     });
   } catch (err) {
     next(err);
