@@ -1,4 +1,5 @@
 import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 import * as userModel from '../model/userModel.js';
 import { sendSuccess } from '../utils/response.js';
 import { normalizeEmail, normalizeUserId } from '../utils/utilsHelper.js';
@@ -66,6 +67,16 @@ function isClaimPasswordValid(password) {
   const hasDigit = /\d/.test(password);
   const hasPunctuation = /[^A-Za-z0-9\s]/.test(password);
   return hasLetter && hasDigit && hasPunctuation;
+}
+
+const claimPasswordResetMessage =
+  'Permintaan reset password tidak valid. Periksa kembali data yang dimasukkan.';
+
+function getClaimResetSecret() {
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET belum diset');
+  }
+  return process.env.JWT_SECRET;
 }
 
 function toSocialAccountList(rawValue) {
@@ -503,6 +514,116 @@ export async function updateUserData(req, res, next) {
         message: 'Username Instagram/TikTok sudah digunakan akun lain.',
       });
     }
+    next(err);
+  }
+}
+
+export async function requestClaimPasswordReset(req, res, next) {
+  try {
+    const { nrp: rawNrp, email: rawEmail } = req.body;
+    const nrp = normalizeUserId(rawNrp);
+    const email = normalizeEmail(rawEmail);
+
+    if (!nrp || !email) {
+      return res.status(400).json({
+        success: false,
+        message: claimPasswordResetMessage,
+      });
+    }
+
+    let user;
+    try {
+      user = await userModel.findUserById(nrp);
+    } catch (err) {
+      if (isConnectionError(err)) {
+        return res.status(503).json({ success: false, message: 'Database tidak tersedia' });
+      }
+      throw err;
+    }
+
+    const normalizedUserEmail = normalizeEmail(user?.email || '');
+    if (!user || !normalizedUserEmail || normalizedUserEmail !== email) {
+      return res.status(400).json({
+        success: false,
+        message: claimPasswordResetMessage,
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        type: 'claim_password_reset',
+        nrp,
+        email,
+      },
+      getClaimResetSecret(),
+      { expiresIn: '15m' }
+    );
+
+    return sendSuccess(res, {
+      message: 'Token reset password berhasil dibuat.',
+      token,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function confirmClaimPasswordReset(req, res, next) {
+  try {
+    const { token, password, confirmPassword } = req.body;
+
+    if (!token || !password || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'token, password, dan confirmPassword wajib diisi',
+      });
+    }
+
+    if (password !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password dan konfirmasi password harus sama.',
+      });
+    }
+
+    if (!isClaimPasswordValid(password)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Password minimal 8 karakter dan wajib kombinasi huruf, angka, serta tanda baca.',
+      });
+    }
+
+    let payload;
+    try {
+      payload = jwt.verify(token, getClaimResetSecret());
+    } catch {
+      return res.status(400).json({
+        success: false,
+        message: 'Token reset password tidak valid atau sudah kedaluwarsa.',
+      });
+    }
+
+    if (payload?.type !== 'claim_password_reset' || !payload?.nrp) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token reset password tidak valid atau sudah kedaluwarsa.',
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const updatedUser = await userModel.setClaimCredentials(payload.nrp, { passwordHash });
+    if (!updatedUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token reset password tidak valid atau sudah kedaluwarsa.',
+      });
+    }
+
+    return sendSuccess(res, {
+      message: 'Password berhasil diperbarui.',
+    });
+  } catch (err) {
     next(err);
   }
 }

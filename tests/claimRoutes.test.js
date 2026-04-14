@@ -8,15 +8,21 @@ describe('claim routes credential flow', () => {
 
   beforeEach(async () => {
     jest.resetModules();
+    process.env.JWT_SECRET = 'test-secret';
     userModelMocks = {
       findUserById: jest.fn().mockResolvedValue({
         user_id: '1',
         password_hash: 'hashed-password',
+        email: 'user1@cicero.id',
       }),
       setClaimCredentials: jest.fn().mockResolvedValue({
         user_id: '1',
       }),
       updateUser: jest.fn().mockResolvedValue({ success: true }),
+      findUserSocialAccounts: jest.fn().mockResolvedValue({
+        instagram: [],
+        tiktok: [],
+      }),
     };
 
     await jest.isolateModulesAsync(async () => {
@@ -77,6 +83,33 @@ describe('claim routes credential flow', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
+  });
+
+  test('creates claim password reset token for matching nrp/email', async () => {
+    const res = await request(app)
+      .post('/api/claim/password-reset/request')
+      .send({ nrp: '1', email: 'USER1@CICERO.ID' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(typeof res.body.data?.token).toBe('string');
+  });
+
+  test('confirms claim password reset and updates password hash', async () => {
+    const requestReset = await request(app)
+      .post('/api/claim/password-reset/request')
+      .send({ nrp: '1', email: 'user1@cicero.id' });
+
+    const res = await request(app)
+      .post('/api/claim/password-reset/confirm')
+      .send({
+        token: requestReset.body.data?.token,
+        password: 'Password1!',
+        confirmPassword: 'Password1!',
+      });
+
+    expect(res.status).toBe(200);
+    expect(userModelMocks.setClaimCredentials).toHaveBeenCalled();
   });
 
   test('updates user profile with nrp + password', async () => {
