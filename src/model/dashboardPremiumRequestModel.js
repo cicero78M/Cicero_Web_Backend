@@ -118,6 +118,22 @@ export async function findLatestOpenByUsername(username, dbClient = query) {
   return rows[0] || null;
 }
 
+export async function findPendingRequests(limit = 20, dbClient = query) {
+  const exec = getExecutor(dbClient);
+  const safeLimit = Number.isFinite(Number(limit)) ? Number(limit) : 20;
+  const boundedLimit = Math.min(Math.max(safeLimit, 1), 100);
+  const { rows } = await exec(
+    `SELECT *
+     FROM dashboard_premium_request
+     WHERE status IN ('pending', 'confirmed')
+       AND (expired_at IS NULL OR expired_at > NOW())
+     ORDER BY created_at ASC
+     LIMIT $1`,
+    [boundedLimit],
+  );
+  return rows || [];
+}
+
 export async function updateRequest(requestId, patch, dbClient = query) {
   const existing = await findById(requestId, dbClient);
   if (!existing) return null;

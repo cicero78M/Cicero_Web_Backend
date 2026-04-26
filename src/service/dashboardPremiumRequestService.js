@@ -431,3 +431,7 @@ export async function markDashboardPremiumRequestNotified(request, metadataPatch
     dbClient,
   );
 }
+
+export async function listPendingDashboardPremiumRequests(limit = 20) {
+  return dashboardPremiumRequestModel.findPendingRequests(limit);
+}

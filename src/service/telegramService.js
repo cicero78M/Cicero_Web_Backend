@@ -409,16 +409,136 @@ export async function sendDashboardPremiumRequestNotification(request) {
     message += `• [Lihat Bukti Transfer](${paymentProofLink})\n`;
   }
   
-  message += `\n*Request ID:* ${escapeMarkdown(String(request.request_id || '-'))}`;
+  const requestToken = request.request_token || '-';
+  message += `\n*Request ID:* ${escapeMarkdown(String(request.request_id || '-'))}\n`;
+  message += `*Token:* \`${escapeMarkdown(requestToken)}\`\n\n`;
+  message += `Gunakan tombol di bawah atau ketik:\n`;
+  message += `\`/approvepremium ${escapeMarkdown(requestToken)}\` untuk menyetujui\n`;
+  message += `\`/denypremium ${escapeMarkdown(requestToken)}\` untuk menolak`;
+
+  const inlineKeyboard = {
+    inline_keyboard: [
+      [
+        { text: '✅ Approve Premium', callback_data: `premium_approve:${requestToken}` },
+        { text: '❌ Deny Premium', callback_data: `premium_deny:${requestToken}` },
+      ],
+    ],
+  };
   
   try {
-    const result = await sendTelegramAdminMessage(message);
+    const result = await sendTelegramAdminMessage(message, { reply_markup: inlineKeyboard });
     return result !== null;
   } catch (err) {
     console.warn(
       `[Telegram] Failed to send dashboard premium request ${request.request_id}: ${err?.message || err}`
     );
     return false;
+  }
+}
+
+async function processPremiumApproval(chatId, token) {
+  try {
+    const { approveDashboardPremiumRequest } = await import('./dashboardPremiumRequestService.js');
+    const result = await approveDashboardPremiumRequest(token, {
+      actor: 'telegram_admin',
+      channel: 'telegram',
+    });
+    const approvedRequest = result?.request;
+    await bot.sendMessage(
+      chatId,
+      `✅ Premium request berhasil disetujui.\n` +
+        `• Token: \`${escapeMarkdown(token)}\`\n` +
+        `• Username: ${escapeMarkdown(approvedRequest?.username || '-')}\n` +
+        `• Tier: ${escapeMarkdown(approvedRequest?.premium_tier || 'premium')}`,
+      { parse_mode: 'Markdown' },
+    );
+  } catch (err) {
+    await bot.sendMessage(chatId, `❌ Gagal approve premium request: ${escapeMarkdown(err.message)}`);
+  }
+}
+
+async function processPremiumDenial(chatId, token) {
+  try {
+    const { denyDashboardPremiumRequest } = await import('./dashboardPremiumRequestService.js');
+    const deniedRequest = await denyDashboardPremiumRequest(token, {
+      actor: 'telegram_admin',
+      channel: 'telegram',
+      note: 'Denied via Telegram',
+      metadata: { denied_via: 'telegram' },
+    });
+
+    await bot.sendMessage(
+      chatId,
+      `✅ Premium request berhasil ditolak.\n` +
+        `• Token: \`${escapeMarkdown(token)}\`\n` +
+        `• Username: ${escapeMarkdown(deniedRequest?.username || '-')}`,
+      { parse_mode: 'Markdown' },
+    );
+  } catch (err) {
+    await bot.sendMessage(chatId, `❌ Gagal deny premium request: ${escapeMarkdown(err.message)}`);
+  }
+}
+
+function buildPremiumPendingListMessage(requests = []) {
+  if (!requests.length) {
+    return '📭 Tidak ada premium request pending/confirmed saat ini.';
+  }
+
+  const lines = requests.map((request, index) => (
+    `${index + 1}. *${escapeMarkdown(request.username || '-')}* (${escapeMarkdown(request.status || '-')})\n` +
+    `   • Token: \`${escapeMarkdown(request.request_token || '-')}\`\n` +
+    `   • Tier: ${escapeMarkdown(request.premium_tier || '-')}\n` +
+    `   • Nominal: ${escapeMarkdown(formatCurrencyId(request.transfer_amount))}\n` +
+    `   • Dibuat: ${escapeMarkdown(new Date(request.created_at).toLocaleString('id-ID', { timeZone: DEFAULT_TIMEZONE }))}`
+  ));
+
+  return `📋 *Premium Pending Requests*\n\n${lines.join('\n\n')}`;
+}
+
+async function handleApprovePremiumCommand(msg) {
+  const chatId = msg.chat.id;
+  const token = msg.text.split(' ')[1];
+  if (!isTelegramAdmin(chatId)) {
+    await bot.sendMessage(chatId, '❌ Anda tidak memiliki akses ke sistem ini.');
+    return;
+  }
+  if (!token) {
+    await bot.sendMessage(chatId, '❌ Format salah. Gunakan: `/approvepremium request_token`', {
+      parse_mode: 'Markdown',
+    });
+    return;
+  }
+  await processPremiumApproval(chatId, token);
+}
+
+async function handleDenyPremiumCommand(msg) {
+  const chatId = msg.chat.id;
+  const token = msg.text.split(' ')[1];
+  if (!isTelegramAdmin(chatId)) {
+    await bot.sendMessage(chatId, '❌ Anda tidak memiliki akses ke sistem ini.');
+    return;
+  }
+  if (!token) {
+    await bot.sendMessage(chatId, '❌ Format salah. Gunakan: `/denypremium request_token`', {
+      parse_mode: 'Markdown',
+    });
+    return;
+  }
+  await processPremiumDenial(chatId, token);
+}
+
+async function handlePremiumPendingCommand(msg) {
+  const chatId = msg.chat.id;
+  if (!isTelegramAdmin(chatId)) {
+    await bot.sendMessage(chatId, '❌ Anda tidak memiliki akses ke sistem ini.');
+    return;
+  }
+  try {
+    const { listPendingDashboardPremiumRequests } = await import('./dashboardPremiumRequestService.js');
+    const requests = await listPendingDashboardPremiumRequests(20);
+    await bot.sendMessage(chatId, buildPremiumPendingListMessage(requests), { parse_mode: 'Markdown' });
+  } catch (err) {
+    await bot.sendMessage(chatId, `❌ Gagal mengambil premium pending: ${escapeMarkdown(err.message)}`);
   }
 }
 
@@ -781,6 +901,11 @@ function setupCommandHandlers() {
   
   // Handle /denydash command
   bot.onText(/\/denydash/, handleDenyDashCommand);
+
+  // Handle premium approval commands
+  bot.onText(/\/approvepremium/, handleApprovePremiumCommand);
+  bot.onText(/\/denypremium/, handleDenyPremiumCommand);
+  bot.onText(/\/premiumpending/, handlePremiumPendingCommand);
   
   // Handle /start command
   bot.onText(/\/start/, async (msg) => {
@@ -791,7 +916,10 @@ function setupCommandHandlers() {
         'Selamat datang di Cicero Admin Bot!\n\n' +
         'Perintah yang tersedia:\n' +
         '/approvedash <username> - Setujui registrasi user\n' +
-        '/denydash <username> - Tolak registrasi user'
+        '/denydash <username> - Tolak registrasi user\n' +
+        '/approvepremium <request_token> - Setujui premium request\n' +
+        '/denypremium <request_token> - Tolak premium request\n' +
+        '/premiumpending - Lihat daftar premium pending'
       );
     } else {
       await bot.sendMessage(chatId, '❌ Anda tidak memiliki akses ke sistem ini.');
@@ -852,6 +980,37 @@ function setupCallbackHandlers() {
         );
       } catch (err) {
         console.warn('[Telegram] Failed to remove inline keyboard:', err.message);
+      }
+      return;
+    }
+
+    if (data.startsWith('premium_approve:') || data.startsWith('premium_deny:')) {
+      const [action, token] = data.split(':');
+      if (!token) {
+        await bot.answerCallbackQuery(callbackQuery.id, {
+          text: '❌ Token tidak valid',
+          show_alert: true,
+        });
+        return;
+      }
+
+      await bot.answerCallbackQuery(callbackQuery.id, {
+        text: action === 'premium_approve' ? 'Memproses approve premium...' : 'Memproses deny premium...',
+      });
+
+      if (action === 'premium_approve') {
+        await processPremiumApproval(chatId, token);
+      } else {
+        await processPremiumDenial(chatId, token);
+      }
+
+      try {
+        await bot.editMessageReplyMarkup(
+          { inline_keyboard: [] },
+          { chat_id: chatId, message_id: messageId }
+        );
+      } catch (err) {
+        console.warn('[Telegram] Failed to remove premium inline keyboard:', err.message);
       }
       return;
     }
