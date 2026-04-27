@@ -197,7 +197,6 @@ function buildExportRows(summary) {
       rows.push({
         section: "posting_per_platform",
         platform,
-        total_post: Number(entry?.posts || 0),
         task_id: "",
         task_link: "",
         ...context,
@@ -208,7 +207,6 @@ function buildExportRows(summary) {
       rows.push({
         section: "posting_per_platform",
         platform,
-        total_post: Number(entry?.posts || 0),
         task_id: task?.task_id || "",
         task_link: task?.task_link || "",
         ...context,
