@@ -146,7 +146,62 @@ async function fetchAnevSummary(req) {
   return { summary };
 }
 
-function buildExportRows(summary) {
+function normalizeHandle(value) {
+  if (!value) return "";
+  return String(value).trim().replace(/^@+/, "").toLowerCase();
+}
+
+function mapTopPerformerRows(summary, context) {
+  const igRows = Array.isArray(summary?.instagram_engagement?.per_user)
+    ? summary.instagram_engagement.per_user
+    : [];
+  const tkRows = Array.isArray(summary?.tiktok_engagement?.per_user)
+    ? summary.tiktok_engagement.per_user
+    : [];
+  const merged = new Map();
+
+  const upsert = (entry, metric) => {
+    const userId = entry?.user_id ? String(entry.user_id).trim() : "";
+    const username = normalizeHandle(entry?.username);
+    const key = userId || username || normalizeHandle(entry?.nama || entry?.display_name);
+    if (!key) return;
+
+    const name =
+      entry?.display_name || entry?.full_name || entry?.nama || entry?.name || username || "User";
+    const satfung = entry?.divisi || entry?.division || entry?.satfung || "-";
+    const value = Number(metric === "likes" ? entry?.likes : entry?.comments) || 0;
+
+    if (!merged.has(key)) {
+      merged.set(key, {
+        personel: name,
+        username: username ? `@${username}` : "",
+        satfung,
+        likes_ig: 0,
+        komentar_tiktok: 0,
+      });
+    }
+
+    const current = merged.get(key);
+    if (metric === "likes") current.likes_ig += value;
+    if (metric === "comments") current.komentar_tiktok += value;
+    if ((!current.satfung || current.satfung === "-") && satfung) current.satfung = satfung;
+    if ((!current.personel || current.personel === current.username) && name) current.personel = name;
+  };
+
+  igRows.forEach((entry) => upsert(entry, "likes"));
+  tkRows.forEach((entry) => upsert(entry, "comments"));
+
+  return Array.from(merged.values())
+    .map((row) => ({
+      section: "top_performer",
+      ...row,
+      total_interaksi: Number(row.likes_ig || 0) + Number(row.komentar_tiktok || 0),
+      ...context,
+    }))
+    .sort((a, b) => Number(b.total_interaksi || 0) - Number(a.total_interaksi || 0));
+}
+
+function buildExportRows(summary, selectedSection = null) {
   const filters = summary?.filters || {};
   const context = {
     time_range: filters.time_range || "",
@@ -280,7 +335,24 @@ function buildExportRows(summary) {
     });
   });
 
-  return rows;
+  rows.push(...mapTopPerformerRows(summary, context));
+
+  if (!selectedSection) {
+    return rows;
+  }
+
+  const normalized = String(selectedSection).trim().toLowerCase();
+  const aliases = {
+    ringkasan: ["ringkasan"],
+    platform_posts: ["posting_per_platform"],
+    compliance: ["compliance_per_pelaksana"],
+    user_satfung: ["user_per_satfung_divisi"],
+    ig_satfung: ["instagram_likes_per_satfung_divisi"],
+    tiktok_satfung: ["tiktok_per_satfung_divisi"],
+    top_performer: ["top_performer"],
+  };
+  const allowed = aliases[normalized] || [normalized];
+  return rows.filter((row) => allowed.includes(String(row.section || "").toLowerCase()));
 }
 
 function computeWorksheetColumnWidths(rows) {
@@ -351,8 +423,13 @@ export async function exportAnevDashboard(req, res) {
       return res.status(error.status).json(error.payload);
     }
 
-    const rows = buildExportRows(summary);
-    const fileName = `anev-polres-${(summary?.filters?.client_id || "client").toString().toLowerCase()}-${summary?.filters?.time_range || "custom"}`;
+    const section = req.query.section ? String(req.query.section).trim().toLowerCase() : null;
+    const rows = buildExportRows(summary, section);
+    if (!rows.length) {
+      return res.status(404).json({ success: false, message: "Data export tidak ditemukan" });
+    }
+    const suffix = section ? `-${section}` : "";
+    const fileName = `anev-polres-${(summary?.filters?.client_id || "client").toString().toLowerCase()}-${summary?.filters?.time_range || "custom"}${suffix}`;
     const buffer = buildWorkbookBuffer(rows);
 
     res.setHeader(
