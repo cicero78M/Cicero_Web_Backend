@@ -554,6 +554,177 @@ async function getTiktokCommentStats(clientId, startDate, endDate, options) {
   return result;
 }
 
+async function fetchInstagramTaskRefs(clientId, startDate, endDate, { role, scope, regionalId }) {
+  const normalizedClientId = clientId ? String(clientId).trim() : null;
+  const normalizedRole = role ? String(role).trim().toLowerCase() : null;
+  const normalizedScope = scope ? String(scope).trim().toLowerCase() : null;
+  const normalizedRegionalId = regionalId ? String(regionalId).trim().toUpperCase() : null;
+
+  const clientType = await getClientType(normalizedClientId);
+  const useRoleFilter = shouldUseRoleFilter({ role: normalizedRole, scope: normalizedScope });
+  const includeClientScope = normalizedScope === 'org' && normalizedClientId;
+
+  const executeQuery = async (useRoleClause) => {
+    const params = [];
+    const addParam = (value) => {
+      params.push(value);
+      return `$${params.length}`;
+    };
+
+    const joins = [];
+    const whereClauses = [];
+
+    if (useRoleClause) {
+      joins.push('LEFT JOIN insta_post_roles pr ON pr.shortcode = p.shortcode');
+      const audience = buildPostAudienceClause({
+        normalizedRole,
+        normalizedClientId,
+        includeClientScope,
+      });
+      const replacements = [];
+      if (audience.needsClient) {
+        const clientIdx = addParam(normalizedClientId);
+        replacements.push(['$CLIENT$', clientIdx]);
+      }
+      if (audience.needsRole) {
+        const roleIdx = addParam(normalizedRole);
+        replacements.push(['$ROLE$', roleIdx]);
+      }
+      const sql = replacements.reduce((acc, [needle, val]) => acc.replaceAll(needle, val), audience.sql);
+      whereClauses.push(sql);
+    } else if (normalizedClientId) {
+      const clientIdx = addParam(normalizedClientId);
+      whereClauses.push(`LOWER(TRIM(p.client_id)) = LOWER(${clientIdx})`);
+    }
+
+    if (normalizedRegionalId) {
+      joins.push('JOIN clients c ON c.client_id = p.client_id');
+      const regionalIdx = addParam(normalizedRegionalId);
+      whereClauses.push(`UPPER(c.regional_id) = ${regionalIdx}`);
+    }
+
+    const startIdx = addParam(startDate);
+    const endIdx = addParam(endDate);
+    whereClauses.push(
+      `(p.created_at AT TIME ZONE 'Asia/Jakarta') BETWEEN ${startIdx}::timestamptz AND ${endIdx}::timestamptz`
+    );
+
+    const whereSql = whereClauses.length ? whereClauses.join(' AND ') : '1=1';
+    const joinSql = joins.length ? ` ${joins.join(' ')}` : '';
+
+    const { rows } = await query(
+      `
+      SELECT DISTINCT p.shortcode
+      FROM insta_post p
+      ${joinSql}
+      WHERE ${whereSql}
+      ORDER BY p.shortcode ASC
+      `,
+      params,
+    );
+
+    return rows
+      .map((row) => String(row.shortcode || '').trim())
+      .filter(Boolean)
+      .map((shortcode) => ({
+        task_id: shortcode,
+        task_link: `https://www.instagram.com/p/${shortcode}/`,
+      }));
+  };
+
+  const initial = await executeQuery(useRoleFilter);
+  if (initial.length === 0 && useRoleFilter && normalizedClientId && clientType === 'direktorat') {
+    return executeQuery(false);
+  }
+  return initial;
+}
+
+async function fetchTiktokTaskRefs(clientId, startDate, endDate, { role, scope, regionalId }) {
+  const normalizedClientId = clientId ? String(clientId).trim() : null;
+  const normalizedRole = role ? String(role).trim().toLowerCase() : null;
+  const normalizedScope = scope ? String(scope).trim().toLowerCase() : null;
+  const normalizedRegionalId = regionalId ? String(regionalId).trim().toUpperCase() : null;
+
+  const clientType = await getClientType(normalizedClientId);
+  const useRoleFilter = shouldUseRoleFilter({ role: normalizedRole, scope: normalizedScope });
+  const includeClientScope = normalizedScope === 'org' && normalizedClientId;
+
+  const executeQuery = async (useRoleClause) => {
+    const params = [];
+    const addParam = (value) => {
+      params.push(value);
+      return `$${params.length}`;
+    };
+
+    const joins = [];
+    const whereClauses = [];
+
+    if (useRoleClause) {
+      joins.push('LEFT JOIN tiktok_post_roles pr ON pr.video_id = p.video_id');
+      const audience = buildPostAudienceClause({
+        normalizedRole,
+        normalizedClientId,
+        includeClientScope,
+      });
+      const replacements = [];
+      if (audience.needsClient) {
+        const clientIdx = addParam(normalizedClientId);
+        replacements.push(['$CLIENT$', clientIdx]);
+      }
+      if (audience.needsRole) {
+        const roleIdx = addParam(normalizedRole);
+        replacements.push(['$ROLE$', roleIdx]);
+      }
+      const sql = replacements.reduce((acc, [needle, val]) => acc.replaceAll(needle, val), audience.sql);
+      whereClauses.push(sql);
+    } else if (normalizedClientId) {
+      const clientIdx = addParam(normalizedClientId);
+      whereClauses.push(`LOWER(TRIM(p.client_id)) = LOWER(${clientIdx})`);
+    }
+
+    if (normalizedRegionalId) {
+      joins.push('JOIN clients c2 ON c2.client_id = p.client_id');
+      const regionalIdx = addParam(normalizedRegionalId);
+      whereClauses.push(`UPPER(c2.regional_id) = ${regionalIdx}`);
+    }
+
+    const startIdx = addParam(startDate);
+    const endIdx = addParam(endDate);
+    const tiktokDateExpression = jakartaDateCast(tiktokDateBaseExpression('p'));
+    whereClauses.push(
+      `${tiktokDateExpression} BETWEEN ${startIdx}::timestamptz AND ${endIdx}::timestamptz`
+    );
+
+    const whereSql = whereClauses.length ? whereClauses.join(' AND ') : '1=1';
+    const joinSql = joins.length ? ` ${joins.join(' ')}` : '';
+
+    const { rows } = await query(
+      `
+      SELECT DISTINCT p.video_id
+      FROM tiktok_post p
+      ${joinSql}
+      WHERE ${whereSql}
+      ORDER BY p.video_id ASC
+      `,
+      params,
+    );
+
+    return rows
+      .map((row) => String(row.video_id || '').trim())
+      .filter(Boolean)
+      .map((videoId) => ({
+        task_id: videoId,
+        task_link: `https://www.tiktok.com/@_/video/${videoId}`,
+      }));
+  };
+
+  const initial = await executeQuery(useRoleFilter);
+  if (initial.length === 0 && useRoleFilter && normalizedClientId && clientType === 'direktorat') {
+    return executeQuery(false);
+  }
+  return initial;
+}
+
 export async function getAnevSummary({
   clientId,
   role,
@@ -608,11 +779,13 @@ export async function getAnevSummary({
 
   const targetClientId = resolvedClientId || clientId;
   const options = { role: effectiveRole, scope: normalizedScope, regionalId };
-  const [igLikes, ttComments, igPosts, ttPosts] = await Promise.all([
+  const [igLikes, ttComments, igPosts, ttPosts, igTaskRefs, ttTaskRefs] = await Promise.all([
     getInstagramLikeStats(targetClientId, startDate, endDate, options),
     getTiktokCommentStats(targetClientId, startDate, endDate, options),
     getInstaPostCount(targetClientId, 'custom', null, startDate, endDate, options),
     getTiktokPostCount(targetClientId, 'custom', null, startDate, endDate, options),
+    fetchInstagramTaskRefs(targetClientId, startDate, endDate, options),
+    fetchTiktokTaskRefs(targetClientId, startDate, endDate, options),
   ]);
 
   const expectedActions = (Number(igPosts) || 0) + (Number(ttPosts) || 0);
@@ -630,11 +803,14 @@ export async function getAnevSummary({
     return {
       user_id: user.user_id,
       nama: user.nama,
+      pangkat: user.title || null,
       full_name: user.nama,
       display_name: user.nama,
       divisi: user.divisi,
       client_id: user.client_id,
       assigned: expectedActions,
+      instagram_posts: Number(igPosts) || 0,
+      tiktok_posts: Number(ttPosts) || 0,
       expected_actions: expectedActions,
       completed: totalActions,
       likes,
@@ -691,6 +867,17 @@ export async function getAnevSummary({
     count,
   }));
   const assignedTasksPerSatfungMap = new Map();
+  const assignedInstagramTasksPerSatfungMap = new Map();
+  const totalInstagramPosts = Number(igPosts) || 0;
+  const totalInstagramLikes = Number(igLikes.totalLikes) || 0;
+  for (const [label, likes] of instagramLikesPerSatfungMap.entries()) {
+    if (totalInstagramPosts <= 0 || totalInstagramLikes <= 0) {
+      assignedInstagramTasksPerSatfungMap.set(label, 0);
+      continue;
+    }
+    const proportionalTasks = Math.round((Number(likes) / totalInstagramLikes) * totalInstagramPosts);
+    assignedInstagramTasksPerSatfungMap.set(label, proportionalTasks);
+  }
   const totalTiktokPosts = Number(ttPosts) || 0;
   const totalTiktokComments = Number(ttComments.totalComments) || 0;
   for (const [label, engagement] of tiktokEngagementPerSatfungMap.entries()) {
@@ -710,6 +897,9 @@ export async function getAnevSummary({
       satfung: label,
       total_personnel: userPerSatfungMap.get(label) || 0,
       active_personnel: instagramActivePersonnelPerSatfungMap.get(label) || 0,
+      posts: assignedInstagramTasksPerSatfungMap.get(label) || 0,
+      task_count: assignedInstagramTasksPerSatfungMap.get(label) || 0,
+      assigned: assignedInstagramTasksPerSatfungMap.get(label) || 0,
       likes,
     }),
   );
@@ -747,6 +937,10 @@ export async function getAnevSummary({
       total_posts: Number(ttPosts) || 0,
       total_comments: ttComments.totalComments,
       per_user: tiktokPerUser,
+    },
+    platform_tasks: {
+      instagram: igTaskRefs,
+      tiktok: ttTaskRefs,
     },
     aggregates: {
       totals: {

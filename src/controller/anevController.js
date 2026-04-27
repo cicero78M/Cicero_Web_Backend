@@ -154,7 +154,6 @@ function buildExportRows(summary) {
     end_date: filters.end_date || "",
     role: filters.role || "",
     scope: filters.scope || "",
-    regional_id: filters.regional_id || "",
     client_id: filters.client_id || "",
   };
 
@@ -190,12 +189,30 @@ function buildExportRows(summary) {
   );
 
   const platforms = Array.isArray(aggregates.platforms) ? aggregates.platforms : [];
+  const platformTasks = summary?.platform_tasks || {};
   platforms.forEach((entry) => {
-    rows.push({
-      section: "posting_per_platform",
-      platform: entry?.platform || "",
-      posts: Number(entry?.posts || 0),
-      ...context,
+    const platform = String(entry?.platform || "").toLowerCase();
+    const tasks = Array.isArray(platformTasks?.[platform]) ? platformTasks[platform] : [];
+    if (!tasks.length) {
+      rows.push({
+        section: "posting_per_platform",
+        platform,
+        total_post: Number(entry?.posts || 0),
+        task_id: "",
+        task_link: "",
+        ...context,
+      });
+      return;
+    }
+    tasks.forEach((task) => {
+      rows.push({
+        section: "posting_per_platform",
+        platform,
+        total_post: Number(entry?.posts || 0),
+        task_id: task?.task_id || "",
+        task_link: task?.task_link || "",
+        ...context,
+      });
     });
   });
 
@@ -204,10 +221,16 @@ function buildExportRows(summary) {
     (Array.isArray(aggregates.compliance_per_pelaksana) && aggregates.compliance_per_pelaksana) ||
     [];
   complianceRows.forEach((entry) => {
+    const nama = entry?.nama || entry?.name || entry?.pelaksana || "-";
+    const pangkat = entry?.pangkat || entry?.title || "";
     rows.push({
       section: "compliance_per_pelaksana",
-      pelaksana: entry?.nama || entry?.name || entry?.pelaksana || "-",
-      assigned: Number(entry?.assigned || 0),
+      pelaksana: [pangkat, nama].filter(Boolean).join(" "),
+      jumlah_post_ig: Number(entry?.instagram_posts || 0),
+      jumlah_post_tiktok: Number(entry?.tiktok_posts || 0),
+      pelaksanaan_likes_ig: Number(entry?.likes || 0),
+      pelaksanaan_komentar_tiktok: Number(entry?.comments || 0),
+      total_tugas: Number(entry?.assigned || entry?.expected_actions || 0),
       completed: Number(entry?.completed || 0),
       completion_rate: Number(entry?.completion_rate || 0),
       ...context,
@@ -235,9 +258,10 @@ function buildExportRows(summary) {
     rows.push({
       section: "tiktok_per_satfung_divisi",
       satfung_divisi: entry?.satfung || entry?.division || entry?.label || "-",
-      posts: Number(entry?.posts || 0),
-      comments: Number(entry?.comments || 0),
-      engagement: Number(entry?.engagement || entry?.comments || 0),
+      jumlah_personil_satfung: Number(entry?.total_personnel || 0),
+      jumlah_personil_melaksanakan_komentar: Number(entry?.active_personnel || 0),
+      jumlah_post_tugas_tiktok: Number(entry?.task_count || entry?.assigned || entry?.posts || 0),
+      total_komentar: Number(entry?.comments || 0),
       ...context,
     });
   });
@@ -250,12 +274,28 @@ function buildExportRows(summary) {
     rows.push({
       section: "instagram_likes_per_satfung_divisi",
       satfung_divisi: entry?.satfung || entry?.division || entry?.label || "-",
-      likes: Number(entry?.likes || 0),
+      jumlah_personil_satfung: Number(entry?.total_personnel || 0),
+      jumlah_personil_melaksanakan_likes: Number(entry?.active_personnel || 0),
+      jumlah_post_tugas_instagram: Number(entry?.task_count || entry?.assigned || entry?.posts || 0),
+      total_likes: Number(entry?.likes || 0),
       ...context,
     });
   });
 
   return rows;
+}
+
+function computeWorksheetColumnWidths(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+  const headers = Object.keys(rows[0] || {});
+  return headers.map((header) => {
+    const maxCellLength = rows.reduce((max, row) => {
+      const value = row?.[header];
+      const text = value == null ? "" : String(value);
+      return Math.max(max, text.length);
+    }, header.length);
+    return { wch: Math.min(Math.max(maxCellLength + 2, header.length + 2), 120) };
+  });
 }
 
 function toSheetName(section, index) {
@@ -281,6 +321,7 @@ function buildWorkbookBuffer(rows) {
       return clone;
     });
     const worksheet = XLSX.utils.json_to_sheet(normalizedRows);
+    worksheet["!cols"] = computeWorksheetColumnWidths(normalizedRows);
     XLSX.utils.book_append_sheet(workbook, worksheet, toSheetName(section, index));
     index += 1;
   }
