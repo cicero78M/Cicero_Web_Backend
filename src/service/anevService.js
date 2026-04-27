@@ -278,6 +278,7 @@ function mapEngagementPerUser(users, byUserMap, platform) {
       divisi: user.divisi,
       client_id: user.client_id,
       username,
+      posts: total,
       kontak_sosial: {
         instagram: user.insta || null,
         tiktok: user.tiktok || null,
@@ -296,6 +297,7 @@ function mapEngagementPerUser(users, byUserMap, platform) {
       divisi: null,
       client_id: null,
       username,
+      posts: total,
       [metricKey]: total,
       unmapped: true,
     });
