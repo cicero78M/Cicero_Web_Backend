@@ -130,14 +130,18 @@ function normalizeInstaUsername(username) {
   if (!username) return null;
   const trimmed = String(username).trim();
   if (!trimmed) return null;
-  return trimmed.replace(/^@+/, '').toLowerCase();
+  const fromUrl = trimmed.match(/instagram\.com\/(?:p\/|reel\/)?@?([A-Za-z0-9._-]+)/i);
+  const candidate = fromUrl?.[1] || trimmed;
+  return candidate.replace(/^@+/, '').replace(/\/$/, '').toLowerCase();
 }
 
 function normalizeTiktokUsername(username) {
   if (!username) return null;
   const trimmed = String(username).trim();
   if (!trimmed) return null;
-  return trimmed.replace(/^@+/, '').toLowerCase();
+  const fromUrl = trimmed.match(/tiktok\.com\/@?([A-Za-z0-9._-]+)/i);
+  const candidate = fromUrl?.[1] || trimmed;
+  return candidate.replace(/^@+/, '').replace(/\/$/, '').toLowerCase();
 }
 
 function normalizeRoleValue(value) {
