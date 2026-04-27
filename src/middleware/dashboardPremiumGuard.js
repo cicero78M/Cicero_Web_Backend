@@ -1,4 +1,14 @@
 import * as dashboardSubscriptionService from '../service/dashboardSubscriptionService.js';
+import { query } from '../repository/db.js';
+
+const DIREKTORAT_ROLE_SET = new Set([
+  'ditbinmas',
+  'ditlantas',
+  'bidhumas',
+  'ditsamapta',
+  'ditintelkam',
+  'direktorat',
+]);
 
 function normalizeTier(tier) {
   return typeof tier === 'string' ? tier.trim().toLowerCase() : null;
@@ -25,6 +35,74 @@ function needsSnapshot(user = {}) {
     (typeof user.premium_expires_at === 'string' && user.premium_expires_at.trim() === '');
 
   return missingStatus || missingTier || missingExpiresAt;
+}
+
+function normalizeRoleValue(value) {
+  if (value == null) return null;
+  const normalized = String(value).trim().toLowerCase();
+  return normalized || null;
+}
+
+function resolveDirektoratRoleCandidate(client) {
+  if (!client || typeof client !== 'object') return null;
+
+  const parentClientId = normalizeRoleValue(client.parent_client_id);
+  if (parentClientId && DIREKTORAT_ROLE_SET.has(parentClientId)) {
+    return parentClientId;
+  }
+
+  const clientGroup = normalizeRoleValue(client.client_group);
+  if (clientGroup) {
+    const compact = clientGroup.replace(/[\s_-]+/g, '');
+    for (const role of DIREKTORAT_ROLE_SET) {
+      if (compact.includes(role)) return role;
+    }
+  }
+
+  return null;
+}
+
+async function isMandiriPolresOperatorBypassAllowed(req, userContext = {}) {
+  const role = normalizeRoleValue(userContext.role);
+  if (role !== 'operator') return false;
+
+  const requestedClientId =
+    req.query?.client_id ||
+    req.headers?.['x-client-id'] ||
+    userContext.client_id ||
+    (Array.isArray(userContext.client_ids) && userContext.client_ids.length === 1
+      ? userContext.client_ids[0]
+      : null);
+
+  if (!requestedClientId) return false;
+
+  const normalizedRequested = String(requestedClientId).trim().toLowerCase();
+  if (!normalizedRequested) return false;
+
+  const allowedClientIds = Array.isArray(userContext.client_ids)
+    ? userContext.client_ids.map((id) => String(id).trim().toLowerCase()).filter(Boolean)
+    : [];
+
+  if (allowedClientIds.length > 0 && !allowedClientIds.includes(normalizedRequested)) {
+    return false;
+  }
+
+  const { rows } = await query(
+    `SELECT client_type, parent_client_id, client_group
+     FROM clients
+     WHERE LOWER(TRIM(client_id)) = LOWER($1)
+     LIMIT 1`,
+    [normalizedRequested],
+  );
+
+  const client = rows[0];
+  if (!client) return false;
+
+  const clientType = normalizeRoleValue(client.client_type);
+  if (clientType !== 'org') return false;
+
+  const tiedDirektorat = resolveDirektoratRoleCandidate(client);
+  return !tiedDirektorat;
 }
 
 export function dashboardPremiumGuard(allowedTiers = []) {
@@ -56,6 +134,16 @@ export function dashboardPremiumGuard(allowedTiers = []) {
         };
         req.dashboardUser = refreshedUser;
         req.user = refreshedUser;
+      }
+
+      const isOperatorMandiriBypass = await isMandiriPolresOperatorBypassAllowed(req, req.dashboardUser || req.user);
+      if (isOperatorMandiriBypass) {
+        req.premiumGuard = {
+          premiumStatus: true,
+          premiumTier: 'operator_mandiri_bypass',
+          premiumExpiresAt: null,
+        };
+        return next();
       }
 
       const normalizedTier = normalizeTier(premiumTier);
