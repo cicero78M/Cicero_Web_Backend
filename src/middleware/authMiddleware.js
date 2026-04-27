@@ -4,7 +4,8 @@ import jwt from 'jsonwebtoken';
 const authLogEvent = 'auth.middleware.denied';
 const maxUserAgentLength = 120;
 const defaultJwtClockToleranceSeconds = 30;
-const defaultExpiredTokenGraceSeconds = 24 * 60 * 60;
+const defaultExpiredTokenGraceSeconds = 0;
+const jwtAllowedAlgorithms = ['HS256'];
 
 const operatorAllowlist = [
   { path: '/clients/profile', type: 'exact' },
@@ -127,6 +128,7 @@ function decodeExpiredTokenWithinGrace(token) {
 
   const decoded = jwt.verify(token, process.env.JWT_SECRET, {
     ignoreExpiration: true,
+    algorithms: jwtAllowedAlgorithms,
   });
   const expiredAt = Number(decoded?.exp);
   if (!Number.isFinite(expiredAt)) {
@@ -158,6 +160,7 @@ export function authRequired(req, res, next) {
         'JWT_CLOCK_TOLERANCE_SECONDS',
         defaultJwtClockToleranceSeconds,
       ),
+      algorithms: jwtAllowedAlgorithms,
     });
     req.user = decoded;
     if (decoded.role === 'operator' && !isOperatorAllowedPath(req.method, req.path)) {

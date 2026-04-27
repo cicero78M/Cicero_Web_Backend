@@ -3,6 +3,8 @@ import * as dashboardUserModel from '../model/dashboardUserModel.js';
 import { query } from '../repository/db.js';
 import redis from '../config/redis.js';
 
+const jwtAllowedAlgorithms = ['HS256'];
+
 function getTokenFromRequest(req) {
   const authHeader = req.headers.authorization;
   return (
@@ -44,7 +46,9 @@ export async function verifyDashboardToken(req, res, next) {
   }
   let payload;
   try {
-    payload = jwt.verify(token, process.env.JWT_SECRET);
+    payload = jwt.verify(token, process.env.JWT_SECRET, {
+      algorithms: jwtAllowedAlgorithms,
+    });
   } catch (err) {
     console.error('[AUTH] Failed to verify dashboard token:', err);
     return res.status(401).json({ success: false, message: 'Invalid token' });
@@ -112,7 +116,9 @@ export async function verifyDashboardOrClientToken(req, res, next) {
 
   let payload;
   try {
-    payload = jwt.verify(token, process.env.JWT_SECRET);
+    payload = jwt.verify(token, process.env.JWT_SECRET, {
+      algorithms: jwtAllowedAlgorithms,
+    });
   } catch (err) {
     console.error('[AUTH] Failed to verify token:', err);
     return res.status(401).json({ success: false, message: 'Invalid token' });

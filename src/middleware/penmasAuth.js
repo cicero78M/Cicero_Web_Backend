@@ -1,13 +1,17 @@
 import jwt from 'jsonwebtoken';
 import redis from '../config/redis.js';
 
+const jwtAllowedAlgorithms = ['HS256'];
+
 export async function verifyPenmasToken(req, res, next) {
   const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ success: false, message: 'Token required' });
 
   let payload;
   try {
-    payload = jwt.verify(token, process.env.JWT_SECRET);
+    payload = jwt.verify(token, process.env.JWT_SECRET, {
+      algorithms: jwtAllowedAlgorithms,
+    });
   } catch {
     return res.status(401).json({ success: false, message: 'Invalid token' });
   }

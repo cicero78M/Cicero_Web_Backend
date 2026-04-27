@@ -99,7 +99,8 @@ const cookieSameSite = ['lax', 'strict', 'none'].includes(env.AUTH_COOKIE_SAME_S
   ? env.AUTH_COOKIE_SAME_SITE.toLowerCase()
   : 'lax';
 
-const cookieSecure = ['true', '1', 'yes'].includes(String(env.AUTH_COOKIE_SECURE).toLowerCase());
+const requestedCookieSecure = ['true', '1', 'yes'].includes(String(env.AUTH_COOKIE_SECURE).toLowerCase());
+const cookieSecure = cookieSameSite === 'none' ? true : requestedCookieSecure;
 
 const cookieOptions = {
   httpOnly: true,
