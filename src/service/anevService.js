@@ -245,6 +245,8 @@ function buildUserDirectory(users) {
   return users.map((user) => ({
     user_id: user.user_id,
     nama: user.nama,
+    pangkat: user.title || null,
+    title: user.title || null,
     full_name: user.nama,
     display_name: user.nama,
     divisi: user.divisi,
@@ -273,6 +275,8 @@ function mapEngagementPerUser(users, byUserMap, platform) {
     perUser.push({
       user_id: user.user_id,
       nama: user.nama,
+      pangkat: user.title || null,
+      title: user.title || null,
       full_name: user.nama,
       display_name: user.nama,
       divisi: user.divisi,

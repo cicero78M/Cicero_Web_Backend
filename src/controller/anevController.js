@@ -152,6 +152,32 @@ function normalizeHandle(value) {
 }
 
 function mapTopPerformerRows(summary, context) {
+  const directory = Array.isArray(summary?.user_directory) ? summary.user_directory : [];
+  const byId = new Map();
+  const byHandle = new Map();
+  directory.forEach((entry) => {
+    const userId = entry?.user_id ? String(entry.user_id).trim() : "";
+    const nama = String(entry?.display_name || entry?.full_name || entry?.nama || "").trim();
+    const pangkat = String(entry?.pangkat || entry?.title || "").trim();
+    const satfung = String(entry?.divisi || entry?.division || entry?.satfung || "-").trim() || "-";
+    const identity = { nama, pangkat, satfung };
+    if (userId) byId.set(userId, identity);
+
+    const handles = [
+      entry?.username,
+      entry?.instagram,
+      entry?.tiktok,
+      entry?.insta,
+      entry?.tiktok_username,
+      entry?.instagram_username,
+      entry?.kontak_sosial?.instagram,
+      entry?.kontak_sosial?.tiktok,
+    ]
+      .map((value) => normalizeHandle(value))
+      .filter(Boolean);
+    handles.forEach((handle) => byHandle.set(handle, identity));
+  });
+
   const igRows = Array.isArray(summary?.instagram_engagement?.per_user)
     ? summary.instagram_engagement.per_user
     : [];
@@ -163,17 +189,21 @@ function mapTopPerformerRows(summary, context) {
   const upsert = (entry, metric) => {
     const userId = entry?.user_id ? String(entry.user_id).trim() : "";
     const username = normalizeHandle(entry?.username);
+    const identity = (userId && byId.get(userId)) || (username && byHandle.get(username));
     const key = userId || username || normalizeHandle(entry?.nama || entry?.display_name);
     if (!key) return;
 
-    const name =
-      entry?.display_name || entry?.full_name || entry?.nama || entry?.name || username || "User";
-    const satfung = entry?.divisi || entry?.division || entry?.satfung || "-";
+    const baseName =
+      (identity?.nama || entry?.display_name || entry?.full_name || entry?.nama || entry?.name || username || "User");
+    const pangkat = String(identity?.pangkat || entry?.pangkat || entry?.title || "").trim();
+    const personel = [pangkat, baseName].filter(Boolean).join(" ").trim() || baseName;
+    const satfung =
+      String(identity?.satfung || entry?.divisi || entry?.division || entry?.satfung || "-").trim() || "-";
     const value = Number(metric === "likes" ? entry?.likes : entry?.comments) || 0;
 
     if (!merged.has(key)) {
       merged.set(key, {
-        personel: name,
+        personel,
         username: username ? `@${username}` : "",
         satfung,
         likes_ig: 0,
@@ -185,7 +215,7 @@ function mapTopPerformerRows(summary, context) {
     if (metric === "likes") current.likes_ig += value;
     if (metric === "comments") current.komentar_tiktok += value;
     if ((!current.satfung || current.satfung === "-") && satfung) current.satfung = satfung;
-    if ((!current.personel || current.personel === current.username) && name) current.personel = name;
+    if ((!current.personel || current.personel === current.username) && personel) current.personel = personel;
   };
 
   igRows.forEach((entry) => upsert(entry, "likes"));
