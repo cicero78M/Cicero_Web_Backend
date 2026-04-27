@@ -53,8 +53,10 @@ export async function updateRequest(id, data) {
 }
 
 export async function expireOldRequests(hours = 3) {
+  const safeHours = Number.isFinite(Number(hours)) ? Math.max(0, Number(hours)) : 3;
   await query(
     `UPDATE premium_request SET status='expired', updated_at=NOW()
-     WHERE status='pending' AND created_at <= NOW() - INTERVAL '${hours} hours'`
+     WHERE status='pending' AND created_at <= NOW() - make_interval(hours => $1)`,
+    [safeHours]
   );
 }

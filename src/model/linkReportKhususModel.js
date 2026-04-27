@@ -19,7 +19,7 @@ export async function createLinkReport(data) {
      SELECT p.shortcode, $2, $3, $4, $5, $6, $7, p.created_at
      FROM insta_post_khusus p
      WHERE LOWER(p.shortcode) = LOWER($1)
-       AND p.created_at >= (NOW() AT TIME ZONE 'Asia/Jakarta') - INTERVAL '${LINK_REPORT_KHUSUS_INTERVAL}'
+       AND p.created_at >= (NOW() AT TIME ZONE 'Asia/Jakarta') - $8::interval
      ON CONFLICT (shortcode, user_id) DO UPDATE
      SET instagram_link = EXCLUDED.instagram_link,
          facebook_link = EXCLUDED.facebook_link,
@@ -35,7 +35,8 @@ export async function createLinkReport(data) {
       data.facebook_link || null,
       data.twitter_link || null,
       data.tiktok_link || null,
-      data.youtube_link || null
+      data.youtube_link || null,
+      LINK_REPORT_KHUSUS_INTERVAL,
     ]
   );
 
@@ -136,10 +137,12 @@ export async function deleteLinkReport(shortcode, user_id) {
 export async function getReportsTodayByClient(client_id, roleFlag = null) {
   let whereClause = 'u.client_id = $1';
   let joinClause = 'JOIN "user" u ON u.user_id = r.user_id';
+  const params = [client_id];
   
   if (roleFlag && roleFlag.toLowerCase() === OPERATOR_ROLE_NAME) {
     joinClause += ' JOIN user_roles ur ON ur.user_id = u.user_id JOIN roles ro ON ur.role_id = ro.role_id';
-    whereClause += ` AND LOWER(ro.role_name) = '${OPERATOR_ROLE_NAME}'`;
+    params.push(OPERATOR_ROLE_NAME);
+    whereClause += ` AND LOWER(ro.role_name) = LOWER($${params.length})`;
   }
   
   const res = await query(
@@ -147,7 +150,7 @@ export async function getReportsTodayByClient(client_id, roleFlag = null) {
      ${joinClause}
      WHERE ${whereClause} AND (r.created_at AT TIME ZONE 'Asia/Jakarta')::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date
      ORDER BY r.created_at ASC`,
-    [client_id]
+    params
   );
   return res.rows;
 }
@@ -155,10 +158,12 @@ export async function getReportsTodayByClient(client_id, roleFlag = null) {
 export async function getReportsTodayByShortcode(client_id, shortcode, roleFlag = null) {
   let whereClause = 'u.client_id = $1 AND r.shortcode = $2';
   let joinClause = 'JOIN "user" u ON u.user_id = r.user_id';
+  const params = [client_id, shortcode];
   
   if (roleFlag && roleFlag.toLowerCase() === OPERATOR_ROLE_NAME) {
     joinClause += ' JOIN user_roles ur ON ur.user_id = u.user_id JOIN roles ro ON ur.role_id = ro.role_id';
-    whereClause += ` AND LOWER(ro.role_name) = '${OPERATOR_ROLE_NAME}'`;
+    params.push(OPERATOR_ROLE_NAME);
+    whereClause += ` AND LOWER(ro.role_name) = LOWER($${params.length})`;
   }
   
   const res = await query(
@@ -167,7 +172,7 @@ export async function getReportsTodayByShortcode(client_id, shortcode, roleFlag 
      WHERE ${whereClause}
        AND (r.created_at AT TIME ZONE 'Asia/Jakarta')::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date
      ORDER BY r.created_at ASC`,
-    [client_id, shortcode]
+    params
   );
   return res.rows;
 }

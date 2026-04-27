@@ -8,9 +8,9 @@ export async function hasRecentLinkReport(shortcode, user_id) {
     `SELECT 1 FROM link_report
      WHERE shortcode = $1
        AND user_id IS NOT DISTINCT FROM $2
-       AND created_at >= NOW() - INTERVAL '${LINK_REPORT_INTERVAL}'
+       AND created_at >= NOW() - $3::interval
      LIMIT 1`,
-    [shortcode, user_id]
+    [shortcode, user_id, LINK_REPORT_INTERVAL]
   );
   return res.rows.length > 0;
 }
@@ -30,7 +30,7 @@ export async function createLinkReport(data) {
      SELECT p.shortcode, $2, $3, $4, $5, $6, $7, p.created_at
      FROM insta_post p
      WHERE p.shortcode = $1
-       AND p.created_at >= (NOW() AT TIME ZONE 'Asia/Jakarta') - INTERVAL '${LINK_REPORT_INTERVAL}'
+       AND p.created_at >= (NOW() AT TIME ZONE 'Asia/Jakarta') - $8::interval
      ON CONFLICT (shortcode, user_id) DO UPDATE
      SET instagram_link = EXCLUDED.instagram_link,
          facebook_link = EXCLUDED.facebook_link,
@@ -46,7 +46,8 @@ export async function createLinkReport(data) {
       data.facebook_link || null,
       data.twitter_link || null,
       data.tiktok_link || null,
-      data.youtube_link || null
+      data.youtube_link || null,
+      LINK_REPORT_INTERVAL,
     ]
   );
 
