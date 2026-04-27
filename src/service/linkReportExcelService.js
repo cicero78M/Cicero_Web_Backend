@@ -3,7 +3,7 @@ import path from 'path';
 import { generateLinkReportExcelBuffer } from './amplifyExportService.js';
 
 export async function saveLinkReportExcel(rows, clientId, monthName) {
-  const buffer = generateLinkReportExcelBuffer(rows);
+  const buffer = await generateLinkReportExcelBuffer(rows);
   const exportDir = path.resolve('export_data');
   await fs.mkdir(exportDir, { recursive: true });
   const safeMonth = monthName.replace(/\s+/g, '_');

@@ -138,7 +138,7 @@ export async function downloadMonthlyLinkReportExcel(req, res, next) {
         .json({ success: false, message: 'client_id wajib diisi' });
     }
     const rows = await linkReportModel.getReportsThisMonthByClient(clientId);
-    const buffer = generateLinkReportExcelBuffer(rows);
+    const buffer = await generateLinkReportExcelBuffer(rows);
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
