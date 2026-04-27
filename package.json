@@ -28,7 +28,7 @@
     "express": "^4.22.1",
     "express-rate-limit": "^6.9.0",
     "express-session": "^1.19.0",
-    "googleapis": "^131.0.0",
+    "googleapis": "^171.4.0",
     "ioredis": "^5.10.0",
     "jsonwebtoken": "^9.0.0",
     "link-preview-js": "^3.1.0",
@@ -37,7 +37,7 @@
     "morgan": "^1.10.1",
     "node-fetch": "^3.3.2",
     "node-telegram-bot-api": "^0.63.0",
-    "nodemailer": "^6.9.11",
+    "nodemailer": "^8.0.7",
     "p-queue": "^7.4.1",
     "pg": "^8.16.0",
     "pg-protocol": "1.10.3",
@@ -78,6 +78,15 @@
     "path-to-regexp": "0.1.13",
     "qs": "^6.14.2",
     "brace-expansion": "^1.1.14",
-    "minimatch": "^3.1.5"
+    "minimatch": "^3.1.5",
+    "lodash": "^4.18.1",
+    "jws": "^4.0.1",
+    "ajv": "^6.15.0",
+    "dottie": "^2.0.7",
+    "js-yaml": "^4.1.1",
+    "picomatch": "^2.3.2",
+    "tar": "^7.5.11",
+    "tar-fs": "^3.1.2",
+    "ws": "^8.17.1"
   }
 }
