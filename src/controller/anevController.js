@@ -153,14 +153,20 @@ function normalizeHandle(value) {
 
 function mapTopPerformerRows(summary, context) {
   const directory = Array.isArray(summary?.user_directory) ? summary.user_directory : [];
+  const targetClientId = String(context?.client_id || "").trim().toLowerCase();
   const byId = new Map();
   const byHandle = new Map();
   directory.forEach((entry) => {
+    const entryClientId = String(entry?.client_id || "").trim().toLowerCase();
+    if (targetClientId && entryClientId && entryClientId !== targetClientId) {
+      return;
+    }
+
     const userId = entry?.user_id ? String(entry.user_id).trim() : "";
     const nama = String(entry?.display_name || entry?.full_name || entry?.nama || "").trim();
     const pangkat = String(entry?.pangkat || entry?.title || "").trim();
     const satfung = String(entry?.divisi || entry?.division || entry?.satfung || "-").trim() || "-";
-    const identity = { nama, pangkat, satfung };
+    const identity = { nama, pangkat, satfung, client_id: entryClientId || null };
     if (userId) byId.set(userId, identity);
 
     const handles = [
@@ -187,9 +193,21 @@ function mapTopPerformerRows(summary, context) {
   const merged = new Map();
 
   const upsert = (entry, metric) => {
+    const entryClientId = String(entry?.client_id || "").trim().toLowerCase();
+    if (targetClientId && entryClientId && entryClientId !== targetClientId) {
+      return;
+    }
+
     const userId = entry?.user_id ? String(entry.user_id).trim() : "";
     const username = normalizeHandle(entry?.username);
     const identity = (userId && byId.get(userId)) || (username && byHandle.get(username));
+
+    if (targetClientId) {
+      if (!identity && !entryClientId) return;
+      const resolvedClientId = String(identity?.client_id || entryClientId || "").trim().toLowerCase();
+      if (resolvedClientId && resolvedClientId !== targetClientId) return;
+    }
+
     const key = userId || username || normalizeHandle(entry?.nama || entry?.display_name);
     if (!key) return;
 
