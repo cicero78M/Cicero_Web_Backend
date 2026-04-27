@@ -340,6 +340,18 @@ export const getClientProfile = async (req, res, next) => {
     const resolvedTier = tierFromSubscription || tierFromLevel;
     const levelAlias = client.level ?? client.client_level ?? null;
 
+    const premiumStatus =
+      typeof req.user?.premium_status !== "undefined"
+        ? Boolean(req.user.premium_status)
+        : Boolean(client.premium_status);
+
+    const premiumExpiresAt =
+      req.user?.premium_expires_at ||
+      req.user?.premiumExpiresAt ||
+      client.premium_expires_at ||
+      client.premiumExpiresAt ||
+      null;
+
     // Sesuaikan key hasil jika ingin (client/profile)
     res.json({
       success: true,
@@ -348,6 +360,8 @@ export const getClientProfile = async (req, res, next) => {
         level: levelAlias,
         tier: resolvedTier,
         premium_tier: resolvedTier,
+        premium_status: premiumStatus,
+        premium_expires_at: premiumExpiresAt,
       },
     });
   } catch (err) {
