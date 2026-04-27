@@ -404,6 +404,114 @@ function toSheetName(section, index) {
   return raw.replace(/[\\/?*[\]:]/g, "-").replace(/\s+/g, "_").slice(0, 31);
 }
 
+const SECTION_COLUMN_ORDER = {
+  ringkasan: [
+    "metric",
+    "value",
+    "time_range",
+    "start_date",
+    "end_date",
+    "role",
+    "scope",
+    "client_id",
+  ],
+  posting_per_platform: [
+    "platform",
+    "task_id",
+    "task_link",
+    "time_range",
+    "start_date",
+    "end_date",
+    "role",
+    "scope",
+    "client_id",
+  ],
+  compliance_per_pelaksana: [
+    "pelaksana",
+    "jumlah_post_ig",
+    "jumlah_post_tiktok",
+    "pelaksanaan_likes_ig",
+    "pelaksanaan_komentar_tiktok",
+    "total_tugas",
+    "completed",
+    "completion_rate",
+    "time_range",
+    "start_date",
+    "end_date",
+    "role",
+    "scope",
+    "client_id",
+  ],
+  user_per_satfung_divisi: [
+    "satfung_divisi",
+    "users",
+    "time_range",
+    "start_date",
+    "end_date",
+    "role",
+    "scope",
+    "client_id",
+  ],
+  instagram_likes_per_satfung_divisi: [
+    "satfung_divisi",
+    "jumlah_personil_satfung",
+    "jumlah_personil_melaksanakan_likes",
+    "jumlah_post_tugas_instagram",
+    "total_likes",
+    "time_range",
+    "start_date",
+    "end_date",
+    "role",
+    "scope",
+    "client_id",
+  ],
+  tiktok_per_satfung_divisi: [
+    "satfung_divisi",
+    "jumlah_personil_satfung",
+    "jumlah_personil_melaksanakan_komentar",
+    "jumlah_post_tugas_tiktok",
+    "total_komentar",
+    "time_range",
+    "start_date",
+    "end_date",
+    "role",
+    "scope",
+    "client_id",
+  ],
+  top_performer: [
+    "personel",
+    "satfung",
+    "username",
+    "likes_ig",
+    "komentar_tiktok",
+    "total_interaksi",
+    "time_range",
+    "start_date",
+    "end_date",
+    "role",
+    "scope",
+    "client_id",
+  ],
+};
+
+function reorderRowBySection(section, row) {
+  const preferredOrder = SECTION_COLUMN_ORDER[String(section || "").toLowerCase()] || [];
+  const ordered = {};
+  preferredOrder.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(row, key)) {
+      ordered[key] = row[key];
+    }
+  });
+
+  Object.keys(row).forEach((key) => {
+    if (!Object.prototype.hasOwnProperty.call(ordered, key)) {
+      ordered[key] = row[key];
+    }
+  });
+
+  return ordered;
+}
+
 function buildWorkbookBuffer(rows) {
   const workbook = XLSX.utils.book_new();
   const grouped = new Map();
@@ -418,7 +526,7 @@ function buildWorkbookBuffer(rows) {
     const normalizedRows = sectionRows.map((row) => {
       const clone = { ...row };
       delete clone.section;
-      return clone;
+      return reorderRowBySection(section, clone);
     });
     const worksheet = XLSX.utils.json_to_sheet(normalizedRows);
     worksheet["!cols"] = computeWorksheetColumnWidths(normalizedRows);
