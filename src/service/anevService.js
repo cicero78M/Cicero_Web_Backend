@@ -654,7 +654,9 @@ export async function getAnevSummary({
 
   const userPerSatfungMap = new Map();
   const instagramLikesPerSatfungMap = new Map();
+  const instagramActivePersonnelPerSatfungMap = new Map();
   const tiktokEngagementPerSatfungMap = new Map();
+  const tiktokActivePersonnelPerSatfungMap = new Map();
   activeUsers.forEach((user) => {
     const divisionLabel = normalizeDivisionLabel(user.divisi);
     userPerSatfungMap.set(divisionLabel, (userPerSatfungMap.get(divisionLabel) || 0) + 1);
@@ -664,12 +666,24 @@ export async function getAnevSummary({
       divisionLabel,
       (instagramLikesPerSatfungMap.get(divisionLabel) || 0) + likes,
     );
+    if (likes > 0) {
+      instagramActivePersonnelPerSatfungMap.set(
+        divisionLabel,
+        (instagramActivePersonnelPerSatfungMap.get(divisionLabel) || 0) + 1,
+      );
+    }
 
     const comments = tiktokTotalsByUserId.get(user.user_id) || 0;
     tiktokEngagementPerSatfungMap.set(
       divisionLabel,
       (tiktokEngagementPerSatfungMap.get(divisionLabel) || 0) + comments,
     );
+    if (comments > 0) {
+      tiktokActivePersonnelPerSatfungMap.set(
+        divisionLabel,
+        (tiktokActivePersonnelPerSatfungMap.get(divisionLabel) || 0) + 1,
+      );
+    }
   });
 
   const userPerSatfung = Array.from(userPerSatfungMap.entries()).map(([label, count]) => ({
@@ -694,12 +708,16 @@ export async function getAnevSummary({
   const likesPerSatfung = Array.from(instagramLikesPerSatfungMap.entries()).map(
     ([label, likes]) => ({
       satfung: label,
+      total_personnel: userPerSatfungMap.get(label) || 0,
+      active_personnel: instagramActivePersonnelPerSatfungMap.get(label) || 0,
       likes,
     }),
   );
   const tiktokPerSatfung = Array.from(tiktokEngagementPerSatfungMap.entries()).map(
     ([label, engagement]) => ({
       satfung: label,
+      total_personnel: userPerSatfungMap.get(label) || 0,
+      active_personnel: tiktokActivePersonnelPerSatfungMap.get(label) || 0,
       posts: assignedTasksPerSatfungMap.get(label) || 0,
       task_count: assignedTasksPerSatfungMap.get(label) || 0,
       assigned: assignedTasksPerSatfungMap.get(label) || 0,
