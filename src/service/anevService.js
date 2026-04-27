@@ -628,12 +628,23 @@ export async function getAnevSummary({
       display_name: user.nama,
       divisi: user.divisi,
       client_id: user.client_id,
+      assigned: expectedActions,
+      expected_actions: expectedActions,
+      completed: totalActions,
       likes,
       comments,
       total_actions: totalActions,
       completion_rate: Number(completionRate.toFixed(4)),
     };
   });
+
+  const totalCompletedActions = compliance.reduce(
+    (sum, entry) => sum + (Number(entry.total_actions) || 0),
+    0,
+  );
+  const totalExpectedActions = expectedActions * activeUsers.length;
+  const overallCompletionRate =
+    totalExpectedActions > 0 ? totalCompletedActions / totalExpectedActions : 0;
 
   const userPerSatfungMap = new Map();
   const instagramLikesPerSatfungMap = new Map();
@@ -668,7 +679,7 @@ export async function getAnevSummary({
   const tiktokPerSatfung = Array.from(tiktokEngagementPerSatfungMap.entries()).map(
     ([label, engagement]) => ({
       satfung: label,
-      posts: 0,
+      posts: engagement,
       comments: engagement,
       engagement,
     }),
@@ -702,6 +713,9 @@ export async function getAnevSummary({
         likes: igLikes.totalLikes,
         comments: ttComments.totalComments,
         expected_actions: expectedActions,
+        total_expected_actions: totalExpectedActions,
+        total_completed_actions: totalCompletedActions,
+        overall_completion_rate: Number(overallCompletionRate.toFixed(4)),
         posts: {
           instagram: Number(igPosts) || 0,
           tiktok: Number(ttPosts) || 0,
