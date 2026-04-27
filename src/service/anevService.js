@@ -674,9 +674,21 @@ export async function getAnevSummary({
     satfung: label,
     count,
   }));
-  const assignedTasksPerSatfungMap = new Map(
-    userPerSatfung.map((entry) => [entry.satfung, (Number(entry.count) || 0) * expectedActions]),
-  );
+  const assignedTasksPerSatfungMap = new Map();
+  const totalTiktokPosts = Number(ttPosts) || 0;
+  const totalTiktokComments = Number(ttComments.totalComments) || 0;
+  for (const [label, engagement] of tiktokEngagementPerSatfungMap.entries()) {
+    if (totalTiktokPosts <= 0) {
+      assignedTasksPerSatfungMap.set(label, 0);
+      continue;
+    }
+    if (totalTiktokComments <= 0) {
+      assignedTasksPerSatfungMap.set(label, 0);
+      continue;
+    }
+    const proportionalTasks = Math.round((Number(engagement) / totalTiktokComments) * totalTiktokPosts);
+    assignedTasksPerSatfungMap.set(label, proportionalTasks);
+  }
   const likesPerSatfung = Array.from(instagramLikesPerSatfungMap.entries()).map(
     ([label, likes]) => ({
       satfung: label,
