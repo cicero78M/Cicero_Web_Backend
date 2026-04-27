@@ -670,6 +670,9 @@ export async function getAnevSummary({
     satfung: label,
     count,
   }));
+  const assignedTasksPerSatfungMap = new Map(
+    userPerSatfung.map((entry) => [entry.satfung, (Number(entry.count) || 0) * expectedActions]),
+  );
   const likesPerSatfung = Array.from(instagramLikesPerSatfungMap.entries()).map(
     ([label, likes]) => ({
       satfung: label,
@@ -679,7 +682,9 @@ export async function getAnevSummary({
   const tiktokPerSatfung = Array.from(tiktokEngagementPerSatfungMap.entries()).map(
     ([label, engagement]) => ({
       satfung: label,
-      posts: engagement,
+      posts: assignedTasksPerSatfungMap.get(label) || 0,
+      task_count: assignedTasksPerSatfungMap.get(label) || 0,
+      assigned: assignedTasksPerSatfungMap.get(label) || 0,
       comments: engagement,
       engagement,
     }),
