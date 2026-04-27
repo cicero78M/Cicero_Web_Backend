@@ -439,8 +439,7 @@ export async function countPostsByClient(
   const normalizedRegionalId = options.regionalId
     ? String(options.regionalId).trim().toUpperCase()
     : null;
-  const shouldForceClientFilter =
-    normalizedScope === 'org' && normalizedRole === 'operator';
+  const shouldForceClientFilter = normalizedScope === 'org' && normalizedRole === 'operator';
   const resolvedClientId =
     shouldForceClientFilter && normalizedIgClientIdOverride
       ? normalizedIgClientIdOverride
@@ -480,6 +479,7 @@ export async function countPostsByClient(
   };
 
   const shouldUseRoleFilter = Boolean(normalizedRole) && !shouldForceClientFilter;
+  const includeClientScope = normalizedScope === 'org' && Boolean(resolvedClientId);
 
   const executeCount = async (useRoleFilter) => {
     const params = [];
@@ -492,9 +492,18 @@ export async function countPostsByClient(
     const whereClauses = [];
 
     if (useRoleFilter && normalizedRole) {
-      joins.push('JOIN insta_post_roles pr ON pr.shortcode = p.shortcode');
+      joins.push('LEFT JOIN insta_post_roles pr ON pr.shortcode = p.shortcode');
       const roleIdx = addParam(normalizedRole);
-      whereClauses.push(`LOWER(TRIM(pr.role_name)) = LOWER(${roleIdx})`);
+      if (includeClientScope) {
+        const clientIdx = addParam(resolvedClientId);
+        whereClauses.push(
+          `(LOWER(TRIM(p.client_id)) = LOWER(${clientIdx}) OR LOWER(TRIM(p.client_id)) = LOWER(${roleIdx}) OR LOWER(TRIM(pr.role_name)) = LOWER(${roleIdx}))`
+        );
+      } else {
+        whereClauses.push(
+          `(LOWER(TRIM(p.client_id)) = LOWER(${roleIdx}) OR LOWER(TRIM(pr.role_name)) = LOWER(${roleIdx}))`
+        );
+      }
     } else if (resolvedClientId) {
       const clientIdx = addParam(resolvedClientId);
       whereClauses.push(`LOWER(TRIM(p.client_id)) = LOWER(${clientIdx})`);

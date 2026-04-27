@@ -358,20 +358,6 @@ export async function countPostsByClient(
     ? String(options.regionalId).trim().toUpperCase()
     : null;
 
-  let clientType = null;
-  if (normalizedClientId) {
-    const clientTypeRes = await query(
-      `SELECT client_type
-       FROM clients
-       WHERE LOWER(TRIM(client_id)) = LOWER($1)
-       LIMIT 1`,
-      [normalizedClientId]
-    );
-    clientType = clientTypeRes.rows[0]?.client_type
-      ? String(clientTypeRes.rows[0].client_type).trim().toLowerCase()
-      : null;
-  }
-
   const addDateFilter = (addParamFn) => {
     const jakartaColumn = jakartaDateCast(tiktokDateBaseExpression('p'));
     const nowJakarta = "(NOW() AT TIME ZONE 'Asia/Jakarta')";
@@ -405,14 +391,8 @@ export async function countPostsByClient(
     return filter;
   };
 
-  const shouldUseRoleFilter = Boolean(
-    normalizedRole &&
-      normalizedRole !== 'operator' &&
-      (
-        normalizedScope === 'direktorat' ||
-        (!normalizedScope && clientType === 'direktorat')
-      )
-  );
+  const shouldUseRoleFilter = Boolean(normalizedRole && normalizedRole !== 'operator');
+  const includeClientScope = normalizedScope === 'org' && Boolean(normalizedClientId);
 
   const executeCount = async (useRoleFilter) => {
     const params = [];
@@ -427,9 +407,16 @@ export async function countPostsByClient(
     if (useRoleFilter && normalizedRole) {
       joins.push('LEFT JOIN tiktok_post_roles pr ON pr.video_id = p.video_id');
       const roleIdx = addParam(normalizedRole);
-      const roleFilter =
-        `LOWER(TRIM(p.client_id)) = LOWER(${roleIdx}) OR LOWER(TRIM(pr.role_name)) = LOWER(${roleIdx})`;
-      whereClauses.push(`(${roleFilter})`);
+      if (includeClientScope) {
+        const clientIdx = addParam(normalizedClientId);
+        whereClauses.push(
+          `(LOWER(TRIM(p.client_id)) = LOWER(${clientIdx}) OR LOWER(TRIM(p.client_id)) = LOWER(${roleIdx}) OR LOWER(TRIM(pr.role_name)) = LOWER(${roleIdx}))`
+        );
+      } else {
+        const roleFilter =
+          `LOWER(TRIM(p.client_id)) = LOWER(${roleIdx}) OR LOWER(TRIM(pr.role_name)) = LOWER(${roleIdx})`;
+        whereClauses.push(`(${roleFilter})`);
+      }
     } else if (normalizedClientId) {
       const clientIdx = addParam(normalizedClientId);
       whereClauses.push(`LOWER(TRIM(p.client_id)) = LOWER(${clientIdx})`);

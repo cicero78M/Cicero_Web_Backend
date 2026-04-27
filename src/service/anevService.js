@@ -139,6 +139,56 @@ function normalizeTiktokUsername(username) {
   return trimmed.replace(/^@+/, '').toLowerCase();
 }
 
+function normalizeRoleValue(value) {
+  if (value == null) return null;
+  const normalized = String(value).trim().toLowerCase();
+  return normalized || null;
+}
+
+function shouldUseRoleFilter({ role, scope }) {
+  const normalizedRole = normalizeRoleValue(role);
+  if (!normalizedRole || normalizedRole === 'operator') return false;
+  const normalizedScope = String(scope || '').trim().toLowerCase();
+  return normalizedScope === 'direktorat' || normalizedScope === 'org' || normalizedScope === '';
+}
+
+function buildPostAudienceClause({ normalizedRole, normalizedClientId, includeClientScope }) {
+  if (normalizedRole && includeClientScope && normalizedClientId) {
+    return {
+      sql:
+        `(LOWER(TRIM(p.client_id)) = LOWER($CLIENT$) ` +
+        `OR LOWER(TRIM(p.client_id)) = LOWER($ROLE$) ` +
+        `OR LOWER(TRIM(pr.role_name)) = LOWER($ROLE$))`,
+      needsClient: true,
+      needsRole: true,
+    };
+  }
+
+  if (normalizedRole) {
+    return {
+      sql:
+        `(LOWER(TRIM(p.client_id)) = LOWER($ROLE$) ` +
+        `OR LOWER(TRIM(pr.role_name)) = LOWER($ROLE$))`,
+      needsClient: false,
+      needsRole: true,
+    };
+  }
+
+  if (normalizedClientId) {
+    return {
+      sql: `LOWER(TRIM(p.client_id)) = LOWER($CLIENT$)`,
+      needsClient: true,
+      needsRole: false,
+    };
+  }
+
+  return {
+    sql: '1=1',
+    needsClient: false,
+    needsRole: false,
+  };
+}
+
 function tiktokDateBaseExpression(tableAlias = null) {
   const prefix = tableAlias ? `${tableAlias}.` : '';
   return `CASE
@@ -164,6 +214,8 @@ function buildUserDirectory(users) {
   return users.map((user) => ({
     user_id: user.user_id,
     nama: user.nama,
+    full_name: user.nama,
+    display_name: user.nama,
     divisi: user.divisi,
     client_id: user.client_id,
     kontak_sosial: {
@@ -190,6 +242,8 @@ function mapEngagementPerUser(users, byUserMap, platform) {
     perUser.push({
       user_id: user.user_id,
       nama: user.nama,
+      full_name: user.nama,
+      display_name: user.nama,
       divisi: user.divisi,
       client_id: user.client_id,
       username,
@@ -205,7 +259,9 @@ function mapEngagementPerUser(users, byUserMap, platform) {
     if (seenUsernames.has(username)) continue;
     perUser.push({
       user_id: null,
-      nama: null,
+      nama: username,
+      full_name: username,
+      display_name: username,
       divisi: null,
       client_id: null,
       username,
@@ -224,8 +280,8 @@ async function fetchInstagramLikeStats(clientId, startDate, endDate, { role, sco
   const normalizedRegionalId = regionalId ? String(regionalId).trim().toUpperCase() : null;
 
   const clientType = await getClientType(normalizedClientId);
-  const shouldUseRoleFilter =
-    Boolean(normalizedRole) && (normalizedScope === 'direktorat' || clientType === 'direktorat');
+  const useRoleFilter = shouldUseRoleFilter({ role: normalizedRole, scope: normalizedScope });
+  const includeClientScope = normalizedScope === 'org' && normalizedClientId;
 
   const executeAggregation = async (useRoleFilter) => {
     const params = [];
@@ -237,12 +293,24 @@ async function fetchInstagramLikeStats(clientId, startDate, endDate, { role, sco
     const joins = ['JOIN insta_post p ON p.shortcode = l.shortcode'];
     const whereClauses = [];
 
-    if (useRoleFilter && normalizedRole) {
+    if (useRoleFilter) {
       joins.push('LEFT JOIN insta_post_roles pr ON pr.shortcode = p.shortcode');
-      const roleIdx = addParam(normalizedRole);
-      const roleFilter =
-        `LOWER(TRIM(p.client_id)) = LOWER(${roleIdx}) OR LOWER(TRIM(pr.role_name)) = LOWER(${roleIdx})`;
-      whereClauses.push(`(${roleFilter})`);
+      const audience = buildPostAudienceClause({
+        normalizedRole,
+        normalizedClientId,
+        includeClientScope,
+      });
+      const replacements = [];
+      if (audience.needsClient) {
+        const clientIdx = addParam(normalizedClientId);
+        replacements.push(['$CLIENT$', clientIdx]);
+      }
+      if (audience.needsRole) {
+        const roleIdx = addParam(normalizedRole);
+        replacements.push(['$ROLE$', roleIdx]);
+      }
+      const sql = replacements.reduce((acc, [needle, val]) => acc.replaceAll(needle, val), audience.sql);
+      whereClauses.push(sql);
     } else if (normalizedClientId) {
       const clientIdx = addParam(normalizedClientId);
       whereClauses.push(`LOWER(TRIM(p.client_id)) = LOWER(${clientIdx})`);
@@ -292,10 +360,10 @@ async function fetchInstagramLikeStats(clientId, startDate, endDate, { role, sco
     return { totalLikes, byUser };
   };
 
-  const initial = await executeAggregation(shouldUseRoleFilter);
+  const initial = await executeAggregation(useRoleFilter);
   if (
     initial.totalLikes === 0 &&
-    shouldUseRoleFilter &&
+    useRoleFilter &&
     normalizedClientId &&
     clientType === 'direktorat'
   ) {
@@ -311,8 +379,8 @@ async function fetchTiktokCommentStats(clientId, startDate, endDate, { role, sco
   const normalizedRegionalId = regionalId ? String(regionalId).trim().toUpperCase() : null;
 
   const clientType = await getClientType(normalizedClientId);
-  const shouldUseRoleFilter =
-    Boolean(normalizedRole) && (normalizedScope === 'direktorat' || clientType === 'direktorat');
+  const useRoleFilter = shouldUseRoleFilter({ role: normalizedRole, scope: normalizedScope });
+  const includeClientScope = normalizedScope === 'org' && normalizedClientId;
 
   const executeAggregation = async (useRoleFilter) => {
     const params = [];
@@ -324,12 +392,24 @@ async function fetchTiktokCommentStats(clientId, startDate, endDate, { role, sco
     const joins = ['JOIN tiktok_post p ON p.video_id = c.video_id'];
     const whereClauses = [];
 
-    if (useRoleFilter && normalizedRole) {
+    if (useRoleFilter) {
       joins.push('LEFT JOIN tiktok_post_roles pr ON pr.video_id = p.video_id');
-      const roleIdx = addParam(normalizedRole);
-      const roleFilter =
-        `LOWER(TRIM(p.client_id)) = LOWER(${roleIdx}) OR LOWER(TRIM(pr.role_name)) = LOWER(${roleIdx})`;
-      whereClauses.push(`(${roleFilter})`);
+      const audience = buildPostAudienceClause({
+        normalizedRole,
+        normalizedClientId,
+        includeClientScope,
+      });
+      const replacements = [];
+      if (audience.needsClient) {
+        const clientIdx = addParam(normalizedClientId);
+        replacements.push(['$CLIENT$', clientIdx]);
+      }
+      if (audience.needsRole) {
+        const roleIdx = addParam(normalizedRole);
+        replacements.push(['$ROLE$', roleIdx]);
+      }
+      const sql = replacements.reduce((acc, [needle, val]) => acc.replaceAll(needle, val), audience.sql);
+      whereClauses.push(sql);
     } else if (normalizedClientId) {
       const clientIdx = addParam(normalizedClientId);
       whereClauses.push(`LOWER(TRIM(p.client_id)) = LOWER(${clientIdx})`);
@@ -380,10 +460,10 @@ async function fetchTiktokCommentStats(clientId, startDate, endDate, { role, sco
     return { totalComments, byUser };
   };
 
-  const initial = await executeAggregation(shouldUseRoleFilter);
+  const initial = await executeAggregation(useRoleFilter);
   if (
     initial.totalComments === 0 &&
-    shouldUseRoleFilter &&
+    useRoleFilter &&
     normalizedClientId &&
     clientType === 'direktorat'
   ) {
@@ -492,6 +572,8 @@ export async function getAnevSummary({
     return {
       user_id: user.user_id,
       nama: user.nama,
+      full_name: user.nama,
+      display_name: user.nama,
       divisi: user.divisi,
       client_id: user.client_id,
       likes,
