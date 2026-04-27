@@ -6,7 +6,7 @@ import { approveDashboardUser, rejectDashboardUser } from "../controller/dashboa
 import { postComplaintInstagram, postComplaintTiktok } from "../controller/complaintController.js";
 import { verifyDashboardOrClientToken, verifyDashboardToken } from "../middleware/dashboardAuth.js";
 import { getDashboardWebLoginRecap } from "../controller/loginLogController.js";
-import { getAnevDashboard } from "../controller/anevController.js";
+import { exportAnevDashboard, getAnevDashboard } from "../controller/anevController.js";
 import { dashboardPremiumGuard } from "../middleware/dashboardPremiumGuard.js";
 import { dashboardPremiumConfig } from "../config/dashboardPremium.js";
 const router = Router();
@@ -15,6 +15,7 @@ router.get("/stats", verifyDashboardOrClientToken, getDashboardStats);
 
 router.use(verifyDashboardToken);
 router.get("/anev", dashboardPremiumGuard(dashboardPremiumConfig.allowedTiers), getAnevDashboard);
+router.get("/anev/export", dashboardPremiumGuard(dashboardPremiumConfig.allowedTiers), exportAnevDashboard);
 router.post("/social-media/instagram/analysis", analyzeInstagramJson);
 router.post("/komplain/insta", postComplaintInstagram);
 router.post("/komplain/tiktok", postComplaintTiktok);

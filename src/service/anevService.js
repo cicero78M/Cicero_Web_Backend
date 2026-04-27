@@ -155,6 +155,11 @@ function mapFromObject(obj) {
   return new Map(Object.entries(obj || {}).map(([key, value]) => [key, Number(value) || 0]));
 }
 
+function normalizeDivisionLabel(value) {
+  const label = value == null ? '' : String(value).trim();
+  return label || 'Tidak diketahui';
+}
+
 function buildUserDirectory(users) {
   return users.map((user) => ({
     user_id: user.user_id,
@@ -496,6 +501,45 @@ export async function getAnevSummary({
     };
   });
 
+  const userPerSatfungMap = new Map();
+  const instagramLikesPerSatfungMap = new Map();
+  const tiktokEngagementPerSatfungMap = new Map();
+  activeUsers.forEach((user) => {
+    const divisionLabel = normalizeDivisionLabel(user.divisi);
+    userPerSatfungMap.set(divisionLabel, (userPerSatfungMap.get(divisionLabel) || 0) + 1);
+
+    const likes = instagramTotalsByUserId.get(user.user_id) || 0;
+    instagramLikesPerSatfungMap.set(
+      divisionLabel,
+      (instagramLikesPerSatfungMap.get(divisionLabel) || 0) + likes,
+    );
+
+    const comments = tiktokTotalsByUserId.get(user.user_id) || 0;
+    tiktokEngagementPerSatfungMap.set(
+      divisionLabel,
+      (tiktokEngagementPerSatfungMap.get(divisionLabel) || 0) + comments,
+    );
+  });
+
+  const userPerSatfung = Array.from(userPerSatfungMap.entries()).map(([label, count]) => ({
+    satfung: label,
+    count,
+  }));
+  const likesPerSatfung = Array.from(instagramLikesPerSatfungMap.entries()).map(
+    ([label, likes]) => ({
+      satfung: label,
+      likes,
+    }),
+  );
+  const tiktokPerSatfung = Array.from(tiktokEngagementPerSatfungMap.entries()).map(
+    ([label, engagement]) => ({
+      satfung: label,
+      posts: 0,
+      comments: engagement,
+      engagement,
+    }),
+  );
+
   return {
     filters: {
       client_id: targetClientId,
@@ -519,6 +563,27 @@ export async function getAnevSummary({
       per_user: tiktokPerUser,
     },
     aggregates: {
+      totals: {
+        total_users: activeUsers.length,
+        likes: igLikes.totalLikes,
+        comments: ttComments.totalComments,
+        expected_actions: expectedActions,
+        posts: {
+          instagram: Number(igPosts) || 0,
+          tiktok: Number(ttPosts) || 0,
+        },
+        compliance_per_pelaksana: compliance,
+        user_per_satfung: userPerSatfung,
+        likes_per_satfung: likesPerSatfung,
+        tiktok_per_satfung: tiktokPerSatfung,
+      },
+      platforms: [
+        { platform: 'instagram', posts: Number(igPosts) || 0 },
+        { platform: 'tiktok', posts: Number(ttPosts) || 0 },
+      ],
+      user_per_satfung: userPerSatfung,
+      likes_per_satfung: likesPerSatfung,
+      tiktok_per_satfung: tiktokPerSatfung,
       total_users: activeUsers.length,
       instagram_posts: Number(igPosts) || 0,
       tiktok_posts: Number(ttPosts) || 0,
