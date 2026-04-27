@@ -1,6 +1,6 @@
 // src/service/telegramService.js
 
-import TelegramBot from 'node-telegram-bot-api';
+import TelegramBot from './telegramBotAdapter.js';
 
 let bot = null;
 let botReady = false;
