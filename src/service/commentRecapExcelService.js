@@ -1,6 +1,6 @@
 import { mkdir } from 'fs/promises';
 import path from 'path';
-import XLSX from 'xlsx';
+import XLSX from '../utils/xlsxCompat.js';
 import { hariIndo } from '../utils/constants.js';
 
 function formatClientName(clientId = '') {
@@ -73,7 +73,7 @@ export async function saveCommentRecapExcel(data, clientId) {
   );
   await mkdir(exportDir, { recursive: true });
 
-  XLSX.writeFile(wb, filePath);
+  await XLSX.writeFile(wb, filePath);
   return filePath;
 }
 
@@ -108,7 +108,7 @@ export async function saveCommentRecapPerContentExcel(data, clientId) {
   );
   await mkdir(exportDir, { recursive: true });
 
-  XLSX.writeFile(wb, filePath);
+  await XLSX.writeFile(wb, filePath);
   return filePath;
 }
 

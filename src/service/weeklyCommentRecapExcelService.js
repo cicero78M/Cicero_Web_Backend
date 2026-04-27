@@ -1,6 +1,6 @@
 import { mkdir } from 'fs/promises';
 import path from 'path';
-import XLSX from 'xlsx';
+import XLSX from '../utils/xlsxCompat.js';
 import { hariIndo } from '../utils/constants.js';
 import { getNamaPriorityIndex } from '../utils/sqlPriority.js';
 import { getRekapKomentarByClient } from '../model/tiktokCommentModel.js';
@@ -366,7 +366,7 @@ export async function saveWeeklyCommentRecapExcel(clientId, { regionalId } = {})
     exportDir,
     `Rekap_Mingguan_Tiktok_${formattedClient}_${hari}_${dateSafe}_${timeSafe}.xlsx`
   );
-  XLSX.writeFile(wb, filePath, { cellStyles: true });
+  await XLSX.writeFile(wb, filePath, { cellStyles: true });
   return filePath;
 }
 

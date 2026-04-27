@@ -1,6 +1,6 @@
 import { mkdir, readFile, unlink, writeFile } from "fs/promises";
 import path, { basename } from "path";
-import XLSX from "xlsx";
+import XLSX from "../utils/xlsxCompat.js";
 import { getRekapLikesByClient } from "../model/instaLikeModel.js";
 import { getUsersByClient } from "../model/userModel.js";
 import { formatNama } from "../utils/utilsHelper.js";
@@ -148,7 +148,7 @@ export async function generateKasatBinmasLikesRecapExcel({
 
   await mkdir(EXPORT_DIR, { recursive: true });
   const filePath = path.join(EXPORT_DIR, buildFilename(periodInfo.label));
-  const buffer = XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
+  const buffer = await XLSX.write(wb, { bookType: "xlsx", type: "buffer" });
   await writeFile(filePath, buffer);
 
   return { filePath, periodLabel: periodInfo.label, totalKonten: Number(totalKonten) || 0 };

@@ -1,6 +1,6 @@
 import { mkdir } from 'fs/promises';
 import path from 'path';
-import XLSX from 'xlsx';
+import XLSX from '../utils/xlsxCompat.js';
 import { getRekapKomentarByClient } from '../model/tiktokCommentModel.js';
 import { formatDateWIB, formatTimeWIB } from '../utils/dateTimeJakarta.js';
 
@@ -187,7 +187,7 @@ export async function generateTiktokAllDataRecap({
     exportDir,
     `${clientLabel}_Rekap_TikTok_All_Data_${dateSafe}_${timeSafe}.xlsx`
   );
-  XLSX.writeFile(wb, filePath, { cellStyles: true });
+  await XLSX.writeFile(wb, filePath, { cellStyles: true });
 
   return { filePath, months: months.map((m) => m.key) };
 }

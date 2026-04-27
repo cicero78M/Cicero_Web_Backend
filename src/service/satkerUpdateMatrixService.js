@@ -1,6 +1,6 @@
 import { mkdir } from "fs/promises";
 import path from "path";
-import XLSX from "xlsx";
+import XLSX from "../utils/xlsxCompat.js";
 import { getUsersSocialByClient, getClientsByRole } from "../model/userModel.js";
 import { findClientById } from "./clientService.js";
 import { getSatkerDspCount } from "../data/satkerDspMap.js";
@@ -330,7 +330,7 @@ export async function saveSatkerUpdateMatrixExcel({
   }.xlsx`;
   const filePath = path.join(exportDir, fileName);
 
-  XLSX.writeFile(workbook, filePath);
+  await XLSX.writeFile(workbook, filePath);
   return { filePath, fileName };
 }
 

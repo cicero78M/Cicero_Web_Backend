@@ -1,6 +1,6 @@
 import { mkdir, readFile, unlink } from "fs/promises";
 import path, { basename } from "path";
-import XLSX from "xlsx";
+import XLSX from "../utils/xlsxCompat.js";
 import { getRekapKomentarByClient } from "../model/tiktokCommentModel.js";
 import { getUsersByClient } from "../model/userModel.js";
 import { formatNama } from "../utils/utilsHelper.js";
@@ -128,7 +128,7 @@ export async function generateKasatBinmasTiktokCommentRecapExcel({
 
   await mkdir(EXPORT_DIR, { recursive: true });
   const filePath = path.join(EXPORT_DIR, buildFilename(periodInfo.label));
-  XLSX.writeFile(wb, filePath);
+  await XLSX.writeFile(wb, filePath);
 
   return { filePath, periodLabel: periodInfo.label, totalKonten };
 }

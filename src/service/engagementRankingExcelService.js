@@ -1,6 +1,6 @@
 import { mkdir } from "fs/promises";
 import path from "path";
-import XLSX from "xlsx";
+import XLSX from "../utils/xlsxCompat.js";
 
 import { findClientById } from "./clientService.js";
 import { getShortcodesByDateRange } from "../model/instaPostModel.js";
@@ -676,7 +676,7 @@ export async function saveEngagementRankingExcel({
   const fileName = `${clientSlug}_Rekap_Ranking_Engagement_${periodSlug}_${dateLabel}_${timeLabel}.xlsx`;
   const filePath = path.join(EXPORT_DIR, fileName);
 
-  XLSX.writeFile(workbook, filePath, { cellStyles: true });
+  await XLSX.writeFile(workbook, filePath, { cellStyles: true });
   return { filePath, fileName };
 }
 

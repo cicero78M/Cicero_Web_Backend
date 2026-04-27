@@ -1,4 +1,4 @@
-import XLSX from "xlsx";
+import XLSX from "../utils/xlsxCompat.js";
 import { sendConsoleDebug } from "../middleware/debugHandler.js";
 import { ALLOWED_TIME_RANGES, getAnevSummary, resolveTimeRange } from "../service/anevService.js";
 import { UserDirectoryError } from "../service/userDirectoryService.js";
@@ -530,7 +530,7 @@ function reorderRowBySection(section, row) {
   return ordered;
 }
 
-function buildWorkbookBuffer(rows) {
+async function buildWorkbookBuffer(rows) {
   const workbook = XLSX.utils.book_new();
   const grouped = new Map();
   rows.forEach((row) => {
@@ -552,7 +552,7 @@ function buildWorkbookBuffer(rows) {
     index += 1;
   }
 
-  return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+  return await XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 }
 
 export async function getAnevDashboard(req, res) {
@@ -586,7 +586,7 @@ export async function exportAnevDashboard(req, res) {
     }
     const suffix = section ? `-${section}` : "";
     const fileName = `anev-polres-${(summary?.filters?.client_id || "client").toString().toLowerCase()}-${summary?.filters?.time_range || "custom"}${suffix}`;
-    const buffer = buildWorkbookBuffer(rows);
+    const buffer = await buildWorkbookBuffer(rows);
 
     res.setHeader(
       "Content-Type",
