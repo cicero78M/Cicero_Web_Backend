@@ -20,12 +20,18 @@ startOtpWorker().catch(err => console.error('[OTP] worker error', err));
 const app = express();
 app.disable('etag');
 app.disable('x-powered-by');
+app.set('trust proxy', 1);
 
 const corsOrigin = env.CORS_ORIGIN.split(',')
   .map(origin => origin.trim())
   .filter(Boolean);
 
 const isWildcardCors = corsOrigin.includes('*');
+const isProduction = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+
+if (isProduction && isWildcardCors) {
+  throw new Error('CORS_ORIGIN wildcard (*) is not allowed in production');
+}
 const securityHeaderMiddleware = (req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
