@@ -6,6 +6,7 @@ import { getUserDirectoryUsers } from './userDirectoryService.js';
 
 const TTL_SEC = 60;
 export const ALLOWED_TIME_RANGES = ['today', '7d', '30d', '90d', 'custom', 'all'];
+const DIREKTORAT_ROLE_SET = new Set(['ditbinmas', 'ditlantas', 'bidhumas', 'ditsamapta', 'ditintelkam']);
 
 const clientTypeCache = new Map();
 
@@ -143,6 +144,32 @@ function normalizeRoleValue(value) {
   if (value == null) return null;
   const normalized = String(value).trim().toLowerCase();
   return normalized || null;
+}
+
+function resolveDirektoratRoleCandidate(client) {
+  if (!client || typeof client !== 'object') return null;
+  const parentClientId = normalizeRoleValue(client.parent_client_id);
+  if (parentClientId && DIREKTORAT_ROLE_SET.has(parentClientId)) {
+    return parentClientId;
+  }
+
+  const clientGroup = normalizeRoleValue(client.client_group);
+  if (clientGroup) {
+    const compact = clientGroup.replace(/[\s_-]+/g, '');
+    for (const role of DIREKTORAT_ROLE_SET) {
+      if (compact.includes(role)) return role;
+    }
+  }
+
+  return null;
+}
+
+async function inferOrgDirektoratRole(clientId) {
+  if (!clientId) return null;
+  const client = await findClientById(clientId);
+  if (!client) return null;
+  if (String(client.client_type || '').trim().toLowerCase() !== 'org') return null;
+  return resolveDirektoratRoleCandidate(client);
 }
 
 function shouldUseRoleFilter({ role, scope }) {
@@ -533,12 +560,7 @@ export async function getAnevSummary({
   requesterClientId,
   requesterClientIds = [],
 }) {
-  const {
-    users: activeUsers,
-    clientId: resolvedClientId,
-    role: normalizedRole,
-    scope: normalizedScope,
-  } = await getUserDirectoryUsers({
+  const directoryResult = await getUserDirectoryUsers({
     requesterRole,
     tokenClientId: requesterClientId,
     tokenClientIds: requesterClientIds,
@@ -548,8 +570,38 @@ export async function getAnevSummary({
     regionalId,
   });
 
+  let {
+    users: activeUsers,
+    clientId: resolvedClientId,
+    role: normalizedRole,
+    scope: normalizedScope,
+  } = directoryResult;
+
+  let effectiveRole = normalizedRole;
+  const shouldInferDirektoratRole =
+    normalizedScope === 'org' && (!normalizedRole || normalizedRole === 'operator');
+
+  if (shouldInferDirektoratRole) {
+    const inferredRole = await inferOrgDirektoratRole(resolvedClientId || clientId);
+    if (inferredRole) {
+      effectiveRole = inferredRole;
+      const refinedDirectory = await getUserDirectoryUsers({
+        requesterRole,
+        tokenClientId: requesterClientId,
+        tokenClientIds: requesterClientIds,
+        clientId: resolvedClientId || clientId,
+        role: inferredRole,
+        scope: normalizedScope,
+        regionalId,
+      });
+      if (Array.isArray(refinedDirectory.users) && refinedDirectory.users.length > 0) {
+        activeUsers = refinedDirectory.users;
+      }
+    }
+  }
+
   const targetClientId = resolvedClientId || clientId;
-  const options = { role: normalizedRole, scope: normalizedScope, regionalId };
+  const options = { role: effectiveRole, scope: normalizedScope, regionalId };
   const [igLikes, ttComments, igPosts, ttPosts] = await Promise.all([
     getInstagramLikeStats(targetClientId, startDate, endDate, options),
     getTiktokCommentStats(targetClientId, startDate, endDate, options),
@@ -625,7 +677,7 @@ export async function getAnevSummary({
   return {
     filters: {
       client_id: targetClientId,
-      role: normalizedRole || null,
+      role: effectiveRole || normalizedRole || null,
       scope: normalizedScope || null,
       regional_id: regionalId || null,
       time_range: timeRange,
