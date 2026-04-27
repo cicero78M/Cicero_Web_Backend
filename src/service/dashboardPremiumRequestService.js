@@ -36,6 +36,34 @@ function createServiceError(message, statusCode = 400, code = null) {
   return err;
 }
 
+function isPremiumSnapshotActive(dashboardUser = {}) {
+  const hasPremiumStatus = Boolean(dashboardUser?.premium_status);
+  if (!hasPremiumStatus) return false;
+
+  const rawExpiry = dashboardUser?.premium_expires_at;
+  if (!rawExpiry) return true;
+
+  const expiryTime = new Date(rawExpiry).getTime();
+  if (Number.isNaN(expiryTime)) return true;
+
+  return expiryTime > Date.now();
+}
+
+async function assertNoActivePremiumForRequest(dashboardUserId, dashboardUser = {}, dbClient) {
+  const activeSubscription = await dashboardSubscriptionModel.findActiveByUser(
+    dashboardUserId,
+    dbClient,
+  );
+
+  if (activeSubscription || isPremiumSnapshotActive(dashboardUser)) {
+    throw createServiceError(
+      'Akun sudah memiliki akses premium aktif. Pengajuan premium baru tidak diperlukan.',
+      409,
+      'already_premium',
+    );
+  }
+}
+
 function resolveExpiry(payload, fallbackHours) {
   if (payload?.expiredAt || payload?.expired_at) return payload.expiredAt || payload.expired_at;
   if (payload?.expires_at) return payload.expires_at;
@@ -163,6 +191,12 @@ export async function createDashboardPremiumRequest(dashboardUser, payload = {})
   const status = payload.proof_url ? 'confirmed' : 'pending';
 
   return withTransaction(async client => {
+    await assertNoActivePremiumForRequest(
+      resolvedDashboardUser.dashboard_user_id,
+      resolvedDashboardUser,
+      client,
+    );
+
     const request = await dashboardPremiumRequestModel.createRequest(
       {
         dashboard_user_id: resolvedDashboardUser.dashboard_user_id,
@@ -210,6 +244,12 @@ export async function confirmDashboardPremiumRequest(token, dashboardUser, paylo
   }
 
   return withTransaction(async client => {
+    await assertNoActivePremiumForRequest(
+      resolvedDashboardUser.dashboard_user_id,
+      resolvedDashboardUser,
+      client,
+    );
+
     const request = await dashboardPremiumRequestModel.findByToken(token, client);
     if (!request) {
       throw createServiceError('Request tidak ditemukan', 404, 'not_found');
