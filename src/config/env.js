@@ -43,3 +43,9 @@ export const env = cleanEnv(process.env, {
   }),
   DASHBOARD_PREMIUM_ALLOWED_TIERS: str({ default: 'tier1,tier2,premium_1' })
 });
+
+const isProduction = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+
+if (isProduction && env.REDIS_URL === 'redis://localhost:6379') {
+  throw new Error('REDIS_URL must be explicitly configured in production');
+}

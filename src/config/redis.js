@@ -1,6 +1,8 @@
 import { env } from './env.js';
 
 const redisUrl = env.REDIS_URL;
+const REDIS_CONNECT_TIMEOUT_MS = Number(process.env.REDIS_CONNECT_TIMEOUT_MS || 10000);
+const REDIS_MAX_RETRY_DELAY_MS = Number(process.env.REDIS_MAX_RETRY_DELAY_MS || 3000);
 
 const createSetArgs = (options = {}) => {
   if (!options || typeof options !== 'object') {
@@ -20,6 +22,34 @@ const createSetArgs = (options = {}) => {
   return args;
 };
 
+const getRetryDelay = (attempt) => {
+  const normalizedAttempt = Number.isFinite(attempt) ? Math.max(0, attempt) : 0;
+  return Math.min(250 * (normalizedAttempt + 1), REDIS_MAX_RETRY_DELAY_MS);
+};
+
+const logRedisLifecycle = (client, driverLabel) => {
+  if (!client || typeof client.on !== 'function') {
+    return;
+  }
+
+  client.on('connect', () => {
+    console.info(`[Redis] ${driverLabel} connecting to ${redisUrl}`);
+  });
+  client.on('ready', () => {
+    console.info(`[Redis] ${driverLabel} ready`);
+  });
+  client.on('reconnecting', () => {
+    console.warn(`[Redis] ${driverLabel} reconnecting`);
+  });
+  client.on('end', () => {
+    console.warn(`[Redis] ${driverLabel} connection closed`);
+  });
+  client.on('close', () => {
+    console.warn(`[Redis] ${driverLabel} socket closed`);
+  });
+  client.on('error', (err) => console.error(`[Redis] ${driverLabel} error`, err));
+};
+
 const createNodeRedisClient = async () => {
   let nodeRedisModule;
 
@@ -29,8 +59,21 @@ const createNodeRedisClient = async () => {
     nodeRedisModule = await import('@redis/client');
   }
 
-  const redis = nodeRedisModule.createClient({ url: redisUrl });
-  redis.on('error', (err) => console.error('Redis Client Error', err));
+  const redis = nodeRedisModule.createClient({
+    url: redisUrl,
+    socket: {
+      connectTimeout: REDIS_CONNECT_TIMEOUT_MS,
+      reconnectStrategy: (retries) => {
+        const delay = getRetryDelay(retries);
+        if (retries === 0 || retries % 10 === 0) {
+          console.warn(`[Redis] node-redis reconnect attempt #${retries + 1}, next retry in ${delay}ms`);
+        }
+        return delay;
+      },
+    },
+  });
+
+  logRedisLifecycle(redis, 'node-redis');
 
   await redis.connect();
   return redis;
@@ -38,9 +81,19 @@ const createNodeRedisClient = async () => {
 
 const createIoRedisClient = async () => {
   const { default: IORedis } = await import('ioredis');
-  const ioRedis = new IORedis(redisUrl);
+  const ioRedis = new IORedis(redisUrl, {
+    connectTimeout: REDIS_CONNECT_TIMEOUT_MS,
+    maxRetriesPerRequest: null,
+    retryStrategy: (times) => {
+      const delay = getRetryDelay(times - 1);
+      if (times === 1 || times % 10 === 0) {
+        console.warn(`[Redis] ioredis reconnect attempt #${times}, next retry in ${delay}ms`);
+      }
+      return delay;
+    },
+  });
 
-  ioRedis.on('error', (err) => console.error('Redis Client Error', err));
+  logRedisLifecycle(ioRedis, 'ioredis');
 
   return {
     get: (...args) => ioRedis.get(...args),
@@ -55,6 +108,7 @@ const createIoRedisClient = async () => {
     del: (...args) => ioRedis.del(...args),
     ttl: (...args) => ioRedis.ttl(...args),
     exists: (...args) => ioRedis.exists(...args),
+    ping: (...args) => ioRedis.ping(...args),
     sAdd: (key, ...members) => ioRedis.sadd(key, ...members),
     sMembers: (...args) => ioRedis.smembers(...args),
     on: (...args) => ioRedis.on(...args),
