@@ -3,6 +3,8 @@ import { env } from './env.js';
 const redisUrl = env.REDIS_URL;
 const REDIS_CONNECT_TIMEOUT_MS = Number(process.env.REDIS_CONNECT_TIMEOUT_MS || 10000);
 const REDIS_MAX_RETRY_DELAY_MS = Number(process.env.REDIS_MAX_RETRY_DELAY_MS || 3000);
+const LOGIN_SESSION_TTL_SEC = Number(process.env.LOGIN_SESSION_TTL_SEC || 2 * 60 * 60);
+const SESSION_SET_KEY_PREFIXES = ['dashboard_login:', 'penmas_login:', 'login:', 'user_login:'];
 
 const createSetArgs = (options = {}) => {
   if (!options || typeof options !== 'object') {
@@ -25,6 +27,21 @@ const createSetArgs = (options = {}) => {
 const getRetryDelay = (attempt) => {
   const normalizedAttempt = Number.isFinite(attempt) ? Math.max(0, attempt) : 0;
   return Math.min(250 * (normalizedAttempt + 1), REDIS_MAX_RETRY_DELAY_MS);
+};
+
+const isSessionSetKey = (key) =>
+  typeof key === 'string' && SESSION_SET_KEY_PREFIXES.some((prefix) => key.startsWith(prefix));
+
+const applySessionSetTtl = async (client, key) => {
+  if (!isSessionSetKey(key) || typeof client?.expire !== 'function') {
+    return;
+  }
+
+  try {
+    await client.expire(key, LOGIN_SESSION_TTL_SEC);
+  } catch (err) {
+    console.warn(`[Redis] Failed to refresh TTL for session set ${key}: ${err.message}`);
+  }
 };
 
 const logRedisLifecycle = (client, driverLabel) => {
@@ -76,6 +93,16 @@ const createNodeRedisClient = async () => {
   logRedisLifecycle(redis, 'node-redis');
 
   await redis.connect();
+
+  if (typeof redis.sAdd === 'function') {
+    const originalSAdd = redis.sAdd.bind(redis);
+    redis.sAdd = async (key, ...members) => {
+      const result = await originalSAdd(key, ...members);
+      await applySessionSetTtl(redis, key);
+      return result;
+    };
+  }
+
   return redis;
 };
 
@@ -108,8 +135,13 @@ const createIoRedisClient = async () => {
     del: (...args) => ioRedis.del(...args),
     ttl: (...args) => ioRedis.ttl(...args),
     exists: (...args) => ioRedis.exists(...args),
+    expire: (...args) => ioRedis.expire(...args),
     ping: (...args) => ioRedis.ping(...args),
-    sAdd: (key, ...members) => ioRedis.sadd(key, ...members),
+    sAdd: async (key, ...members) => {
+      const result = await ioRedis.sadd(key, ...members);
+      await applySessionSetTtl(ioRedis, key);
+      return result;
+    },
     sMembers: (...args) => ioRedis.smembers(...args),
     on: (...args) => ioRedis.on(...args),
     connect: async () => undefined
