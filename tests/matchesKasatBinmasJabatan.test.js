@@ -1,4 +1,18 @@
-import { matchesKasatBinmasJabatan } from '../src/service/kasatkerAttendanceService.js';
+import { jest } from '@jest/globals';
+
+jest.unstable_mockModule('../src/model/userModel.js', () => ({
+  getUsersByClient: jest.fn(),
+}));
+
+jest.unstable_mockModule('../src/model/clientModel.js', () => ({
+  findAllOrgClients: jest.fn(),
+}));
+
+jest.unstable_mockModule('../src/utils/utilsHelper.js', () => ({
+  formatNama: jest.fn(),
+}));
+
+const { matchesKasatBinmasJabatan } = await import('../src/service/kasatkerAttendanceService.js');
 
 describe('matchesKasatBinmasJabatan', () => {
   test('returns true for plain Kasat Binmas titles', () => {

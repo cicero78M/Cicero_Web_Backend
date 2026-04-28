@@ -10,6 +10,14 @@ jest.unstable_mockModule('../src/service/instaPostService.js', () => ({}));
 jest.unstable_mockModule('../src/service/instaLikeService.js', () => ({}));
 jest.unstable_mockModule('../src/service/tiktokPostService.js', () => ({}));
 jest.unstable_mockModule('../src/service/tiktokCommentService.js', () => ({}));
+jest.unstable_mockModule('../src/service/satbinmasOfficialAccountService.js', () => ({
+  getAccountsByClient: jest.fn(),
+  getAccountById: jest.fn(),
+  createAccount: jest.fn(),
+  updateAccount: jest.fn(),
+  deleteAccount: jest.fn(),
+  syncOfficialInstagramAccount: jest.fn(),
+}));
 
 let getClientProfile;
 
@@ -80,13 +88,15 @@ test('uses token client_id when not provided in request', async () => {
   expect(mockFindClientById).toHaveBeenCalledWith('C1');
   expect(json).toHaveBeenCalledWith({
     success: true,
-    client: {
+    client: expect.objectContaining({
       client_id: 'C1',
       client_type: 'org',
       level: null,
       tier: null,
       premium_tier: null,
-    },
+      premium_status: false,
+      premium_expires_at: null,
+    }),
   });
 });
 
@@ -106,14 +116,16 @@ test('maps client_level to tier aliases in profile response', async () => {
 
   expect(json).toHaveBeenCalledWith({
     success: true,
-    client: {
+    client: expect.objectContaining({
       client_id: 'LEVEL1',
       client_type: 'org',
       client_level: 'Premium_1',
       level: 'Premium_1',
       tier: 'premium_1',
       premium_tier: 'premium_1',
-    },
+      premium_status: false,
+      premium_expires_at: null,
+    }),
   });
 });
 

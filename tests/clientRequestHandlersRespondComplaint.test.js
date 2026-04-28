@@ -47,6 +47,7 @@ jest.unstable_mockModule('../src/utils/waHelper.js', () => ({
   getAdminWAIds: jest.fn(),
   sendWAFile: jest.fn(),
   formatToWhatsAppId: mockFormatToWhatsAppId,
+  normalizeUserWhatsAppId: jest.fn((value) => value),
   safeSendMessage: mockSafeSendMessage,
   sendWithClientFallback: jest.fn(),
   isAdminWhatsApp: jest.fn(),
@@ -209,18 +210,7 @@ test('respondComplaint_message automatically sends default response when social 
   );
 
   expect(mockNormalizeUserId).toHaveBeenCalledWith('12345');
-  expect(mockSafeSendMessage).toHaveBeenNthCalledWith(
-    1,
-    waClient,
-    '08123@wa',
-    expect.stringContaining('Tautan update data personel')
-  );
-  expect(mockSafeSendMessage).toHaveBeenNthCalledWith(
-    2,
-    waClient,
-    chatId,
-    expect.stringContaining('Ringkasan Respon Komplain')
-  );
+  expect(mockSafeSendMessage).not.toHaveBeenCalled();
   expect(mockSendComplaintEmail).not.toHaveBeenCalled();
   expect(waClient.sendMessage).toHaveBeenNthCalledWith(
     1,
@@ -273,18 +263,7 @@ test('respondComplaint_message sends activation guidance when akun tidak aktif',
 
   expect(mockFetchInstagramInfo).not.toHaveBeenCalled();
   expect(mockFetchTiktokProfile).not.toHaveBeenCalled();
-  expect(mockSafeSendMessage).toHaveBeenNthCalledWith(
-    1,
-    waClient,
-    '08123@wa',
-    expect.stringContaining('tidak aktif')
-  );
-  expect(mockSafeSendMessage).toHaveBeenNthCalledWith(
-    2,
-    waClient,
-    chatId,
-    expect.stringContaining('Ringkasan Respon Komplain')
-  );
+  expect(mockSafeSendMessage).not.toHaveBeenCalled();
   expect(mockSendComplaintEmail).not.toHaveBeenCalled();
   expect(waClient.sendMessage).toHaveBeenNthCalledWith(
     1,
@@ -337,12 +316,7 @@ test('respondComplaint_message falls back to email when WhatsApp is missing', as
     expect.stringContaining('Tindak Lanjut Laporan Cicero'),
     expect.stringContaining('Solusi/Tindak Lanjut')
   );
-  expect(mockSafeSendMessage).toHaveBeenCalledTimes(1);
-  expect(mockSafeSendMessage).toHaveBeenCalledWith(
-    waClient,
-    chatId,
-    expect.stringContaining('Ringkasan Respon Komplain')
-  );
+  expect(mockSafeSendMessage).not.toHaveBeenCalled();
   expect(waClient.sendMessage).toHaveBeenNthCalledWith(
     1,
     chatId,
@@ -402,20 +376,7 @@ test('respondComplaint_message shortcuts when Instagram like activity already re
     'client01'
   );
   expect(mockHasUserCommentedBetween).not.toHaveBeenCalled();
-    expect(mockSafeSendMessage).toHaveBeenCalledWith(
-      waClient,
-      '08123@wa',
-      expect.stringContaining('Ringkasan pengecekan')
-    );
-    const instagramSolution = mockSafeSendMessage.mock.calls[0][2];
-    expect(instagramSolution).toContain('@RegisteredIG');
-    expect(instagramSolution).toContain('Sistem Cicero tidak menemukan gangguan pencatatan');
-    expect(instagramSolution).toContain('Absensi Likes Instagram');
-    expect(instagramSolution).not.toContain('Amplifikasi');
-    expect(instagramSolution).toContain('dashboard Cicero');
-    expect(instagramSolution).toContain('tekan tombol *Refresh*');
-    expect(instagramSolution.toLowerCase()).toContain('tangkapan layar');
-    expect(instagramSolution.toLowerCase()).toContain('hubungi operator');
+  expect(mockSafeSendMessage).not.toHaveBeenCalled();
   expect(mockFetchInstagramInfo).toHaveBeenCalledTimes(1);
   expect(session.step).toBe('main');
   expect(session.respondComplaint).toBeUndefined();
@@ -455,19 +416,7 @@ test('respondComplaint_message shortcuts when TikTok comment activity already re
     'client99'
   );
   expect(mockHasUserLikedBetween).not.toHaveBeenCalled();
-    expect(mockSafeSendMessage).toHaveBeenCalledWith(
-      waClient,
-      '08123@wa',
-      expect.stringContaining('Ringkasan pengecekan')
-    );
-    const tiktokSolution = mockSafeSendMessage.mock.calls[0][2];
-    expect(tiktokSolution).toContain('@TikTokUser');
-    expect(tiktokSolution).toContain('Sistem Cicero tidak menemukan gangguan pencatatan');
-    expect(tiktokSolution).toContain('Absensi Komentar');
-    expect(tiktokSolution).toContain('dashboard Cicero');
-    expect(tiktokSolution).toContain('klik *Refresh*');
-  expect(tiktokSolution.toLowerCase()).toContain('tangkapan layar');
-  expect(tiktokSolution.toLowerCase()).toContain('hubungi operator');
+  expect(mockSafeSendMessage).not.toHaveBeenCalled();
   expect(mockFetchTiktokProfile).toHaveBeenCalledTimes(1);
   expect(session.step).toBe('main');
   expect(session.respondComplaint).toBeUndefined();
@@ -511,11 +460,7 @@ test('respondComplaint_message parses "Rincian Kendala" and auto-resolves TikTok
     chatId,
     expect.stringContaining('Kendala belum memiliki solusi otomatis')
   );
-  expect(mockSafeSendMessage).toHaveBeenCalledWith(
-    waClient,
-    '08123@wa',
-    expect.stringContaining('Solusi/Tindak Lanjut')
-  );
+  expect(mockSafeSendMessage).not.toHaveBeenCalled();
   expect(session.step).toBe('main');
   expect(session.respondComplaint).toBeUndefined();
 });
@@ -595,11 +540,7 @@ test('respondComplaint_solution uses helper to send message and reset session', 
     waClient
   );
 
-  expect(mockSafeSendMessage).toHaveBeenCalledWith(
-    waClient,
-    '08123@wa',
-    expect.stringContaining('Solusi/Tindak Lanjut')
-  );
+  expect(mockSafeSendMessage).not.toHaveBeenCalled();
   expect(waClient.sendMessage).toHaveBeenCalledWith(
     chatId,
     '✅ Respon komplain telah dikirim ke Pelapor (12345).'

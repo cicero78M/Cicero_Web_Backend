@@ -38,7 +38,7 @@ test('createLinkReport inserts row', async () => {
   expect(res).toEqual({ shortcode: 'abc' });
   expect(mockQuery).toHaveBeenCalledWith(
     expect.stringContaining('FROM insta_post_khusus p'),
-    ['abc', '1', 'a', null, null, null, null]
+    ['abc', '1', 'a', null, null, null, null, '2 days']
   );
 });
 
@@ -95,8 +95,8 @@ test('getReportsTodayByClient filters by client and operator role', async () => 
   const calledQuery = mockQuery.mock.calls[0][0];
   expect(calledQuery).toMatch(/JOIN user_roles ur ON ur\.user_id = u\.user_id/);
   expect(calledQuery).toMatch(/JOIN roles ro ON ur\.role_id = ro\.role_id/);
-  expect(calledQuery).toMatch(/LOWER\(ro\.role_name\) = 'operator'/);
-  expect(mockQuery).toHaveBeenCalledWith(expect.any(String), ['POLRES']);
+  expect(calledQuery).toMatch(/LOWER\(ro\.role_name\) = LOWER\(\$2\)/);
+  expect(mockQuery).toHaveBeenCalledWith(expect.any(String), ['POLRES', 'operator']);
 });
 
 test('getReportsTodayByShortcode filters by client and shortcode', async () => {
@@ -116,8 +116,8 @@ test('getReportsTodayByShortcode filters by client, shortcode and operator role'
   const calledQuery = mockQuery.mock.calls[0][0];
   expect(calledQuery).toMatch(/JOIN user_roles ur ON ur\.user_id = u\.user_id/);
   expect(calledQuery).toMatch(/JOIN roles ro ON ur\.role_id = ro\.role_id/);
-  expect(calledQuery).toMatch(/LOWER\(ro\.role_name\) = 'operator'/);
-  expect(mockQuery).toHaveBeenCalledWith(expect.any(String), ['POLRES', 'abc']);
+  expect(calledQuery).toMatch(/LOWER\(ro\.role_name\) = LOWER\(\$3\)/);
+  expect(mockQuery).toHaveBeenCalledWith(expect.any(String), ['POLRES', 'abc', 'operator']);
 });
 
 test('getRekapLinkByClient_khusus orders by priority list first', async () => {

@@ -3,7 +3,9 @@ import { jest } from '@jest/globals';
 process.env.JWT_SECRET ||= 'test-secret-key';
 
 const mockGetUsersByClient = jest.fn();
+const mockGetUsersByDirektorat = jest.fn();
 const mockFindUserById = jest.fn();
+const mockGetClientsByRole = jest.fn();
 const mockGetRekapKomentarByClient = jest.fn();
 const mockGetCommentsByVideoId = jest.fn();
 const mockGetPostsTodayByClient = jest.fn();
@@ -13,7 +15,9 @@ const toJakartaDateInput = (date) =>
 
 jest.unstable_mockModule('../src/model/userModel.js', () => ({
   getUsersByClient: mockGetUsersByClient,
+  getUsersByDirektorat: mockGetUsersByDirektorat,
   findUserById: mockFindUserById,
+  getClientsByRole: mockGetClientsByRole,
 }));
 
 jest.unstable_mockModule('../src/model/tiktokCommentModel.js', () => ({

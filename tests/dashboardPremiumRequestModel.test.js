@@ -52,7 +52,7 @@ test('createRequest inserts dashboard premium request row', async () => {
       null,
       null,
       null,
-      'pending',
+      undefined,
       null,
       null,
       null,

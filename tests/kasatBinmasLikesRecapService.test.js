@@ -30,6 +30,10 @@ describe('generateKasatBinmasLikesRecap', () => {
     jest.unstable_mockModule('../src/utils/utilsHelper.js', () => ({
       formatNama: (user) => user?.nama || '',
     }));
+    jest.unstable_mockModule('../src/service/kasatkerAttendanceService.js', () => ({
+      matchesKasatBinmasJabatan: (jabatan) =>
+        typeof jabatan === 'string' && /^\s*kasat\s*binmas\b/i.test(jabatan),
+    }));
     ({ generateKasatBinmasLikesRecap } = await import(
       '../src/service/kasatBinmasLikesRecapService.js'
     ));

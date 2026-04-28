@@ -1,12 +1,10 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import { query } from "../db/index.js";
-import { env } from "../config/env.js";
 import bcrypt from "bcrypt";
 import { v4 as uuidv4 } from "uuid";
 import * as penmasUserModel from "../model/penmasUserModel.js";
 import * as dashboardUserModel from "../model/dashboardUserModel.js";
-import * as dashboardPasswordResetModel from "../model/dashboardPasswordResetModel.js";
 import * as userModel from "../model/userModel.js";
 import * as clientModel from "../model/clientModel.js";
 import * as dashboardSubscriptionService from "../service/dashboardSubscriptionService.js";
@@ -19,245 +17,30 @@ import redis from "../config/redis.js";
 import { insertVisitorLog } from "../model/visitorLogModel.js";
 import { insertLoginLog } from "../model/loginLogModel.js";
 import { normalizeUserId } from '../utils/utilsHelper.js';
-import { 
-  sendLoginLogNotification, 
+import {
+  sendLoginLogNotification,
   sendUserApprovalRequest,
-  sendPasswordResetFailureNotification,
-  sendTelegramAdminMessage
+  sendTelegramAdminMessage,
 } from "../service/telegramService.js";
 
-const RESET_TOKEN_EXPIRY_MINUTES = Number(
-  process.env.DASHBOARD_RESET_TOKEN_EXPIRY_MINUTES || 15,
-);
+import {
+  clearClientSessions,
+  clearDashboardSessions,
+  clearPenmasSessions,
+  clearUserSessions,
+  cookieOptions,
+} from './auth/shared.js';
+import {
+  handleDashboardPasswordResetConfirm,
+  handleDashboardPasswordResetRequest,
+} from './auth/passwordResetHandlers.js';
 
-const DEFAULT_RESET_BASE_URL = "https://papiqo.com";
-
-function buildResetMessage({ username, token }) {
-  const configuredBaseUrl =
-    process.env.DASHBOARD_PASSWORD_RESET_URL || process.env.DASHBOARD_URL;
-  const resetBaseUrl = configuredBaseUrl || DEFAULT_RESET_BASE_URL;
-  const header = "🔐 Reset Password Dashboard";
-  const baseUrlWithoutTrailingSlash = resetBaseUrl.replace(/\/$/, "");
-  const baseResetPath = baseUrlWithoutTrailingSlash.endsWith("/reset-password")
-    ? baseUrlWithoutTrailingSlash
-    : `${baseUrlWithoutTrailingSlash}/reset-password`;
-  const url = `${baseResetPath}?token=${token}`;
-  const instruction =
-    `Username: ${username}\nToken: ${token}\nToken berlaku selama ${RESET_TOKEN_EXPIRY_MINUTES} menit. Dengan url ${baseResetPath}`;
-  return `${header}\n\nSilakan buka tautan berikut untuk mengatur ulang password Anda:\n${url}\n\n${instruction}`;
-}
-
-async function clearSessions(userId, keyPrefix) {
-  const sessionKey = `${keyPrefix}:${userId}`;
-  try {
-    if (typeof redis.sMembers === "function") {
-      const tokens = await redis.sMembers(sessionKey);
-      if (Array.isArray(tokens) && tokens.length > 0) {
-        await Promise.all(
-          tokens.map((token) =>
-            redis
-              .del(`login_token:${token}`)
-              .catch((err) =>
-                console.error(
-                  `[AUTH] Gagal menghapus token login ${token}: ${err.message}`,
-                ),
-              ),
-          ),
-        );
-      }
-    }
-    if (typeof redis.del === "function") {
-      await redis.del(sessionKey);
-    }
-  } catch (err) {
-    console.error(
-      `[AUTH] Gagal menghapus sesi ${keyPrefix} ${userId}: ${err.message}`,
-    );
-  }
-}
-
-async function clearDashboardSessions(dashboardUserId) {
-  return clearSessions(dashboardUserId, 'dashboard_login');
-}
-
-async function clearPenmasSessions(userId) {
-  return clearSessions(userId, 'penmas_login');
-}
-
-async function clearClientSessions(clientId) {
-  return clearSessions(clientId, 'login');
-}
-
-async function clearUserSessions(userId) {
-  return clearSessions(userId, 'user_login');
-}
-
-const router = express.Router();
-
-
-const cookieSameSite = ['lax', 'strict', 'none'].includes(env.AUTH_COOKIE_SAME_SITE.toLowerCase())
-  ? env.AUTH_COOKIE_SAME_SITE.toLowerCase()
-  : 'lax';
-
-const requestedCookieSecure = ['true', '1', 'yes'].includes(String(env.AUTH_COOKIE_SECURE).toLowerCase());
-const isProduction = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
-const cookieSecure = isProduction || cookieSameSite === 'none' ? true : requestedCookieSecure;
-
-const cookieOptions = {
-  httpOnly: true,
-  sameSite: cookieSameSite,
-  maxAge: 2 * 60 * 60 * 1000,
-  secure: cookieSecure,
+export {
+  handleDashboardPasswordResetConfirm,
+  handleDashboardPasswordResetRequest,
 };
 
-if (env.AUTH_COOKIE_DOMAIN) {
-  cookieOptions.domain = env.AUTH_COOKIE_DOMAIN;
-}
-
-export async function handleDashboardPasswordResetRequest(req, res) {
-  const { username, contact } = req.body;
-  if (!username || !contact) {
-    return res.status(400).json({
-      success: false,
-      message: 'username dan kontak wajib diisi',
-    });
-  }
-  const normalizedContact = normalizeWhatsappNumber(contact);
-  if (!normalizedContact || normalizedContact.length < 8) {
-    return res.status(400).json({
-      success: false,
-      message: 'kontak whatsapp tidak valid',
-    });
-  }
-  try {
-    const user = await dashboardUserModel.findByUsername(username);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'pengguna dashboard tidak ditemukan',
-      });
-    }
-
-    let matchesWhatsapp = false;
-    if (user.whatsapp) {
-      matchesWhatsapp =
-        normalizeWhatsappNumber(user.whatsapp) === normalizedContact;
-    }
-    if (!matchesWhatsapp) {
-      const candidates = await dashboardUserModel.findAllByNormalizedWhatsApp(
-        normalizedContact,
-      );
-      matchesWhatsapp = candidates.some(
-        (candidate) => candidate.dashboard_user_id === user.dashboard_user_id,
-      );
-    }
-    if (!matchesWhatsapp) {
-      return res.status(400).json({
-        success: false,
-        message: 'kontak tidak sesuai dengan data pengguna',
-      });
-    }
-
-    const resetToken = uuidv4();
-    const expiresAt = new Date(
-      Date.now() + RESET_TOKEN_EXPIRY_MINUTES * 60 * 1000,
-    );
-    await dashboardPasswordResetModel.createResetRequest({
-      dashboardUserId: user.dashboard_user_id,
-      deliveryTarget: contact,
-      resetToken,
-      expiresAt,
-    });
-
-    try {
-      const message = buildResetMessage({ username: user.username, token: resetToken });
-      const sent = await sendTelegramAdminMessage(message);
-      if (!sent) {
-        throw new Error('Telegram send returned null');
-      }
-    } catch (err) {
-      console.warn(
-        `[Telegram] Gagal mengirim reset password dashboard untuk ${username}: ${err.message}`,
-      );
-      await sendPasswordResetFailureNotification(
-        `⚠️ Reset password dashboard gagal dikirim. Username: ${username}. Kontak: ${contact}. Token: ${resetToken}`,
-      ).catch(e => console.error('[Telegram] Failed to send failure notification:', e));
-      return res.status(500).json({
-        success: false,
-        message:
-          'Instruksi reset tidak dapat dikirim. Silakan hubungi admin untuk bantuan.',
-      });
-    }
-
-    return res.json({
-      success: true,
-      message: 'Permintaan reset password telah diterima. Token akan dikirim ke admin melalui Telegram. Silakan hubungi admin untuk mendapatkan token reset password Anda.',
-    });
-  } catch (err) {
-    console.error('[AUTH] Gagal membuat permintaan reset password dashboard:', err);
-    return res.status(500).json({
-      success: false,
-      message: 'Terjadi kesalahan pada server. Silakan hubungi admin.',
-    });
-  }
-}
-
-export async function handleDashboardPasswordResetConfirm(req, res) {
-  const { token, password, confirmPassword, password_confirmation: passwordConfirmation } =
-    req.body;
-  const confirmation = confirmPassword ?? passwordConfirmation;
-  if (!token || !password || !confirmation) {
-    return res.status(400).json({
-      success: false,
-      message: 'token, password, dan konfirmasi wajib diisi',
-    });
-  }
-  if (password !== confirmation) {
-    return res.status(400).json({
-      success: false,
-      message: 'konfirmasi password tidak cocok',
-    });
-  }
-  if (password.length < 8) {
-    return res.status(400).json({
-      success: false,
-      message: 'password minimal 8 karakter',
-    });
-  }
-
-  try {
-    const resetRecord = await dashboardPasswordResetModel.findActiveByToken(token);
-    if (!resetRecord) {
-      return res.status(400).json({
-        success: false,
-        message: 'token reset tidak valid atau sudah kedaluwarsa',
-      });
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-    const updatedUser = await dashboardUserModel.updatePasswordHash(
-      resetRecord.dashboard_user_id,
-      passwordHash,
-    );
-    if (!updatedUser) {
-      throw new Error('dashboard user not found when updating password');
-    }
-
-    await dashboardPasswordResetModel.markTokenUsed(token);
-    await clearDashboardSessions(resetRecord.dashboard_user_id);
-
-    return res.json({
-      success: true,
-      message: 'Password berhasil diperbarui. Silakan login kembali.',
-    });
-  } catch (err) {
-    console.error('[AUTH] Gagal mengonfirmasi reset password dashboard:', err);
-    return res.status(500).json({
-      success: false,
-      message: 'Terjadi kesalahan saat memperbarui password. Silakan hubungi admin.',
-    });
-  }
-}
+const router = express.Router();
 
 router.post('/penmas-register', async (req, res) => {
   const { username, password, role = 'penulis' } = req.body;
@@ -407,7 +190,7 @@ router.post('/dashboard-register', async (req, res) => {
   // Fetch client names for the approval message
   let clientNamesList = [];
   if (clientIds.length > 0) {
-    const clientPromises = clientIds.map(clientId => 
+    const clientPromises = clientIds.map(clientId =>
       clientModel.findById(clientId).then(client => ({ clientId, client }))
     );
     const clientResults = await Promise.all(clientPromises);
@@ -421,7 +204,7 @@ router.post('/dashboard-register', async (req, res) => {
   }
 
   // Log approval request
-  console.log('[AUTH]', 
+  console.log('[AUTH]',
     `\uD83D\uDCCB Permintaan User Approval dengan data sebagai berikut :\nUsername: ${username}\nID: ${dashboard_user_id}\nRole: ${roleRow?.role_name || '-'}\nEmail: ${email}\nClient ID: ${
       clientIds.length ? clientIds.join(', ') : '-'
     }\n\nBalas approvedash#${username} untuk menyetujui atau denydash#${username} untuk menolak.`
@@ -514,7 +297,7 @@ router.post('/dashboard-login', async (req, res) => {
   });
   const clientInfoLabel = user.client_ids.length === 1 ? 'Client ID' : 'Client IDs';
   const clientInfo = user.client_ids.length === 1 ? user.client_ids[0] : user.client_ids.join(', ');
-  
+
   // Send notification to admin via Telegram
   sendLoginLogNotification({
     username: user.username,
@@ -529,10 +312,12 @@ router.post('/dashboard-login', async (req, res) => {
   }).catch((err) => {
     console.warn(`[Telegram] Failed to send login notification: ${err.message}`);
   });
-  
+
   return res.json({ success: true, token, user: payload });
 });
 
+// Canonical dashboard password-reset routes live under /api/password-reset/*.
+// Keep the /api/auth/* aliases for backward compatibility during migration.
 router.post('/dashboard-password-reset/request', handleDashboardPasswordResetRequest);
 router.post('/password-reset/request', handleDashboardPasswordResetRequest);
 
@@ -547,7 +332,7 @@ router.post("/login", async (req, res) => {
     const time = new Date().toLocaleString("id-ID", {
       timeZone: "Asia/Jakarta",
     });
-    console.log('[AUTH]', 
+    console.log('[AUTH]',
       `❌ Login gagal\nAlasan: ${reason}\nID: ${client_id || "-"}\nOperator: ${
         client_operator || "-"}\nWaktu: ${time}`
     );
@@ -565,7 +350,7 @@ router.post("/login", async (req, res) => {
   if (!client) {
     const reason = "client_id tidak ditemukan";
     const time = new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" });
-    console.log('[AUTH]', 
+    console.log('[AUTH]',
       `❌ Login gagal\nAlasan: ${reason}\nID: ${client_id}\nOperator: ${client_operator}\nWaktu: ${time}`
     );
     return res.status(401).json({
@@ -624,12 +409,12 @@ router.post("/login", async (req, res) => {
     loginSource: 'mobile'
   });
   const time = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
-  
+
   // Send notification to admin via WhatsApp
-  console.log('[AUTH]', 
+  console.log('[AUTH]',
     `\uD83D\uDD11 Login: ${client.nama} (${client.client_id})\nOperator: ${client_operator}\nWaktu: ${time}`
   );
-  
+
   // Send notification to admin via Telegram
   sendLoginLogNotification({
     username: client.nama,
@@ -644,7 +429,7 @@ router.post("/login", async (req, res) => {
   }).catch((err) => {
     console.warn(`[Telegram] Failed to send login notification: ${err.message}`);
   });
-  
+
   // Kembalikan token dan data client
   return res.json({ success: true, token, client: payload });
 });
@@ -682,37 +467,37 @@ router.post('/user-register', async (req, res) => {
 
 router.post('/user-login', async (req, res) => {
   const { user_id, whatsapp, nrp, password } = req.body;
-  
+
   // Support both new mechanism (user_id + whatsapp) and old mechanism (nrp + password)
   if (user_id && whatsapp) {
     // New mechanism: authenticate with user_id and whatsapp
     const normalizedUserId = normalizeUserId(user_id);
     const normalizedWhatsapp = normalizeWhatsappNumber(whatsapp);
-    
+
     if (!normalizedUserId) {
       return res
         .status(400)
         .json({ success: false, message: 'user_id dan whatsapp wajib diisi' });
     }
-    
+
     if (!normalizedWhatsapp || normalizedWhatsapp.length < minPhoneDigitLength) {
       return res
         .status(400)
         .json({ success: false, message: 'whatsapp tidak valid' });
     }
-    
+
     const { rows } = await query(
       'SELECT user_id, nama, whatsapp FROM "user" WHERE user_id = $1 AND whatsapp = $2',
       [normalizedUserId, normalizedWhatsapp]
     );
     const user = rows[0];
-    
+
     if (!user) {
       return res
         .status(401)
         .json({ success: false, message: 'Login gagal: user_id atau whatsapp tidak sesuai' });
     }
-    
+
     const payload = { user_id: user.user_id, nama: user.nama, role: 'user' };
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
       expiresIn: '2h'
@@ -736,7 +521,7 @@ router.post('/user-login', async (req, res) => {
       const time = new Date().toLocaleString('id-ID', {
         timeZone: 'Asia/Jakarta'
       });
-      console.warn('[AUTH]', 
+      console.warn('[AUTH]',
         `\uD83D\uDD11 Login user: ${user.user_id} - ${user.nama}\nWaktu: ${time}`
       );
     }
@@ -789,7 +574,7 @@ router.post('/user-login', async (req, res) => {
       const time = new Date().toLocaleString('id-ID', {
         timeZone: 'Asia/Jakarta'
       });
-      console.warn('[AUTH]', 
+      console.warn('[AUTH]',
         `\uD83D\uDD11 Login user: ${user.user_id} - ${user.nama}\nWaktu: ${time}`
       );
     }
@@ -806,7 +591,7 @@ router.get('/open', async (req, res) => {
   const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress;
   const ua = req.headers['user-agent'] || '';
   await insertVisitorLog({ ip, userAgent: ua });
-  console.log('[AUTH]', 
+  console.log('[AUTH]',
     `\uD83D\uDD0D Web dibuka\nIP: ${ip}\nUA: ${ua}\nWaktu: ${time}`
   );
   return res.json({ success: true });

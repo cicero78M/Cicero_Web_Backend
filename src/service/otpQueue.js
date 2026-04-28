@@ -13,8 +13,3 @@ export async function enqueueOtp(email, otp) {
     throw err;
   }
 }
-
-// Kept for backward compatibility; no longer needed when sending OTP directly.
-export async function startOtpWorker() {
-  return Promise.resolve();
-}

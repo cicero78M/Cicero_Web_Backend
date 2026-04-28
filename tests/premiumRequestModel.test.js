@@ -63,6 +63,7 @@ test('expireOldRequests runs update', async () => {
   mockQuery.mockResolvedValueOnce({});
   await expireOldRequests(3);
   expect(mockQuery).toHaveBeenCalledWith(
-    expect.stringContaining('UPDATE premium_request SET status')
+    expect.stringContaining('UPDATE premium_request SET status'),
+    [3]
   );
 });

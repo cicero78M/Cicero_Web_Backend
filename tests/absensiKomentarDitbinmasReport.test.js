@@ -4,6 +4,8 @@ const mockQuery = jest.fn();
 const mockGetPostsTodayByClient = jest.fn();
 const mockGetCommentsByVideoId = jest.fn();
 const mockGetUsersByDirektorat = jest.fn();
+const mockGetUsersByClient = jest.fn();
+const mockGetClientsByRole = jest.fn();
 
 jest.unstable_mockModule('../src/db/index.js', () => ({ query: mockQuery }));
 jest.unstable_mockModule('../src/model/tiktokPostModel.js', () => ({
@@ -15,13 +17,11 @@ jest.unstable_mockModule('../src/model/tiktokCommentModel.js', () => ({
   getCommentsByVideoId: mockGetCommentsByVideoId,
   deleteCommentsByVideoId: jest.fn(),
 }));
-jest.unstable_mockModule('../src/model/userModel.js', async () => {
-  const actual = await import('../src/model/userModel.js');
-  return {
-    ...actual,
-    getUsersByDirektorat: mockGetUsersByDirektorat,
-  };
-});
+jest.unstable_mockModule('../src/model/userModel.js', () => ({
+  getUsersByDirektorat: mockGetUsersByDirektorat,
+  getUsersByClient: mockGetUsersByClient,
+  getClientsByRole: mockGetClientsByRole,
+}));
 
 let absensiKomentarDitbinmasReport;
 
@@ -34,9 +34,11 @@ beforeEach(() => {
   mockGetPostsTodayByClient.mockReset();
   mockGetCommentsByVideoId.mockReset();
   mockGetUsersByDirektorat.mockReset();
+  mockGetUsersByClient.mockReset();
+  mockGetClientsByRole.mockReset();
 });
 
-test('aggregates komentar report per division for Ditbinmas with Ditbinmas first', async () => {
+test('aggregates komentar report per division for Ditbinmas with current section ordering and totals', async () => {
 
   mockQuery.mockResolvedValueOnce({ rows: [{ nama: 'DIREKTORAT BINMAS', client_tiktok: 'ditbinmastiktok' }] });
 
@@ -60,18 +62,16 @@ test('aggregates komentar report per division for Ditbinmas with Ditbinmas first
 
   expect(mockGetUsersByDirektorat).toHaveBeenCalledWith('ditbinmas', 'DITBINMAS');
   expect(msg).toContain('*Jumlah Total Personil:* 5 pers');
-  expect(msg).toContain('✅ *Sudah melaksanakan* : *3 pers*');
+  expect(msg).toContain('✅ *Sudah Melaksanakan* : *3 pers*');
   expect(msg).toContain('⚠️ *Melaksanakan kurang lengkap* : *0 pers*');
   expect(msg).toContain('❌ *Belum melaksanakan* : *2 pers*');
-  expect(msg).toContain('⚠️ *Belum Update Username TikTok* : *0 pers*');
-  // ensure zero-count segments are hidden in division reports
-  expect(msg).not.toContain('⚠️ Melaksanakan Kurang Lengkap (0 pers)');
-  expect(msg).not.toContain('⚠️ Belum Update Username TikTok (0 pers)');
+  expect(msg).toContain('⚠️❌ *Belum Update Username TikTok* : *0 pers*');
+  expect(msg).toContain('⚠️ *Melaksanakan kurang lengkap* : *0 pers*');
 
-  // division headers should still be present
-  expect(msg).toContain('1. DITBINMAS');
-  expect(msg).toContain('2. DIV A');
-  expect(msg).toContain('3. DIV B');
+  // division headers should still be present in rendered order
+  expect(msg).toContain('1. DIV A');
+  expect(msg).toContain('2. DIV B');
+  expect(msg).toContain('3. DITBINMAS');
 
   // two divisions should have one person who has not performed
   expect((msg.match(/❌ Belum melaksanakan \(1 pers\)/g) || []).length).toBe(2);

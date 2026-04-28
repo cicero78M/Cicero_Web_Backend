@@ -9,6 +9,7 @@ const mockGetUsersByClientAndRole = jest.fn();
 const mockGetUsersByDirektorat = jest.fn();
 const mockFindClientById = jest.fn();
 const mockUpdateUserRolesUserId = jest.fn();
+const mockGetUserDirectoryUsers = jest.fn();
 
 jest.unstable_mockModule('../src/model/userModel.js', () => ({
   createUser: mockCreateUser,
@@ -23,6 +24,16 @@ jest.unstable_mockModule('../src/model/userModel.js', () => ({
 
 jest.unstable_mockModule('../src/service/clientService.js', () => ({
   findClientById: mockFindClientById
+}));
+
+jest.unstable_mockModule('../src/service/userDirectoryService.js', () => ({
+  getUserDirectoryUsers: mockGetUserDirectoryUsers,
+  UserDirectoryError: class UserDirectoryError extends Error {
+    constructor(message, status = 400) {
+      super(message);
+      this.status = status;
+    }
+  },
 }));
 
 let createUser;
@@ -50,6 +61,7 @@ beforeEach(() => {
   mockGetUsersByDirektorat.mockReset();
   mockFindClientById.mockReset();
   mockUpdateUserRolesUserId.mockReset();
+  mockGetUserDirectoryUsers.mockReset();
 });
 
 test('operator adds user with defaults', async () => {
@@ -273,7 +285,7 @@ test('reactivates existing user and attaches ditbinmas role', async () => {
     ditintelkam: false,
     operator: false
   });
-  expect(mockUpdateUserField).not.toHaveBeenCalled();
+  expect(mockUpdateUserField).toHaveBeenCalledWith('1', 'client_id', 'C2');
   expect(mockCreateUser).not.toHaveBeenCalled();
   expect(status).toHaveBeenCalledWith(200);
   expect(json).toHaveBeenCalledWith({
@@ -348,8 +360,7 @@ test('ditintelkam creates new user with flag', async () => {
 });
 
 test('ditbinmas role with matching client_id shows all users', async () => {
-  mockFindClientById.mockResolvedValue({ client_type: 'direktorat' });
-  mockGetUsersByDirektorat.mockResolvedValue([{ user_id: '1', ditbinmas: true }]);
+  mockGetUserDirectoryUsers.mockResolvedValue({ users: [{ user_id: '1', ditbinmas: true }] });
   const req = {
     user: { role: 'ditbinmas', client_id: 'DITBINMAS' },
     query: { client_id: 'ditbinmas' }
@@ -360,15 +371,21 @@ test('ditbinmas role with matching client_id shows all users', async () => {
 
   await getUserList(req, res, () => {});
 
-  expect(mockFindClientById).not.toHaveBeenCalled();
-  expect(mockGetUsersByDirektorat).toHaveBeenCalledWith('ditbinmas');
+  expect(mockGetUserDirectoryUsers).toHaveBeenCalledWith({
+    requesterRole: 'ditbinmas',
+    tokenClientId: 'DITBINMAS',
+    tokenClientIds: ['DITBINMAS'],
+    clientId: 'ditbinmas',
+    role: 'ditbinmas',
+    scope: 'org',
+    regionalId: null,
+  });
   expect(status).toHaveBeenCalledWith(200);
   expect(json).toHaveBeenCalledWith({ success: true, data: [{ user_id: '1', ditbinmas: true }] });
 });
 
 test('ditbinmas role with different client_id filters users by client', async () => {
-  mockFindClientById.mockResolvedValue({ client_type: 'direktorat' });
-  mockGetUsersByDirektorat.mockResolvedValue([{ user_id: '2', ditbinmas: true }]);
+  mockGetUserDirectoryUsers.mockResolvedValue({ users: [{ user_id: '2', ditbinmas: true }] });
   const req = {
     user: { role: 'ditbinmas', client_id: 'c1' },
     query: { client_id: 'ditbinmas' }
@@ -379,14 +396,21 @@ test('ditbinmas role with different client_id filters users by client', async ()
 
   await getUserList(req, res, () => {});
 
-  expect(mockFindClientById).not.toHaveBeenCalled();
-  expect(mockGetUsersByDirektorat).toHaveBeenCalledWith('ditbinmas', 'c1');
+  expect(mockGetUserDirectoryUsers).toHaveBeenCalledWith({
+    requesterRole: 'ditbinmas',
+    tokenClientId: 'c1',
+    tokenClientIds: ['c1'],
+    clientId: 'ditbinmas',
+    role: 'ditbinmas',
+    scope: 'org',
+    regionalId: null,
+  });
   expect(status).toHaveBeenCalledWith(200);
   expect(json).toHaveBeenCalledWith({ success: true, data: [{ user_id: '2', ditbinmas: true }] });
 });
 
 test('ditsamapta client routes to direktorate handler with token client filter', async () => {
-  mockGetUsersByDirektorat.mockResolvedValue([{ user_id: '4', ditsamapta: true }]);
+  mockGetUserDirectoryUsers.mockResolvedValue({ users: [{ user_id: '4', ditsamapta: true }] });
   const req = {
     user: { role: 'admin', client_id: 'ORG1' },
     query: { client_id: 'DITSAMAPTA' }
@@ -397,15 +421,21 @@ test('ditsamapta client routes to direktorate handler with token client filter',
 
   await getUserList(req, res, () => {});
 
-  expect(mockFindClientById).not.toHaveBeenCalled();
-  expect(mockGetUsersByDirektorat).toHaveBeenCalledWith('ditsamapta', 'ORG1');
+  expect(mockGetUserDirectoryUsers).toHaveBeenCalledWith({
+    requesterRole: 'admin',
+    tokenClientId: 'ORG1',
+    tokenClientIds: ['ORG1'],
+    clientId: 'DITSAMAPTA',
+    role: 'admin',
+    scope: 'org',
+    regionalId: null,
+  });
   expect(status).toHaveBeenCalledWith(200);
   expect(json).toHaveBeenCalledWith({ success: true, data: [{ user_id: '4', ditsamapta: true }] });
 });
 
 test('non-operator role with org client uses client id and role', async () => {
-  mockFindClientById.mockResolvedValue({ client_type: 'org' });
-  mockGetUsersByClient.mockResolvedValue([{ user_id: '3' }]);
+  mockGetUserDirectoryUsers.mockResolvedValue({ users: [{ user_id: '3' }] });
   const req = { user: { role: 'admin' }, query: { client_id: 'c2' } };
   const json = jest.fn();
   const status = jest.fn().mockReturnThis();
@@ -413,8 +443,15 @@ test('non-operator role with org client uses client id and role', async () => {
 
   await getUserList(req, res, () => {});
 
-  expect(mockFindClientById).toHaveBeenCalledWith('c2');
-  expect(mockGetUsersByClient).toHaveBeenCalledWith('c2', 'admin');
+  expect(mockGetUserDirectoryUsers).toHaveBeenCalledWith({
+    requesterRole: 'admin',
+    tokenClientId: undefined,
+    tokenClientIds: [],
+    clientId: 'c2',
+    role: 'admin',
+    scope: 'org',
+    regionalId: null,
+  });
   expect(status).toHaveBeenCalledWith(200);
   expect(json).toHaveBeenCalledWith({ success: true, data: [{ user_id: '3' }] });
 });

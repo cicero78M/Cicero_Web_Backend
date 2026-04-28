@@ -34,12 +34,14 @@ jest.unstable_mockModule('../src/service/profileCacheService.js', () => ({
 
 jest.unstable_mockModule('../src/service/clientService.js', () => ({
   findClientById: mockFindClientById,
+  fetchTiktokSecUid: jest.fn(),
 }));
 
 jest.unstable_mockModule('../src/service/tiktokPostService.js', () => ({}));
 jest.unstable_mockModule('../src/service/tiktokCommentService.js', () => ({}));
 jest.unstable_mockModule('../src/middleware/dashboardAuth.js', () => ({
   verifyDashboardToken: (req, res, next) => next(),
+  verifyDashboardOrClientToken: (req, res, next) => next(),
 }));
 
 let app;

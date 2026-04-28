@@ -2,7 +2,7 @@
 
 import { jest } from '@jest/globals';
 
-// Mock node-telegram-bot-api before importing telegramService
+// Mock telegram adapter before importing telegramService
 const mockSendMessage = jest.fn();
 const mockOnText = jest.fn();
 const mockOn = jest.fn();
@@ -17,7 +17,7 @@ const mockBot = {
   editMessageReplyMarkup: mockEditMessageReplyMarkup
 };
 
-jest.unstable_mockModule('node-telegram-bot-api', () => ({
+jest.unstable_mockModule('../src/service/telegramBotAdapter.js', () => ({
   default: jest.fn(() => mockBot)
 }));
 

@@ -1,14 +1,18 @@
 import { jest } from '@jest/globals';
 
 const mockWithTransaction = jest.fn();
+const mockQuery = jest.fn();
 const mockCreateRequest = jest.fn();
 const mockInsertAuditEntry = jest.fn();
 const mockFindLatestOpenByDashboardUserId = jest.fn();
 const mockFindLatestOpenByUsername = jest.fn();
 const mockFindDashboardUserById = jest.fn();
+const mockFindActiveSubscriptionByUser = jest.fn();
+const mockCreateSubscriptionWithClient = jest.fn();
 
 jest.unstable_mockModule('../src/repository/db.js', () => ({
   withTransaction: mockWithTransaction,
+  query: mockQuery,
 }));
 
 jest.unstable_mockModule('../src/model/dashboardPremiumRequestModel.js', () => ({
@@ -20,6 +24,14 @@ jest.unstable_mockModule('../src/model/dashboardPremiumRequestModel.js', () => (
 
 jest.unstable_mockModule('../src/model/dashboardUserModel.js', () => ({
   findById: mockFindDashboardUserById,
+}));
+
+jest.unstable_mockModule('../src/model/dashboardSubscriptionModel.js', () => ({
+  findActiveByUser: mockFindActiveSubscriptionByUser,
+}));
+
+jest.unstable_mockModule('../src/service/dashboardSubscriptionService.js', () => ({
+  createSubscriptionWithClient: mockCreateSubscriptionWithClient,
 }));
 
 let createDashboardPremiumRequest;
@@ -37,6 +49,9 @@ beforeEach(() => {
     whatsapp: '12345',
     client_ids: ['client-1'],
   });
+  mockFindActiveSubscriptionByUser.mockResolvedValue(null);
+  mockQuery.mockResolvedValue({ rows: [] });
+  mockCreateSubscriptionWithClient.mockResolvedValue({ subscription: {}, cache: {} });
   mockCreateRequest.mockResolvedValue({
     request_id: 'req-1',
     dashboard_user_id: 'user-1',
@@ -53,7 +68,7 @@ const basePayload = {
 
 describe('createDashboardPremiumRequest - open request guard', () => {
   test('throws conflict when an open request exists', async () => {
-    mockFindLatestOpenByDashboardUserId.mockResolvedValue({
+    mockFindLatestOpenByUsername.mockResolvedValue({
       request_id: 'req-0',
       dashboard_user_id: 'user-1',
       status: 'pending',
@@ -72,7 +87,7 @@ describe('createDashboardPremiumRequest - open request guard', () => {
   });
 
   test('allows creation after previous request is closed', async () => {
-    mockFindLatestOpenByDashboardUserId
+    mockFindLatestOpenByUsername
       .mockResolvedValueOnce({
         request_id: 'req-0',
         dashboard_user_id: 'user-1',

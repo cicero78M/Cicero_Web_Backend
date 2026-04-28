@@ -57,14 +57,14 @@ test('createLinkReport inserts row', async () => {
   expect(mockQuery).toHaveBeenNthCalledWith(
     1,
     expect.stringContaining('FROM link_report'),
-    ['abc', '1']
+    ['abc', '1', '2 days']
   );
   const sql = mockQuery.mock.calls[1][0];
-  expect(sql).toContain("p.created_at >= (NOW() AT TIME ZONE 'Asia/Jakarta') - INTERVAL '2 days'");
+  expect(sql).toContain("p.created_at >= (NOW() AT TIME ZONE 'Asia/Jakarta') - $8::interval");
   expect(mockQuery).toHaveBeenNthCalledWith(
     2,
     expect.any(String),
-    ['abc', '1', 'a', null, null, null, null]
+    ['abc', '1', 'a', null, null, null, null, '2 days']
   );
 });
 
@@ -72,7 +72,8 @@ test('hasRecentLinkReport enforces 2-day interval', async () => {
   mockQuery.mockResolvedValueOnce({ rows: [] });
   await hasRecentLinkReport('abc', 'user-1');
   const sql = mockQuery.mock.calls[0][0];
-  expect(sql).toContain("INTERVAL '2 days'");
+  expect(sql).toContain('created_at >= NOW() - $3::interval');
+  expect(mockQuery.mock.calls[0][1]).toEqual(['abc', 'user-1', '2 days']);
 });
 
 test('createLinkReport throws when shortcode missing or older than 2 days', async () => {
@@ -92,7 +93,7 @@ test('createLinkReport throws when recent link report exists', async () => {
   ).rejects.toThrow('anda mengirimkan link duplikasi');
   expect(mockQuery).toHaveBeenCalledWith(
     expect.stringContaining('FROM link_report'),
-    ['abc', '1']
+    ['abc', '1', '2 days']
   );
 });
 
@@ -114,7 +115,8 @@ test('getLinkReports joins with insta_post', async () => {
   );
   expect(mockQuery).toHaveBeenNthCalledWith(
     2,
-    expect.stringContaining('SELECT COUNT(*)::int AS count FROM link_report')
+    expect.stringContaining('SELECT COUNT(*)::int AS count FROM link_report r'),
+    []
   );
 });
 

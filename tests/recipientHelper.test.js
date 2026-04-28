@@ -8,7 +8,6 @@ jest.unstable_mockModule('../src/repository/clientContactRepository.js', () => (
 
 jest.unstable_mockModule('../src/utils/waHelper.js', () => ({
   formatToWhatsAppId: (nohp) => `${nohp}@c.us`,
-  getAdminWAIds: () => ['admin@c.us'],
 }));
 
 let buildClientRecipientSet;
@@ -40,7 +39,6 @@ test('buildClientRecipientSet merges admin, super admin, operator, and group', a
 
   expect(hasClientRecipients).toBe(true);
   expect(Array.from(recipients)).toEqual([
-    'admin@c.us',
     '081234@c.us',
     '62000@c.us',
     '120@g.us',

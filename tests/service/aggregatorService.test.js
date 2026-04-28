@@ -4,8 +4,17 @@ const mockFindById = jest.fn();
 
 jest.unstable_mockModule('../../src/model/clientModel.js', () => ({
   findById: mockFindById,
+  findByRegionalId: jest.fn(async () => []),
   findAllActiveDirektoratWithSosmed: jest.fn(),
 }));
+jest.unstable_mockModule('../../src/service/instaProfileService.js', () => ({}));
+jest.unstable_mockModule('../../src/model/instaPostModel.js', () => ({}));
+jest.unstable_mockModule('../../src/model/tiktokPostModel.js', () => ({}));
+jest.unstable_mockModule('../../src/service/instagramApi.js', () => ({ fetchInstagramProfile: jest.fn() }));
+jest.unstable_mockModule('../../src/handler/fetchpost/instaFetchPost.js', () => ({ fetchAndStoreInstaContent: jest.fn() }));
+jest.unstable_mockModule('../../src/handler/fetchpost/tiktokFetchPost.js', () => ({ fetchAndStoreTiktokContent: jest.fn() }));
+jest.unstable_mockModule('../../src/service/tiktokRapidService.js', () => ({ fetchTiktokProfile: jest.fn() }));
+jest.unstable_mockModule('../../src/middleware/debugHandler.js', () => ({ sendConsoleDebug: jest.fn() }));
 
 const { resolveAggregatorClient } = await import('../../src/service/aggregatorService.js');
 
@@ -64,8 +73,8 @@ describe('resolveAggregatorClient', () => {
 
   test('maps org requests using directorate role to parent directorate', async () => {
     mockFindById.mockImplementation(async (id) => {
-      if (id === 'ORG1') return { client_id: 'ORG1', client_type: 'org' };
-      if (id === 'DITLANTAS') return { client_id: 'DITLANTAS', client_type: 'direktorat' };
+      if (String(id).toUpperCase() === 'ORG1') return { client_id: 'ORG1', client_type: 'org' };
+      if (String(id).toUpperCase() === 'DITLANTAS') return { client_id: 'DITLANTAS', client_type: 'direktorat' };
       return null;
     });
 

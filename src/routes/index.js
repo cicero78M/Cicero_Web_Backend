@@ -1,7 +1,6 @@
 import express from 'express';
 import userRoutes from './userRoutes.js';
 import clientRoutes from './clientRoutes.js';
-import authRoutes from './authRoutes.js';
 import dashboardRoutes from "./dashboardRoutes.js";
 import instaRoutes from "./instaRoutes.js";
 import quoteRoutes from './quoteRoutes.js';
@@ -27,7 +26,6 @@ const router = express.Router();
 
 router.use('/clients', clientRoutes);
 router.use('/users', userRoutes);
-router.use('/auth', authRoutes);
 router.use("/dashboard", dashboardRoutes);
 router.use("/insta", instaRoutes);
 router.use("/instagram", instagramRoutes);

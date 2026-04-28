@@ -28,7 +28,7 @@ describe('findBySuperAdmin', () => {
 
     expect(mockQuery).toHaveBeenCalledTimes(1);
     const [sql, params] = mockQuery.mock.calls[0];
-    expect(sql).toContain("client_super ~ ('(^|\\\\D)' || $1 || '(\\\\D|$)')");
+    expect(sql).toContain("client_super ~ ('(^|\\D)' || $1 || '(\\D|$)')");
     expect(params).toEqual(['628999888777', '08999888777']);
     expect(result).toEqual(row);
   });

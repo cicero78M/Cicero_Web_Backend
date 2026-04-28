@@ -17,6 +17,8 @@ beforeEach(() => {
 test('builds recap message with dashboard and penmas users', async () => {
   const startTime = new Date('2025-05-05T00:00:00Z');
   const endTime = new Date('2025-05-11T23:59:59.999Z');
+  const expectedStart = new Date('2025-05-04T17:00:00.000Z');
+  const expectedEnd = new Date('2025-05-12T16:59:59.999Z');
 
   mockGetWebLoginCountsByActor.mockResolvedValue([
     { actor_id: 'dash-1', login_count: '2' },
@@ -37,10 +39,13 @@ test('builds recap message with dashboard and penmas users', async () => {
 
   const message = await absensiLoginWeb({ mode: 'mingguan', startTime, endTime });
 
-  const startLabel = startTime.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' });
-  const endLabel = endTime.toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' });
+  const startLabel = '05/05/2025';
+  const endLabel = '12/05/2025';
 
-  expect(mockGetWebLoginCountsByActor).toHaveBeenCalledWith({ startTime, endTime });
+  expect(mockGetWebLoginCountsByActor).toHaveBeenCalledWith({
+    startTime: expectedStart,
+    endTime: expectedEnd,
+  });
   expect(message).toContain('Mingguan');
   expect(message).toContain(`Periode: ${startLabel} - ${endLabel}`);
   expect(message).toContain('Total hadir: 2 user (3 login)');
@@ -50,8 +55,8 @@ test('builds recap message with dashboard and penmas users', async () => {
 
 test('builds monthly recap grouped by polres', async () => {
   const startTime = new Date('2025-06-15T00:00:00Z');
-  const expectedStart = new Date('2025-06-01T00:00:00.000Z');
-  const expectedEnd = new Date('2025-06-30T23:59:59.999Z');
+  const expectedStart = new Date('2025-05-31T17:00:00.000Z');
+  const expectedEnd = new Date('2025-06-30T16:59:59.999Z');
 
   mockGetWebLoginCountsByActor.mockResolvedValue([]);
 
@@ -81,8 +86,8 @@ test('builds monthly recap grouped by polres', async () => {
 
 test('monthly recap ignores directorat clients even with login activity', async () => {
   const startTime = new Date('2025-07-10T00:00:00Z');
-  const expectedStart = new Date('2025-07-01T00:00:00.000Z');
-  const expectedEnd = new Date('2025-07-31T23:59:59.999Z');
+  const expectedStart = new Date('2025-06-30T17:00:00.000Z');
+  const expectedEnd = new Date('2025-07-31T16:59:59.999Z');
 
   mockGetWebLoginCountsByActor.mockResolvedValue([]);
 

@@ -30,10 +30,7 @@ test('harian with specific date uses date filter', async () => {
   mockQuery.mockResolvedValueOnce({ rows: [] });
   mockQuery.mockResolvedValueOnce({ rows: [{ total_post: 0 }] });
   await getRekapLikesByClient('1', 'harian', '2023-10-05');
-  const expected = `(CASE
-      WHEN p.source_type = 'manual_input' THEN p.created_at
-      ELSE COALESCE(p.original_created_at, p.created_at)
-    END AT TIME ZONE 'Asia/Jakarta')::date = $2::date`;
+  const expected = `(COALESCE(p.created_at, p.original_created_at) AT TIME ZONE 'Asia/Jakarta')::date = $2::date`;
   expect(mockQuery).toHaveBeenNthCalledWith(1, expect.stringContaining(expected), expect.any(Array));
   expectPriorityParams(mockQuery.mock.calls[0][1], ['1', '2023-10-05']);
 });
@@ -42,10 +39,7 @@ test('mingguan with date truncs week', async () => {
   mockQuery.mockResolvedValueOnce({ rows: [] });
   mockQuery.mockResolvedValueOnce({ rows: [{ total_post: 0 }] });
   await getRekapLikesByClient('1', 'mingguan', '2023-10-05');
-  const expected = `date_trunc('week', (CASE
-      WHEN p.source_type = 'manual_input' THEN p.created_at
-      ELSE COALESCE(p.original_created_at, p.created_at)
-    END AT TIME ZONE 'Asia/Jakarta')) = date_trunc('week', $2::date)`;
+  const expected = `date_trunc('week', (COALESCE(p.created_at, p.original_created_at) AT TIME ZONE 'Asia/Jakarta')) = date_trunc('week', $2::date)`;
   expect(mockQuery).toHaveBeenNthCalledWith(1, expect.stringContaining(expected), expect.any(Array));
   expectPriorityParams(mockQuery.mock.calls[0][1], ['1', '2023-10-05']);
 });
@@ -54,10 +48,7 @@ test('bulanan converts month string', async () => {
   mockQuery.mockResolvedValueOnce({ rows: [] });
   mockQuery.mockResolvedValueOnce({ rows: [{ total_post: 0 }] });
   await getRekapLikesByClient('1', 'bulanan', '2023-10');
-  const expected = `date_trunc('month', (CASE
-      WHEN p.source_type = 'manual_input' THEN p.created_at
-      ELSE COALESCE(p.original_created_at, p.created_at)
-    END AT TIME ZONE 'Asia/Jakarta')) = date_trunc('month', $2::date)`;
+  const expected = `date_trunc('month', (COALESCE(p.created_at, p.original_created_at) AT TIME ZONE 'Asia/Jakarta')) = date_trunc('month', $2::date)`;
   expect(mockQuery).toHaveBeenNthCalledWith(1, expect.stringContaining(expected), expect.any(Array));
   expectPriorityParams(mockQuery.mock.calls[0][1], ['1', '2023-10-01']);
 });
@@ -74,10 +65,7 @@ test('date range uses between filter', async () => {
   mockQuery.mockResolvedValueOnce({ rows: [] });
   mockQuery.mockResolvedValueOnce({ rows: [{ total_post: 0 }] });
   await getRekapLikesByClient('1', 'harian', undefined, '2023-10-01', '2023-10-07');
-  const expected = `(CASE
-      WHEN p.source_type = 'manual_input' THEN p.created_at
-      ELSE COALESCE(p.original_created_at, p.created_at)
-    END AT TIME ZONE 'Asia/Jakarta')::date BETWEEN $2::date AND $3::date`;
+  const expected = `(COALESCE(p.created_at, p.original_created_at) AT TIME ZONE 'Asia/Jakarta')::date BETWEEN $2::date AND $3::date`;
   expect(mockQuery).toHaveBeenNthCalledWith(1, expect.stringContaining(expected), expect.any(Array));
   expectPriorityParams(mockQuery.mock.calls[0][1], ['1', '2023-10-01', '2023-10-07']);
 });
@@ -208,8 +196,7 @@ test('harian date filter uses manual_input created_at fallback for post date', a
   mockQuery.mockResolvedValueOnce({ rows: [{ total_post: 0 }] });
   await getRekapLikesByClient('1', 'harian', '2026-02-24');
   const sql = mockQuery.mock.calls[0][0];
-  expect(sql).toContain("WHEN p.source_type = 'manual_input' THEN p.created_at");
-  expect(sql).toContain("ELSE COALESCE(p.original_created_at, p.created_at)");
+  expect(sql).toContain("COALESCE(p.created_at, p.original_created_at)");
 });
 
 

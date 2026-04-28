@@ -20,6 +20,9 @@ let buildSatbinmasOfficialTiktokDbRecap;
 let querySatbinmasOfficialInstagramSummary;
 let querySatbinmasOfficialTiktokSummary;
 
+const toJakartaDate = (date) =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(date);
+
 describe('satbinmasOfficialReportService DB recaps', () => {
   beforeAll(async () => {
     ({
@@ -66,8 +69,8 @@ describe('satbinmasOfficialReportService DB recaps', () => {
     const callArgs = mockFetchSatbinmasOfficialMediaFromDb.mock.calls[0][0];
     expect(callArgs.start).toBeInstanceOf(Date);
     expect(callArgs.end).toBeInstanceOf(Date);
-    expect(callArgs.start.toISOString()).toContain('2024-05-06');
-    expect(callArgs.end.toISOString()).toContain('2024-05-13');
+    expect(toJakartaDate(callArgs.start)).toBe('2024-05-06');
+    expect(toJakartaDate(callArgs.end)).toBe('2024-05-13');
 
     expect(recap).toContain('Rekap mingguan');
     expect(recap).toContain('POLRES A');
@@ -81,8 +84,8 @@ describe('satbinmasOfficialReportService DB recaps', () => {
     const recap = await buildSatbinmasOfficialTiktokDbRecap('monthly');
     const callArgs = mockFetchSatbinmasOfficialTiktokMediaFromDb.mock.calls[0][0];
 
-    expect(callArgs.start.toISOString()).toContain('2024-02-01');
-    expect(callArgs.end.toISOString()).toContain('2024-03-01');
+    expect(toJakartaDate(callArgs.start)).toBe('2024-02-01');
+    expect(toJakartaDate(callArgs.end)).toBe('2024-03-01');
 
     expect(recap).toContain('Rekap bulanan');
     expect(recap).toContain('@satbinmas_t');
@@ -95,15 +98,15 @@ describe('satbinmasOfficialReportService DB recaps', () => {
     await querySatbinmasOfficialInstagramSummary('daily');
     const { start, end } = mockFetchSatbinmasOfficialMediaFromDb.mock.calls[0][0];
 
-    expect(start.toISOString()).toContain('2024-05-08');
-    expect(end.toISOString()).toContain('2024-05-09');
+    expect(toJakartaDate(start)).toBe('2024-05-08');
+    expect(toJakartaDate(end)).toBe('2024-05-09');
   });
 
   test('querySatbinmasOfficialTiktokSummary forwards weekly range boundaries', async () => {
     await querySatbinmasOfficialTiktokSummary('weekly');
     const { start, end } = mockFetchSatbinmasOfficialTiktokMediaFromDb.mock.calls[0][0];
 
-    expect(start.toISOString()).toContain('2024-05-06');
-    expect(end.toISOString()).toContain('2024-05-13');
+    expect(toJakartaDate(start)).toBe('2024-05-06');
+    expect(toJakartaDate(end)).toBe('2024-05-13');
   });
 });

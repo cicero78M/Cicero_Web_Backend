@@ -23,6 +23,7 @@ jest.unstable_mockModule('../src/service/instaProfileService.js', () => ({}));
 jest.unstable_mockModule('../src/service/instagramUserService.js', () => ({}));
 jest.unstable_mockModule('../src/service/instaPostCacheService.js', () => ({}));
 jest.unstable_mockModule('../src/service/profileCacheService.js', () => ({}));
+jest.unstable_mockModule('../src/model/clientModel.js', () => ({}));
 
 const mockSendSuccess = jest.fn();
 jest.unstable_mockModule('../src/utils/response.js', () => ({

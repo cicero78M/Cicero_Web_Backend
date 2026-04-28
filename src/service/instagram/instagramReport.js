@@ -24,9 +24,10 @@ export async function getClientInfo(clientId) {
   } catch (error) {
     if (process.env.NODE_ENV !== "test") throw error;
   }
+  const rows = Array.isArray(res?.rows) ? res.rows : [];
   const info = {
-    nama: res.rows[0]?.nama || clientId,
-    clientType: res.rows[0]?.client_type || null,
+    nama: rows[0]?.nama || clientId,
+    clientType: rows[0]?.client_type || null,
   };
   if (process.env.NODE_ENV !== "test") {
     clientInfoCache.set(key, info);
@@ -592,4 +593,3 @@ export async function lapharDitbinmas(clientId = "DITBINMAS") {
     textBelum,
   };
 }
-

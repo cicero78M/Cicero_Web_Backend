@@ -64,7 +64,7 @@ describe('createLinkReport branching', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  test('non-IG ditolak: instagram_link wajib', async () => {
+  test('non-IG tanpa shortcode ditolak', async () => {
     const req = {
       body: {
         facebook_link: 'https://facebook.com/post/123',
@@ -83,7 +83,7 @@ describe('createLinkReport branching', () => {
     expect(next).toHaveBeenCalledWith(
       expect.objectContaining({
         statusCode: 400,
-        message: 'instagram_link wajib diisi sebagai referensi tugas khusus',
+        message: 'shortcode is required when instagram_link is empty',
       })
     );
   });

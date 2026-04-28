@@ -35,6 +35,15 @@ jest.unstable_mockModule('../../src/service/tiktokCommentService.js', () => ({
   findByVideoId: mockFindCommentsByVideoId,
 }));
 
+jest.unstable_mockModule('../../src/service/satbinmasOfficialAccountService.js', () => ({
+  getAccountsByClient: jest.fn(),
+  getAccountById: jest.fn(),
+  createAccount: jest.fn(),
+  updateAccount: jest.fn(),
+  deleteAccount: jest.fn(),
+  syncOfficialInstagramAccount: jest.fn(),
+}));
+
 let getClientSummary;
 let getInstagramLikes;
 let getTiktokComments;

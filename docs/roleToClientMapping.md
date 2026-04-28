@@ -25,7 +25,7 @@ Maintaining this mapping guarantees that each dashboard user sees only the conte
 
 Operators are also allowed to call `GET /users/list`. The handler now supports multi-client operator tokens: if a `client_id` query param is provided it must match (case-insensitive) one of the `req.user.client_ids`, otherwise a single `client_id` in the token is used as the default. Requests for a `client_id` outside the token list are rejected with HTTP 403 (`client_id tidak diizinkan`) to keep listings scoped to authorized clients.
 
-Operator UI flows that create users are supported by the operator allowlist in `authMiddleware`. Operator tokens may access `POST /users` (mounted as `POST /api/users`) and `POST /users/create` so the user creation screen can submit either route without triggering the operator `403 Forbidden` guard.
+Operator UI flows that create users are supported by the operator allowlist in `authMiddleware`. The canonical endpoint is `POST /users` (mounted as `POST /api/users`). The legacy alias `POST /users/create` remains allowed temporarily for backward compatibility so existing screens do not hit the operator `403 Forbidden` guard during migration.
 
 Operator tokens can also update a user record via `PUT /users/:id`. The auth middleware now allows operator requests when the method is `PUT` and the path matches `/users/<id>`; other `/users/*` paths still rely on the explicit allowlist entries above.
 

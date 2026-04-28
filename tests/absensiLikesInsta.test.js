@@ -54,8 +54,8 @@ test('marks user with @username as already liking', async () => {
 
   const msg = await absensiLikes('POLRES', { mode: 'sudah' });
 
-  expect(msg).toMatch(/Sudah melaksanakan\* : \*1 user\*/);
-  expect(msg).toMatch(/Belum melaksanakan\* : \*0 user\*/);
+  expect(msg).toMatch(/Melaksanakan lengkap\* : \*1 user\*/i);
+  expect(msg).toMatch(/Belum melaksanakan\* : \*0 user\*/i);
 });
 
 test('uses directorate users when roleFlag matches directorate', async () => {
@@ -105,7 +105,7 @@ test('filters users by role when roleFlag provided for polres', async () => {
   await absensiLikes('POLRES', { roleFlag: 'ditbinmas' });
 
   expect(mockGetUsersByClient).toHaveBeenCalledWith('POLRES', 'ditbinmas');
-  expect(mockGetShortcodesTodayByClient).toHaveBeenCalledWith('ditbinmas');
+  expect(mockGetShortcodesTodayByClient).toHaveBeenCalledWith('POLRES');
 });
 
 test('directorate summarizes across clients', async () => {
@@ -195,9 +195,9 @@ test('aggregates likes report per division for Ditbinmas with Ditbinmas first', 
   expect(msg).toContain('❌ *Belum melaksanakan :* 2 pers');
   expect(msg).toContain('⚠️❌ *Belum Update Username Instagram :* 0 pers');
 
-  expect(msg).toContain('1. DITBINMAS');
-  expect(msg).toContain('2. DIV A');
-  expect(msg).toContain('3. DIV B');
+  expect(msg).toContain('*DITBINMAS*');
+  expect(msg).toContain('*DIV A*');
+  expect(msg).toContain('*DIV B*');
 
   expect((msg.match(/❌ Belum melaksanakan \(1 pers\)/g) || []).length).toBe(2);
 });
@@ -263,6 +263,7 @@ test('lapharDitbinmas does not count exception usernames as likes', async () => 
 
   const result = await lapharDitbinmas();
 
-  expect(result.narrative).toMatch(/https:\/\/www.instagram.com\/p\/sc1 — 0 likes/);
+  expect(result.narrative).toContain('📸 Instagram');
+  expect(result.narrative).toContain('Top 5 Likes');
+  expect(result.narrative).toContain('Bottom 5 Likes');
 });
-

@@ -2,12 +2,15 @@ import { jest } from '@jest/globals';
 
 const mockFindAllActive = jest.fn();
 const mockFindById = jest.fn();
+const mockFindByRegionalId = jest.fn();
 const mockUpsertProfile = jest.fn();
 const mockFindProfileByUsername = jest.fn();
 const mockGetPostsToday = jest.fn();
 const mockFindInstaByClient = jest.fn();
 const mockGetTiktokPostsToday = jest.fn();
 const mockFindTiktokByClient = jest.fn();
+const mockGetInstaPostsByClientOrRole = jest.fn();
+const mockGetTiktokPostsByClientOrRole = jest.fn();
 const mockFetchInstagramProfile = jest.fn();
 const mockFetchAndStoreInstaContent = jest.fn();
 const mockFetchAndStoreTiktokContent = jest.fn();
@@ -17,6 +20,7 @@ const mockSendConsoleDebug = jest.fn();
 jest.unstable_mockModule('../src/model/clientModel.js', () => ({
   findAllActiveDirektoratWithSosmed: mockFindAllActive,
   findById: mockFindById,
+  findByRegionalId: mockFindByRegionalId,
 }));
 
 jest.unstable_mockModule('../src/service/instaProfileService.js', () => ({
@@ -34,10 +38,12 @@ jest.unstable_mockModule('../src/service/tiktokPostService.js', () => ({
 
 jest.unstable_mockModule('../src/model/instaPostModel.js', () => ({
   getPostsTodayByClient: mockGetPostsToday,
+  getPostsByClientOrRole: mockGetInstaPostsByClientOrRole,
 }));
 
 jest.unstable_mockModule('../src/model/tiktokPostModel.js', () => ({
   getPostsTodayByClient: mockGetTiktokPostsToday,
+  getPostsByClientOrRole: mockGetTiktokPostsByClientOrRole,
 }));
 
 jest.unstable_mockModule('../src/service/instagramApi.js', () => ({
@@ -90,6 +96,8 @@ function setupDefaultMocks() {
     return null;
   });
 
+  mockFindByRegionalId.mockResolvedValue([]);
+
   mockFetchInstagramProfile.mockResolvedValue({
     username: 'dita.ig',
     full_name: 'Dita',
@@ -103,8 +111,10 @@ function setupDefaultMocks() {
 
   mockFindProfileByUsername.mockResolvedValue({ username: 'dita.ig', full_name: 'Dita' });
   mockGetPostsToday.mockResolvedValue([{ shortcode: 's1' }]);
+  mockGetInstaPostsByClientOrRole.mockResolvedValue([{ shortcode: 's1' }]);
   mockFindInstaByClient.mockResolvedValue([{ shortcode: 'sA' }, { shortcode: 'sB' }]);
   mockGetTiktokPostsToday.mockResolvedValue([{ video_id: 'v1' }]);
+  mockGetTiktokPostsByClientOrRole.mockResolvedValue([{ video_id: 'v1' }]);
   mockFindTiktokByClient.mockResolvedValue([{ video_id: 'vA' }]);
   mockFetchAndStoreInstaContent.mockResolvedValue();
   mockFetchAndStoreTiktokContent.mockResolvedValue();
@@ -126,10 +136,10 @@ describe('refreshAggregatorData', () => {
     expect(mockFindAllActive).toHaveBeenCalled();
     expect(mockFetchAndStoreInstaContent).toHaveBeenCalledTimes(2);
     expect(mockFetchAndStoreTiktokContent).toHaveBeenCalledTimes(2);
-    expect(mockGetPostsToday).toHaveBeenCalledWith('DITA');
-    expect(mockGetPostsToday).toHaveBeenCalledWith('DITB');
-    expect(mockGetTiktokPostsToday).toHaveBeenCalledWith('DITA');
-    expect(mockGetTiktokPostsToday).toHaveBeenCalledWith('DITB');
+    expect(mockGetInstaPostsByClientOrRole).toHaveBeenCalledWith('DITA', 'DITA', { periode: 'harian' });
+    expect(mockGetInstaPostsByClientOrRole).toHaveBeenCalledWith('DITB', 'DITB', { periode: 'harian' });
+    expect(mockGetTiktokPostsByClientOrRole).toHaveBeenCalledWith('DITA', 'DITA', { periode: 'harian' });
+    expect(mockGetTiktokPostsByClientOrRole).toHaveBeenCalledWith('DITB', 'DITB', { periode: 'harian' });
     expect(mockUpsertProfile).toHaveBeenCalled();
     expect(results).toHaveLength(2);
     expect(results[0]).toEqual(
@@ -148,11 +158,9 @@ describe('refreshAggregatorData', () => {
   test('uses full history mode when periode is riwayat', async () => {
     const results = await refreshAggregatorData({ clientId: 'DITA', periode: 'riwayat', limit: 2 });
 
-    expect(mockFindInstaByClient).toHaveBeenCalledWith('DITA');
-    expect(mockFindTiktokByClient).toHaveBeenCalledWith('DITA');
-    expect(mockGetPostsToday).not.toHaveBeenCalled();
-    expect(mockGetTiktokPostsToday).not.toHaveBeenCalled();
-    expect(results[0].igPosts).toEqual([{ shortcode: 'sA' }, { shortcode: 'sB' }]);
+    expect(mockGetInstaPostsByClientOrRole).toHaveBeenCalledWith('DITA', 'DITA', { periode: 'riwayat' });
+    expect(mockGetTiktokPostsByClientOrRole).toHaveBeenCalledWith('DITA', 'DITA', { periode: 'riwayat' });
+    expect(results[0].igPosts).toEqual([{ shortcode: 's1' }]);
   });
 
   test('skips upstream post refresh when skipPostRefresh is true', async () => {
@@ -165,8 +173,8 @@ describe('refreshAggregatorData', () => {
 
     expect(mockFetchAndStoreInstaContent).not.toHaveBeenCalled();
     expect(mockFetchAndStoreTiktokContent).not.toHaveBeenCalled();
-    expect(mockGetPostsToday).toHaveBeenCalledWith('DITA');
-    expect(mockGetTiktokPostsToday).toHaveBeenCalledWith('DITA');
+    expect(mockGetInstaPostsByClientOrRole).toHaveBeenCalledWith('DITA', 'DITA', { periode: 'harian' });
+    expect(mockGetTiktokPostsByClientOrRole).toHaveBeenCalledWith('DITA', 'DITA', { periode: 'harian' });
     expect(results[0]).toEqual(
       expect.objectContaining({ client_id: 'DITA', igPosts: [{ shortcode: 's1' }] })
     );

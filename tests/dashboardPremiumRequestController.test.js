@@ -2,11 +2,13 @@ import { jest } from '@jest/globals';
 
 const mockCreateDashboardPremiumRequest = jest.fn();
 const mockSendDashboardPremiumRequestNotification = jest.fn();
+const mockFindLatestOpenDashboardPremiumRequestByIdentifier = jest.fn();
 
 jest.unstable_mockModule('../src/service/dashboardPremiumRequestService.js', () => ({
   createDashboardPremiumRequest: mockCreateDashboardPremiumRequest,
   confirmDashboardPremiumRequest: jest.fn(),
   findDashboardPremiumRequestByToken: jest.fn(),
+  findLatestOpenDashboardPremiumRequestByIdentifier: mockFindLatestOpenDashboardPremiumRequestByIdentifier,
   markDashboardPremiumRequestNotified: jest.fn(),
 }));
 

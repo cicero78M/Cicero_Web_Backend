@@ -1,13 +1,18 @@
 import { jest } from '@jest/globals';
 
-import clientRequestHandlers, {
-  normalizeComplaintHandle,
-  parseComplaintMessage,
-  parseBulkStatusEntries,
-} from '../../../src/handler/menu/clientRequestHandlers.js';
-import * as tiktokPostModel from '../../../src/model/tiktokPostModel.js';
-import * as tiktokCommentModel from '../../../src/model/tiktokCommentModel.js';
-import * as satbinmasOfficialAccountService from '../../../src/service/satbinmasOfficialAccountService.js';
+let clientRequestHandlers;
+let normalizeComplaintHandle;
+let parseComplaintMessage;
+let parseBulkStatusEntries;
+
+beforeAll(async () => {
+  process.env.JWT_SECRET = process.env.JWT_SECRET || 'test';
+  const mod = await import('../../../src/handler/menu/clientRequestHandlers.js');
+  clientRequestHandlers = mod.default;
+  normalizeComplaintHandle = mod.normalizeComplaintHandle;
+  parseComplaintMessage = mod.parseComplaintMessage;
+  parseBulkStatusEntries = mod.parseBulkStatusEntries;
+});
 
 describe('normalizeComplaintHandle', () => {
   it('normalizes plain handles to lowercase with a leading @', () => {
@@ -336,12 +341,8 @@ describe('absensiSatbinmasOfficial', () => {
     const session = {};
     const chatId = 'chat-absensi-official';
     const sendMessage = jest.fn().mockResolvedValue();
-    const attendanceSpy = jest
-      .spyOn(
-        satbinmasOfficialAccountService,
-        'getSatbinmasOfficialAttendance'
-      )
-      .mockResolvedValue([
+    const officialAccountService = {
+      getSatbinmasOfficialAttendance: jest.fn().mockResolvedValue([
         {
           client_id: 'POLRES01',
           nama: 'Polres Example',
@@ -354,13 +355,18 @@ describe('absensiSatbinmasOfficial', () => {
           instagram: false,
           tiktok: true,
         },
-      ]);
+      ]),
+    };
 
-    await clientRequestHandlers.absensiSatbinmasOfficial(session, chatId, '', {
-      sendMessage,
-    });
+    await clientRequestHandlers.absensiSatbinmasOfficial(
+      session,
+      chatId,
+      '',
+      { sendMessage },
+      officialAccountService
+    );
 
-    expect(attendanceSpy).toHaveBeenCalled();
+    expect(officialAccountService.getSatbinmasOfficialAttendance).toHaveBeenCalled();
     expect(session.step).toBe('main');
     expect(sendMessage).toHaveBeenCalledWith(
       chatId,
@@ -385,32 +391,32 @@ describe('absensiSatbinmasOfficial', () => {
       expect.stringContaining('Perlu:')
     );
 
-    attendanceSpy.mockRestore();
   });
 
   it('reports failures gracefully', async () => {
     const session = {};
     const chatId = 'chat-absensi-official-error';
     const sendMessage = jest.fn().mockResolvedValue();
-    const attendanceSpy = jest
-      .spyOn(
-        satbinmasOfficialAccountService,
-        'getSatbinmasOfficialAttendance'
-      )
-      .mockRejectedValue(new Error('db unavailable'));
+    const officialAccountService = {
+      getSatbinmasOfficialAttendance: jest
+        .fn()
+        .mockRejectedValue(new Error('db unavailable')),
+    };
 
-    await clientRequestHandlers.absensiSatbinmasOfficial(session, chatId, '', {
-      sendMessage,
-    });
+    await clientRequestHandlers.absensiSatbinmasOfficial(
+      session,
+      chatId,
+      '',
+      { sendMessage },
+      officialAccountService
+    );
 
-    expect(attendanceSpy).toHaveBeenCalled();
+    expect(officialAccountService.getSatbinmasOfficialAttendance).toHaveBeenCalled();
     expect(session.step).toBe('main');
     expect(sendMessage).toHaveBeenCalledWith(
       chatId,
       expect.stringContaining('❌ Gagal menyiapkan absensi akun resmi: db unavailable')
     );
-
-    attendanceSpy.mockRestore();
   });
 });
 
@@ -606,7 +612,7 @@ describe('bulkStatus_process', () => {
     );
 
     expect(sendMessage).not.toHaveBeenCalled();
-    expect(session.step).toBe('bulkStatus_process');
+    expect(session.step).toBe('main');
   });
 
   it('ignores bot summary echoes without altering the session state', async () => {
@@ -865,7 +871,7 @@ describe('prosesTiktok menu delete option', () => {
     expect(session.step).toBe('prosesTiktok_delete_prompt');
     expect(sendMessage).toHaveBeenCalledWith(
       chatId,
-      expect.stringContaining('hapus konten TikTok')
+      expect.stringContaining('Kirim link atau video ID TikTok')
     );
   });
 });
@@ -879,42 +885,33 @@ describe('prosesTiktok_delete_prompt', () => {
     const chatId = 'chat-delete';
     const sendMessage = jest.fn().mockResolvedValue();
 
-    const findSpy = jest
-      .spyOn(tiktokPostModel, 'findPostByVideoId')
-      .mockResolvedValue({
+    const deps = {
+      findPostByVideoId: jest.fn().mockResolvedValue({
         client_id: 'client-123',
         caption: 'Contoh caption',
         created_at: new Date('2024-01-01T10:00:00Z'),
         like_count: 12,
         comment_count: 4,
-      });
-    const deletePostSpy = jest
-      .spyOn(tiktokPostModel, 'deletePostByVideoId')
-      .mockResolvedValue(1);
-    const deleteCommentsSpy = jest
-      .spyOn(tiktokCommentModel, 'deleteCommentsByVideoId')
-      .mockResolvedValue(2);
+      }),
+      deletePostByVideoId: jest.fn().mockResolvedValue(1),
+      deleteCommentsByVideoId: jest.fn().mockResolvedValue(2),
+    };
 
-    try {
-      await clientRequestHandlers.prosesTiktok_delete_prompt(
-        session,
-        chatId,
-        '7571332440556571924',
-        { sendMessage }
-      );
+    await clientRequestHandlers.prosesTiktok_delete_prompt(
+      session,
+      chatId,
+      '7571332440556571924',
+      { sendMessage },
+      deps
+    );
 
-      expect(findSpy).toHaveBeenCalledWith('7571332440556571924');
-      expect(deleteCommentsSpy).toHaveBeenCalledWith('7571332440556571924');
-      expect(deletePostSpy).toHaveBeenCalledWith('7571332440556571924');
-      expect(session.step).toBe('main');
-      expect(sendMessage).toHaveBeenCalledTimes(1);
-      const [[calledChatId, message]] = sendMessage.mock.calls;
-      expect(calledChatId).toBe(chatId);
-      expect(message).toContain('Konten TikTok berhasil dihapus');
-    } finally {
-      findSpy.mockRestore();
-      deletePostSpy.mockRestore();
-      deleteCommentsSpy.mockRestore();
-    }
+    expect(deps.findPostByVideoId).toHaveBeenCalledWith('7571332440556571924');
+    expect(deps.deleteCommentsByVideoId).toHaveBeenCalledWith('7571332440556571924');
+    expect(deps.deletePostByVideoId).toHaveBeenCalledWith('7571332440556571924');
+    expect(session.step).toBe('main');
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    const [[calledChatId, message]] = sendMessage.mock.calls;
+    expect(calledChatId).toBe(chatId);
+    expect(message).toContain('Konten TikTok berhasil dihapus');
   });
 });

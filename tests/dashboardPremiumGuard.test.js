@@ -1,12 +1,15 @@
 import { jest } from '@jest/globals';
 import express from 'express';
 import request from 'supertest';
-import { dashboardPremiumGuard } from '../src/middleware/dashboardPremiumGuard.js';
-import { dashboardPremiumConfig } from '../src/config/dashboardPremium.js';
 
-jest.mock('../src/service/dashboardSubscriptionService.js', () => ({
-  getPremiumSnapshot: jest.fn(),
+const mockGetPremiumSnapshot = jest.fn();
+
+jest.unstable_mockModule('../src/service/dashboardSubscriptionService.js', () => ({
+  getPremiumSnapshot: mockGetPremiumSnapshot,
 }));
+
+const { dashboardPremiumGuard } = await import('../src/middleware/dashboardPremiumGuard.js');
+const { dashboardPremiumConfig } = await import('../src/config/dashboardPremium.js');
 
 function buildApp(allowedTiers, userContext) {
   const app = express();

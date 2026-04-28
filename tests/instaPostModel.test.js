@@ -44,7 +44,7 @@ test('getShortcodesTodayByClient filters by client for non-direktorat', async ()
 test('getShortcodesTodayByClient uses role filter for directorate', async () => {
   mockQuery
     .mockResolvedValueOnce({ rows: [{ client_type: 'direktorat' }] })
-    .mockResolvedValueOnce({ rows: [] });
+    .mockResolvedValueOnce({ rows: [{ shortcode: 'a' }] });
   await getShortcodesTodayByClient('DITA');
   const sql = mockQuery.mock.calls[1][0];
   expect(sql).toContain('insta_post_roles');
@@ -98,7 +98,7 @@ test('getShortcodesTodayByClient falls back to role when client not found', asyn
 test('getShortcodesTodayByClient orders by created_at and shortcode for role filter', async () => {
   mockQuery
     .mockResolvedValueOnce({ rows: [{ client_type: 'direktorat' }] })
-    .mockResolvedValueOnce({ rows: [] });
+    .mockResolvedValueOnce({ rows: [{ shortcode: 'a' }] });
   await getShortcodesTodayByClient('DITA');
   const sql = mockQuery.mock.calls[1][0];
   expect(sql).toMatch(/ORDER BY\s+p\.created_at\s+ASC,\s+p\.shortcode\s+ASC/i);
@@ -125,46 +125,40 @@ test('getShortcodesYesterdayByClient uses role filter for directorate', async ()
 });
 
 test('countPostsByClient filters by client_id when no scope supplied', async () => {
-  mockQuery
-    .mockResolvedValueOnce({ rows: [{ client_type: 'instansi' }] })
-    .mockResolvedValueOnce({ rows: [{ jumlah_post: '3' }] });
+  mockQuery.mockResolvedValueOnce({ rows: [{ jumlah_post: '3' }] });
 
   const result = await countPostsByClient('C1', 'harian', undefined, undefined, undefined, {});
 
-  expect(mockQuery).toHaveBeenCalledTimes(2);
-  const sql = mockQuery.mock.calls[1][0];
+  expect(mockQuery).toHaveBeenCalledTimes(1);
+  const sql = mockQuery.mock.calls[0][0];
   expect(sql).toContain('COUNT(DISTINCT p.shortcode)');
   expect(sql).toContain('LOWER(TRIM(p.client_id)) = LOWER($1)');
   expect(result).toBe(3);
 });
 
 test('countPostsByClient applies role join for directorate scope', async () => {
-  mockQuery
-    .mockResolvedValueOnce({ rows: [{ client_type: 'direktorat' }] })
-    .mockResolvedValueOnce({ rows: [{ jumlah_post: '2' }] });
+  mockQuery.mockResolvedValueOnce({ rows: [{ jumlah_post: '2' }] });
 
   await countPostsByClient('DITA', 'harian', undefined, undefined, undefined, {
     role: 'dita',
     scope: 'direktorat'
   });
 
-  expect(mockQuery).toHaveBeenCalledTimes(2);
-  const sql = mockQuery.mock.calls[1][0];
-  expect(sql).toContain('JOIN insta_post_roles pr ON pr.shortcode = p.shortcode');
+  expect(mockQuery).toHaveBeenCalledTimes(1);
+  const sql = mockQuery.mock.calls[0][0];
+  expect(sql).toContain('LEFT JOIN insta_post_roles pr ON pr.shortcode = p.shortcode');
   expect(sql).toContain('LOWER(TRIM(pr.role_name)) = LOWER($1)');
 });
 
 test('countPostsByClient filters by regional_id when provided', async () => {
-  mockQuery
-    .mockResolvedValueOnce({ rows: [{ client_type: 'instansi' }] })
-    .mockResolvedValueOnce({ rows: [{ jumlah_post: '1' }] });
+  mockQuery.mockResolvedValueOnce({ rows: [{ jumlah_post: '1' }] });
 
   await countPostsByClient('C1', 'harian', undefined, undefined, undefined, {
     regionalId: 'jatim'
   });
 
-  expect(mockQuery).toHaveBeenCalledTimes(2);
-  const sql = mockQuery.mock.calls[1][0];
+  expect(mockQuery).toHaveBeenCalledTimes(1);
+  const sql = mockQuery.mock.calls[0][0];
   expect(sql).toContain('JOIN clients c ON c.client_id = p.client_id');
   expect(sql).toContain('UPPER(c.regional_id) = $2');
 });

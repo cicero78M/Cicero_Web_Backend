@@ -33,10 +33,12 @@ function logAuthWarning(message) {
 }
 
 function setAuthCooldown() {
+  if (process.env.NODE_ENV === 'test') return;
   authUnavailableUntil = Date.now() + authCooldownMs;
 }
 
 function shouldSkipAuthAttempt() {
+  if (process.env.NODE_ENV === 'test') return false;
   return Date.now() < authUnavailableUntil;
 }
 

@@ -113,7 +113,10 @@ describe('generateKasatBinmasLikesRecapExcel', () => {
         jabatan: 'Kasat Binmas',
       },
     ]);
-    mockGetRekapLikesByClient.mockResolvedValue({ rows: [], totalKonten: 0 });
+    mockGetRekapLikesByClient.mockResolvedValue({
+      rows: [{ user_id: '1', jumlah_like: 0 }],
+      totalKonten: 1,
+    });
 
     const { filePath } = await generateKasatBinmasLikesRecapExcel({
       period: 'weekly',
@@ -132,8 +135,12 @@ describe('generateKasatBinmasLikesRecapExcel', () => {
       { user_id: '1', nama: 'Alpha', jabatan: 'Operator' },
     ]);
 
-    await expect(generateKasatBinmasLikesRecapExcel()).rejects.toThrow(
-      'tidak ditemukan data Kasat Binmas'
+    await expect(generateKasatBinmasLikesRecapExcel()).resolves.toEqual(
+      expect.objectContaining({
+        filePath: null,
+        totalKonten: 0,
+        message: expect.stringContaining('Belum ada data Kasat Binmas'),
+      })
     );
   });
 });

@@ -15,7 +15,6 @@ import {
 import { normalizeHandleValue } from "../../utils/handleNormalizer.js";
 import { absensiLoginWeb } from "../fetchabsensi/dashboard/absensiLoginWeb.js";
 import * as linkReportModel from "../../model/linkReportModel.js";
-import { saveLinkReportExcel } from "../../service/linkReportExcelService.js";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
@@ -48,6 +47,11 @@ import { extractVideoId } from "../../utils/tiktokHelper.js";
 import * as satbinmasOfficialAccountService from "../../service/satbinmasOfficialAccountService.js";
 import { clearSession } from "../../utils/sessionsHelper.js";
 import { appendSubmenuBackInstruction } from "./menuPromptHelpers.js";
+
+async function saveLinkReportExcel(...args) {
+  const mod = await import("../../service/linkReportExcelService.js");
+  return mod.saveLinkReportExcel(...args);
+}
 
 function ignore(..._args) {}
 
@@ -3062,7 +3066,17 @@ Ketik *angka* menu, atau *batal* untuk kembali.
       );
     }
   },
-  prosesTiktok_delete_prompt: async (session, chatId, text, waClient) => {
+  prosesTiktok_delete_prompt: async (
+    session,
+    chatId,
+    text,
+    waClient,
+    deps = {}
+  ) => {
+    const findPost = deps.findPostByVideoId || findPostByVideoId;
+    const deletePost = deps.deletePostByVideoId || deletePostByVideoId;
+    const deleteComments =
+      deps.deleteCommentsByVideoId || deleteCommentsByVideoId;
     if (!session.selected_client_id) {
       session.step = "main";
       await waClient.sendMessage(
@@ -3097,7 +3111,7 @@ Ketik *angka* menu, atau *batal* untuk kembali.
     }
 
     try {
-      const post = await findPostByVideoId(videoId);
+      const post = await findPost(videoId);
       if (!post) {
         await waClient.sendMessage(
           chatId,
@@ -3116,8 +3130,8 @@ Ketik *angka* menu, atau *batal* untuk kembali.
         return;
       }
 
-      const removedComments = await deleteCommentsByVideoId(videoId);
-      const removedPosts = await deletePostByVideoId(videoId);
+      const removedComments = await deleteComments(videoId);
+      const removedPosts = await deletePost(videoId);
 
       if (!removedPosts) {
         await waClient.sendMessage(
@@ -4409,10 +4423,16 @@ Ketik *angka* menu, atau *batal* untuk kembali.
   },
 
   // ================== ABSENSI OFFICIAL ACCOUNT ==================
-  absensiSatbinmasOfficial: async (session, chatId, _text, waClient) => {
+  absensiSatbinmasOfficial: async (
+    session,
+    chatId,
+    _text,
+    waClient,
+    officialAccountService = satbinmasOfficialAccountService
+  ) => {
     try {
       const attendance =
-        await satbinmasOfficialAccountService.getSatbinmasOfficialAttendance();
+        await officialAccountService.getSatbinmasOfficialAttendance();
 
       const grouped = attendance.reduce(
         (acc, row) => {

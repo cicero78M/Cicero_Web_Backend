@@ -16,6 +16,10 @@ const mockWAClient = {
 };
 const mockQueueAdminNotification = jest.fn();
 const mockGetPremiumSnapshot = jest.fn();
+const mockSendLoginLogNotification = jest.fn();
+const mockSendUserApprovalRequest = jest.fn();
+const mockSendPasswordResetFailureNotification = jest.fn();
+const mockSendTelegramAdminMessage = jest.fn();
 const actualWaHelper = await import('../src/utils/waHelper.js');
 
 jest.unstable_mockModule('../src/db/index.js', () => ({
@@ -40,6 +44,13 @@ jest.unstable_mockModule('../src/utils/waHelper.js', () => ({
 
 jest.unstable_mockModule('../src/service/dashboardSubscriptionService.js', () => ({
   getPremiumSnapshot: mockGetPremiumSnapshot,
+}));
+
+jest.unstable_mockModule('../src/service/telegramService.js', () => ({
+  sendLoginLogNotification: mockSendLoginLogNotification,
+  sendUserApprovalRequest: mockSendUserApprovalRequest,
+  sendPasswordResetFailureNotification: mockSendPasswordResetFailureNotification,
+  sendTelegramAdminMessage: mockSendTelegramAdminMessage,
 }));
 
 let app;
@@ -70,11 +81,19 @@ beforeEach(() => {
   mockWAClient.sendMessage.mockReset();
   mockQueueAdminNotification.mockReset();
   mockGetPremiumSnapshot.mockReset();
+  mockSendLoginLogNotification.mockReset();
+  mockSendUserApprovalRequest.mockReset();
+  mockSendPasswordResetFailureNotification.mockReset();
+  mockSendTelegramAdminMessage.mockReset();
   mockGetPremiumSnapshot.mockResolvedValue({
     premiumStatus: false,
     premiumTier: null,
     premiumExpiresAt: null,
   });
+  mockSendLoginLogNotification.mockResolvedValue(true);
+  mockSendUserApprovalRequest.mockResolvedValue(true);
+  mockSendPasswordResetFailureNotification.mockResolvedValue(true);
+  mockSendTelegramAdminMessage.mockResolvedValue(true);
 });
 
 describe('POST /login', () => {
@@ -881,7 +900,8 @@ describe('POST /dashboard-password-reset/request', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       success: true,
-      message: 'Instruksi reset password telah dikirim melalui WhatsApp.',
+      message:
+        'Permintaan reset password telah diterima. Token akan dikirim ke admin melalui Telegram. Silakan hubungi admin untuk mendapatkan token reset password Anda.',
     });
     expect(mockQuery).toHaveBeenNthCalledWith(
       1,
@@ -898,15 +918,12 @@ describe('POST /dashboard-password-reset/request', () => {
         expect.any(Date),
       ],
     );
-    expect(mockWAClient.sendMessage).toHaveBeenCalledTimes(1);
-    const [wid, message, options] = mockWAClient.sendMessage.mock.calls[0];
-    expect(wid).toBe('628123456789@c.us');
-    expect(options).toEqual({});
+    expect(mockSendTelegramAdminMessage).toHaveBeenCalledTimes(1);
+    const [message] = mockSendTelegramAdminMessage.mock.calls[0];
     expect(message).toContain('Reset Password Dashboard');
     expect(message).toContain('https://papiqo.com/reset-password?token=');
     expect(message).toContain('Dengan url https://papiqo.com/reset-password');
-    expect(message).toContain('Copy');
-    expect(mockQueueAdminNotification).not.toHaveBeenCalled();
+    expect(mockSendPasswordResetFailureNotification).not.toHaveBeenCalled();
   });
 
   test('rejects when contact does not match stored whatsapp', async () => {
@@ -939,7 +956,7 @@ describe('POST /dashboard-password-reset/request', () => {
     ['/api/auth/password-reset/request'],
     ['/api/password-reset/request'],
   ])('alias route %s returns the same response as dashboard endpoint', async (aliasPath) => {
-    mockWAClient.sendMessage.mockResolvedValue(true);
+    mockSendTelegramAdminMessage.mockResolvedValue(true);
     const userRow = {
       dashboard_user_id: 'du1',
       username: 'operator',
@@ -971,7 +988,7 @@ describe('POST /dashboard-password-reset/request', () => {
 
     expect(aliasResponse.status).toBe(dashboardResponse.status);
     expect(aliasResponse.body).toEqual(dashboardResponse.body);
-    expect(mockWAClient.sendMessage).toHaveBeenCalledTimes(2);
+    expect(mockSendTelegramAdminMessage).toHaveBeenCalledTimes(2);
   });
 });
 

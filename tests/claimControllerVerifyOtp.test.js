@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 
-let verifyOtpController;
+let registerClaimCredentials;
 let userModel;
 
 function createRes() {
@@ -12,41 +12,47 @@ function createRes() {
 
 beforeEach(async () => {
   jest.resetModules();
+
   jest.unstable_mockModule('../src/model/userModel.js', () => ({
     findUserById: jest.fn(),
-    updateUserField: jest.fn(),
+    setClaimCredentials: jest.fn(),
   }));
-  jest.unstable_mockModule('../src/service/otpService.js', () => ({
-    generateOtp: jest.fn(),
-    verifyOtp: jest.fn().mockReturnValue(true),
-    isVerified: jest.fn(),
-    refreshVerification: jest.fn(),
-    clearVerification: jest.fn(),
-    checkOtpRateLimit: jest.fn(),
+  jest.unstable_mockModule('../src/model/claimPasswordResetModel.js', () => ({}));
+  jest.unstable_mockModule('../src/service/emailService.js', () => ({
+    sendClaimPasswordResetEmail: jest.fn(),
   }));
-  jest.unstable_mockModule('../src/service/otpQueue.js', () => ({
-    enqueueOtp: jest.fn(),
+  jest.unstable_mockModule('../src/service/telegramService.js', () => ({
+    sendTelegramAdminMessage: jest.fn(),
   }));
-  ({ verifyOtpController } = await import('../src/controller/claimController.js'));
+
+  ({ registerClaimCredentials } = await import('../src/controller/claimController.js'));
   userModel = await import('../src/model/userModel.js');
 });
 
-test('returns 503 when findUserById throws connection error', async () => {
-  const err = Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' });
-  userModel.findUserById.mockRejectedValue(err);
-  const req = { body: { nrp: '1', email: 'user@example.com', otp: '123456' } };
+test('returns 400 when nrp or password is missing', async () => {
+  const req = { body: { nrp: '1' } };
   const res = createRes();
-  await verifyOtpController(req, res, () => {});
-  expect(res.status).toHaveBeenCalledWith(503);
-  expect(res.json).toHaveBeenCalledWith({ success: false, message: 'Database tidak tersedia' });
+
+  await registerClaimCredentials(req, res, () => {});
+
+  expect(res.status).toHaveBeenCalledWith(400);
+  expect(res.json).toHaveBeenCalledWith({
+    success: false,
+    message: 'nrp dan password wajib diisi',
+  });
 });
 
-test('returns 404 when user not found after OTP verification', async () => {
+test('returns 404 when user is not found', async () => {
   userModel.findUserById.mockResolvedValue(null);
-  const req = { body: { nrp: '1', email: 'user@example.com', otp: '123456' } };
+  const req = { body: { nrp: '1', password: 'Password1!' } };
   const res = createRes();
-  await verifyOtpController(req, res, () => {});
+
+  await registerClaimCredentials(req, res, () => {});
+
   expect(res.status).toHaveBeenCalledWith(404);
-  expect(res.json).toHaveBeenCalledWith({ success: false, message: 'User tidak ditemukan' });
-  expect(userModel.updateUserField).not.toHaveBeenCalled();
+  expect(res.json).toHaveBeenCalledWith({
+    success: false,
+    message: 'NRP anda tidak terdaftar',
+  });
+  expect(userModel.setClaimCredentials).not.toHaveBeenCalled();
 });

@@ -26,11 +26,13 @@ jest.unstable_mockModule('../src/model/tiktokCommentModel.js', () => ({
 jest.unstable_mockModule('../src/utils/constants.js', () => ({ hariIndo: [] }));
 jest.unstable_mockModule('../src/utils/utilsHelper.js', () => ({
   groupByDivision: () => ({}),
+  groupUsersByDivisionStatus: () => ({ divisions: {}, summary: {} }),
   sortDivisionKeys: () => [],
   formatNama: () => '',
 }));
 jest.unstable_mockModule('../src/utils/sqlPriority.js', () => ({
   getNamaPriorityIndex: () => 0,
+  compareNamaWithPriority: () => 0,
 }));
 jest.unstable_mockModule('../src/middleware/debugHandler.js', () => ({
   sendDebug: mockSendDebug,

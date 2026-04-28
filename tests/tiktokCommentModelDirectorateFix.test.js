@@ -24,6 +24,7 @@ test('include_client_or_role mode drops postClientFilter so role-tagged posts fr
   // Simulate the options produced by scope=DIREKTORAT for DITINTELKAM
   mockQuery.mockResolvedValueOnce({ rows: [{ client_type: 'direktorat' }] });
   mockQuery.mockResolvedValueOnce({ rows: [] });
+  mockQuery.mockResolvedValueOnce({ rows: [] });
 
   await getRekapKomentarByClient(
     'DITINTELKAM',
@@ -43,8 +44,8 @@ test('include_client_or_role mode drops postClientFilter so role-tagged posts fr
     }
   );
 
-  // Should only make 2 queries: one for resolvedUserClientType, one for the main recap
-  expect(mockQuery).toHaveBeenCalledTimes(2);
+  // Should make 3 queries: user client type, main recap, task-link summary
+  expect(mockQuery).toHaveBeenCalledTimes(3);
 
   const sql = mockQuery.mock.calls[1][0];
   const params = mockQuery.mock.calls[1][1];
@@ -72,6 +73,7 @@ test('include_client_or_role mode drops postClientFilter so role-tagged posts fr
 test('non-direktorat scope still uses postClientFilter normally', async () => {
   mockQuery.mockResolvedValueOnce({ rows: [{ client_type: 'instansi' }] });
   mockQuery.mockResolvedValueOnce({ rows: [] });
+  mockQuery.mockResolvedValueOnce({ rows: [] });
 
   await getRekapKomentarByClient(
     'POLRESXYZ',
@@ -83,7 +85,7 @@ test('non-direktorat scope still uses postClientFilter normally', async () => {
     {}
   );
 
-  expect(mockQuery).toHaveBeenCalledTimes(2);
+  expect(mockQuery).toHaveBeenCalledTimes(3);
   const sql = mockQuery.mock.calls[1][0];
   expect(sql).toContain('LOWER(p.client_id) = LOWER(');
   const params = mockQuery.mock.calls[1][1];
@@ -92,6 +94,7 @@ test('non-direktorat scope still uses postClientFilter normally', async () => {
 
 test('comment recap date filter uses manual_input created_at before original_created_at', async () => {
   mockQuery.mockResolvedValueOnce({ rows: [{ client_type: 'direktorat' }] });
+  mockQuery.mockResolvedValueOnce({ rows: [] });
   mockQuery.mockResolvedValueOnce({ rows: [] });
 
   await getRekapKomentarByClient(
@@ -114,4 +117,3 @@ test('comment recap date filter uses manual_input created_at before original_cre
   expect(sql).toContain("CASE WHEN p.source_type = 'manual_input' THEN p.created_at");
   expect(sql).toContain("ELSE COALESCE(p.original_created_at, p.created_at)");
 });
-

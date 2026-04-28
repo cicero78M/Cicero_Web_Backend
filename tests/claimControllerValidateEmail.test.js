@@ -1,8 +1,7 @@
 import { jest } from '@jest/globals';
 
-let validateEmail;
+let requestClaimPasswordReset;
 let userModel;
-let dns;
 
 function createRes() {
   return {
@@ -11,87 +10,55 @@ function createRes() {
   };
 }
 
-describe('validateEmail', () => {
+describe('claim password reset request validation', () => {
   beforeEach(async () => {
     jest.resetModules();
-    jest.unstable_mockModule('dns/promises', () => ({
-      default: {
-        resolveMx: jest.fn(),
-      },
-    }));
+    process.env.JWT_SECRET = 'test-secret';
+
     jest.unstable_mockModule('../src/model/userModel.js', () => ({
-      findUserByEmail: jest.fn().mockResolvedValue(null),
+      findUserById: jest.fn(),
     }));
-    ({ validateEmail } = await import('../src/controller/claimController.js'));
+    jest.unstable_mockModule('../src/model/claimPasswordResetModel.js', () => ({
+      createResetRequest: jest.fn(),
+    }));
+    jest.unstable_mockModule('../src/service/emailService.js', () => ({
+      sendClaimPasswordResetEmail: jest.fn(),
+    }));
+    jest.unstable_mockModule('../src/service/telegramService.js', () => ({
+      sendTelegramAdminMessage: jest.fn(),
+    }));
+
+    ({ requestClaimPasswordReset } = await import('../src/controller/claimController.js'));
     userModel = await import('../src/model/userModel.js');
-    dns = (await import('dns/promises')).default;
   });
 
-  test('rejects email when format fails validator rules', async () => {
-    const req = { body: { email: 'usér@example.com' } };
+  test('returns 400 when nrp/email is missing', async () => {
+    const req = { body: { nrp: '', email: '' } };
     const res = createRes();
 
-    await validateEmail(req, res, () => {});
-
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(dns.resolveMx).not.toHaveBeenCalled();
-    expect(userModel.findUserByEmail).not.toHaveBeenCalled();
-  });
-
-  test('rejects email when domain has no MX records', async () => {
-    dns.resolveMx.mockRejectedValue(Object.assign(new Error('not found'), { code: 'ENOTFOUND' }));
-    const req = { body: { email: 'user@invalid-domain.test' } };
-    const res = createRes();
-
-    await validateEmail(req, res, () => {});
+    await requestClaimPasswordReset(req, res, () => {});
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
       success: false,
-      message: 'Email tidak dapat digunakan. Domain email tidak aktif atau tidak menerima email.',
+      message: 'Permintaan reset password tidak valid. Periksa kembali data yang dimasukkan.',
     });
-    expect(userModel.findUserByEmail).not.toHaveBeenCalled();
   });
 
-  test('returns service unavailable when DNS lookup fails', async () => {
-    dns.resolveMx.mockRejectedValue(Object.assign(new Error('dns timeout'), { code: 'EAI_AGAIN' }));
-    const req = { body: { email: 'user@example.com' } };
+  test('returns neutral success when user email does not match', async () => {
+    userModel.findUserById.mockResolvedValue({ user_id: '1', email: 'user@example.com' });
+    const req = { body: { nrp: '1', email: 'other@example.com' } };
     const res = createRes();
 
-    await validateEmail(req, res, () => {});
+    await requestClaimPasswordReset(req, res, () => {});
 
-    expect(res.status).toHaveBeenCalledWith(503);
-    expect(res.json).toHaveBeenCalledWith({
-      success: false,
-      message: 'Layanan validasi email tidak tersedia. Coba beberapa saat lagi.',
-    });
-    expect(userModel.findUserByEmail).not.toHaveBeenCalled();
-  });
-
-  test('allows active domain after normalizing email and continues to database lookup', async () => {
-    dns.resolveMx.mockResolvedValue([{ exchange: 'mail.example.com', priority: 10 }]);
-    const req = { body: { email: ' User@Example.com ' } };
-    const res = createRes();
-
-    await validateEmail(req, res, () => {});
-
-    expect(dns.resolveMx).toHaveBeenCalledWith('example.com');
-    expect(userModel.findUserByEmail).toHaveBeenCalledWith('user@example.com');
     expect(res.status).toHaveBeenCalledWith(200);
-  });
-
-  test('rejects inactive user email even when domain is active', async () => {
-    dns.resolveMx.mockResolvedValue([{ exchange: 'mail.example.com', priority: 10 }]);
-    userModel.findUserByEmail.mockResolvedValue({ status: false });
-    const req = { body: { email: 'user@example.com' } };
-    const res = createRes();
-
-    await validateEmail(req, res, () => {});
-
-    expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith({
-      success: false,
-      message: 'Email tidak aktif. Hubungi admin untuk mengaktifkan kembali.',
+      success: true,
+      data: {
+        message:
+          'Jika data valid dan terdaftar, instruksi reset password akan dikirim melalui kanal yang tersedia.',
+      },
     });
   });
 });

@@ -6,7 +6,9 @@ This document explains how clients, regular users and dashboard operators authen
 - `/api/auth/login` for client operators,
 - `/api/auth/user-login` and `/api/auth/user-register` for regular users,
 - `/api/auth/dashboard-register` and `/api/auth/dashboard-login` for the web dashboard,
-- `/api/auth/dashboard-password-reset/request` and `/api/auth/dashboard-password-reset/confirm` for dashboard password recovery (aliases available at `/api/auth/password-reset/request`, `/api/auth/password-reset/confirm`, and the unauthenticated `/api/password-reset/request` plus `/api/password-reset/confirm`).
+- `/api/password-reset/request` and `/api/password-reset/confirm` as the canonical dashboard password-recovery endpoints.
+
+Backward-compatible aliases remain available at `/api/auth/dashboard-password-reset/request`, `/api/auth/dashboard-password-reset/confirm`, `/api/auth/password-reset/request`, and `/api/auth/password-reset/confirm` during migration.
 
 All return a JSON Web Token (JWT) that must be included in subsequent requests unless noted otherwise.
 
@@ -151,8 +153,8 @@ The same `client_ids` and `role` from the dashboard token gate both the User Dir
 When operator hanya memiliki satu `client_id` bertipe direktorat, JWT `role` dan field `user.role` akan dinormalisasi ke `client_id` tersebut dalam lowercase (mis. `DITSAMAPTA` → `ditsamapta`) agar downstream handler menggunakan konteks direktorat yang tepat.
 
 ### Dashboard Password Reset Request
-`POST /api/auth/dashboard-password-reset/request`
-*(aliases: `/api/auth/password-reset/request`, `/api/password-reset/request` — the last one requires no token)*
+`POST /api/password-reset/request`
+*(backward-compatible aliases: `/api/auth/dashboard-password-reset/request`, `/api/auth/password-reset/request`)*
 ```json
 {
   "username": "admin",
@@ -173,8 +175,8 @@ Successful response:
 If WhatsApp delivery fails, administrators are alerted and the API responds with a message instructing the operator to contact the admin for manual assistance.
 
 ### Dashboard Password Reset Confirmation
-`POST /api/auth/dashboard-password-reset/confirm`
-*(aliases: `/api/auth/password-reset/confirm`, `/api/password-reset/confirm` — the last one requires no token)*
+`POST /api/password-reset/confirm`
+*(backward-compatible aliases: `/api/auth/dashboard-password-reset/confirm`, `/api/auth/password-reset/confirm`)*
 ```json
 {
   "token": "63e80f9a-3e63-4ad4-8a69-7c7f4d92721e",
@@ -201,12 +203,8 @@ Example error (expired token or mismatched confirmation):
 }
 ```
 
-### Password Reset Aliasing via `/api/password-reset/*`
-`POST /api/password-reset/request`
-
-`POST /api/password-reset/confirm`
-
-These endpoints forward to the same dashboard password reset handlers described above but live under a dedicated `/api/password-reset/*` path for routing aliases. The payloads and success responses are identical to the dashboard flows:
+### Backward-compatible password-reset aliases
+The legacy `/api/auth/*` password-reset routes forward to the same dashboard password-reset handlers described above. Prefer the canonical `/api/password-reset/*` paths for new integrations. Payloads and success responses are identical:
 
 **Request payload**
 ```json

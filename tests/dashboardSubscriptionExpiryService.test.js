@@ -2,9 +2,7 @@ import { jest } from '@jest/globals';
 
 const mockQuery = jest.fn();
 const mockExpireSubscription = jest.fn();
-const mockSafeSendMessage = jest.fn();
-const mockSendWithClientFallback = jest.fn();
-const mockFormatToWhatsAppId = jest.fn((digits) => `${digits}@c.us`);
+const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation(() => {});
 
 jest.unstable_mockModule('../src/repository/db.js', () => ({
   query: mockQuery,
@@ -14,7 +12,6 @@ jest.unstable_mockModule('../src/service/dashboardSubscriptionService.js', () =>
   expireSubscription: mockExpireSubscription,
 }));
 
-// WhatsApp utilities and service removed
 
 let selectExpiredSubscriptions;
 let processExpiredSubscriptions;
@@ -27,6 +24,10 @@ beforeAll(async () => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+});
+
+afterAll(() => {
+  mockConsoleLog.mockRestore();
 });
 
 test('selectExpiredSubscriptions returns only active rows past the reference date', () => {
@@ -45,7 +46,7 @@ test('selectExpiredSubscriptions returns only active rows past the reference dat
   expect(result.map((r) => r.subscription_id)).toEqual(['a']);
 });
 
-test('processExpiredSubscriptions expires overdue entries and sends WhatsApp notifications', async () => {
+test('processExpiredSubscriptions expires overdue entries and logs expiry processing', async () => {
   const now = new Date('2025-01-02T00:00:00Z');
   mockQuery.mockResolvedValue({
     rows: [
@@ -68,19 +69,13 @@ test('processExpiredSubscriptions expires overdue entries and sends WhatsApp not
     ],
   });
   mockExpireSubscription.mockResolvedValue({ subscription: { subscription_id: 'exp-1' } });
-  mockSafeSendMessage.mockResolvedValue(true);
-  mockSendWithClientFallback.mockResolvedValue(true);
 
   const result = await processExpiredSubscriptions(now);
 
   expect(result).toEqual({ checked: 2, expired: 1 });
   expect(mockExpireSubscription).toHaveBeenCalledTimes(1);
   expect(mockExpireSubscription).toHaveBeenCalledWith('exp-1', '2025-01-01T00:00:00Z');
-  expect(mockSendWithClientFallback).toHaveBeenCalledTimes(1);
-  expect(mockSendWithClientFallback).toHaveBeenCalledWith(
-    expect.objectContaining({
-      chatId: '08123456789@c.us',
-      message: expect.any(String),
-    })
+  expect(mockConsoleLog).toHaveBeenCalledWith(
+    '[Subscription] Expired: exp-1 for user user-1'
   );
 });

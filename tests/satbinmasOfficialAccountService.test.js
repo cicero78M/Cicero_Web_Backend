@@ -8,6 +8,7 @@ const mockFindAccountByPlatformAndUsername = jest.fn();
 const mockFindAccountById = jest.fn();
 const mockUpsertAccount = jest.fn();
 const mockRemoveAccount = jest.fn();
+const mockFindMediaWithRelationsByClientId = jest.fn();
 
 jest.unstable_mockModule('../src/model/clientModel.js', () => ({
   findById: mockFindClientById,
@@ -21,6 +22,10 @@ jest.unstable_mockModule('../src/model/satbinmasOfficialAccountModel.js', () => 
   findById: mockFindAccountById,
   upsertAccount: mockUpsertAccount,
   removeById: mockRemoveAccount,
+}));
+
+jest.unstable_mockModule('../src/model/satbinmasOfficialMediaModel.js', () => ({
+  findMediaWithRelationsByClientId: mockFindMediaWithRelationsByClientId,
 }));
 
 let listSatbinmasOfficialAccounts;
@@ -46,6 +51,7 @@ beforeEach(() => {
   mockFindAccountById.mockReset();
   mockUpsertAccount.mockReset();
   mockRemoveAccount.mockReset();
+  mockFindMediaWithRelationsByClientId.mockReset();
 });
 
 test('listSatbinmasOfficialAccounts returns rows for existing client', async () => {

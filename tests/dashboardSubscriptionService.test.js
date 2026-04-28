@@ -95,7 +95,7 @@ test('expireSubscription marks subscription expired and clears cache when no act
 
   expect(mockQuery).toHaveBeenNthCalledWith(1, 'BEGIN');
   expect(mockExpire).toHaveBeenCalledWith('sub-2', null);
-  expect(mockFindActiveByUser).toHaveBeenCalledWith('du-2');
+  expect(mockFindActiveByUser).toHaveBeenCalledWith('du-2', mockQuery);
   expect(result.cache.premium_status).toBe(false);
   expect(mockQuery).toHaveBeenNthCalledWith(3, 'COMMIT');
 });

@@ -34,7 +34,13 @@ export async function saveMonthlyCommentRecapExcel(clientId, { regionalId } = {}
   const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
   const endDate = new Date(now);
 
-  const formatIso = (d) => d.toISOString().slice(0, 10);
+  const formatIso = (d) =>
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jakarta',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
   const formatDisplay = (d) =>
     new Date(d).toLocaleDateString('id-ID', {
       day: '2-digit',

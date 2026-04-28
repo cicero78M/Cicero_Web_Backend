@@ -271,7 +271,7 @@ test('scope org ditintelkam enables satik filter when switch_satik is string tru
     undefined,
     'ditintelkam',
     {
-      postClientId: 'NGAWI',
+      postClientId: 'ditintelkam',
       userClientId: 'NGAWI',
       userRoleFilter: 'ditintelkam',
       includePostRoleFilter: false,
@@ -313,7 +313,7 @@ test('scope org ditbinmas follows tiktok comments flow (role-scoped post client)
     undefined,
     'ditbinmas',
     {
-      postClientId: 'NGAWI',
+      postClientId: 'ditbinmas',
       userClientId: 'NGAWI',
       userRoleFilter: 'ditbinmas',
       includePostRoleFilter: false,
@@ -354,7 +354,7 @@ test('org ditbinmas ignores query client_id and uses token client_id', async () 
     undefined,
     'ditbinmas',
     {
-      postClientId: 'PRESISI_ORG',
+      postClientId: 'ditbinmas',
       userClientId: 'PRESISI_ORG',
       userRoleFilter: 'ditbinmas',
       includePostRoleFilter: false,
@@ -435,7 +435,7 @@ test('org ditbinmas uses x-client-id when token has no client_id', async () => {
     undefined,
     'ditbinmas',
     expect.objectContaining({
-      postClientId: 'NGAWI',
+      postClientId: 'ditbinmas',
       userClientId: 'NGAWI',
     })
   );

@@ -27,8 +27,9 @@ const PRIORITY_UPPER = PRIORITY_USER_NAMES.map(name => name.toUpperCase());
 test('getRekapKomentarByClient uses post created_at BETWEEN for date range in both CTEs', async () => {
   mockClientType();
   mockQuery.mockResolvedValueOnce({ rows: [] });
+  mockQuery.mockResolvedValueOnce({ rows: [] });
   await getRekapKomentarByClient('POLRES', 'harian', null, '2024-01-01', '2024-01-31');
-  expect(mockQuery).toHaveBeenCalledTimes(2);
+  expect(mockQuery).toHaveBeenCalledTimes(3);
   expect(mockQuery.mock.calls[1][0]).toContain('p.created_at');
   expect(mockQuery.mock.calls[1][0]).not.toContain("(c.updated_at AT TIME ZONE 'UTC')");
   expect(mockQuery.mock.calls[1][0]).toContain('BETWEEN');
@@ -40,6 +41,7 @@ test('getRekapKomentarByClient uses post created_at BETWEEN for date range in bo
 
 test('getRekapKomentarByClient keeps comment period based on post date even if comment updated_at shifts', async () => {
   mockClientType();
+  mockQuery.mockResolvedValueOnce({ rows: [] });
   mockQuery.mockResolvedValueOnce({ rows: [] });
   await getRekapKomentarByClient('POLRES', 'harian', null, '2024-01-01', '2024-01-31');
 
@@ -54,8 +56,9 @@ test('getRekapKomentarByClient keeps comment period based on post date even if c
 test('getRekapKomentarByClient filters directorate users by ditbinmas role only', async () => {
   mockClientType('direktorat');
   mockQuery.mockResolvedValueOnce({ rows: [] });
+  mockQuery.mockResolvedValueOnce({ rows: [] });
   await getRekapKomentarByClient('ditbinmas', 'harian', undefined, undefined, undefined, 'ditbinmas');
-  expect(mockQuery).toHaveBeenCalledTimes(2);
+  expect(mockQuery).toHaveBeenCalledTimes(3);
   expect(mockQuery.mock.calls[0][0]).toContain('SELECT client_type FROM clients');
   const sql = mockQuery.mock.calls[1][0];
   expect(sql).toContain('EXISTS (');
@@ -73,9 +76,10 @@ test('getRekapKomentarByClient filters directorate users by ditbinmas role only'
 test('ditbinmas recap counts only ditbinmas-scoped posts and respects tanggal filter', async () => {
   mockClientType('direktorat');
   mockQuery.mockResolvedValueOnce({ rows: [] });
+  mockQuery.mockResolvedValueOnce({ rows: [] });
   await getRekapKomentarByClient('ditbinmas', 'harian', '2024-02-10', undefined, undefined, 'ditbinmas');
 
-  expect(mockQuery).toHaveBeenCalledTimes(2);
+  expect(mockQuery).toHaveBeenCalledTimes(3);
   const sql = mockQuery.mock.calls[1][0];
   expect(sql).toContain('pr.video_id IS NOT NULL');
   expect(sql).toContain('COALESCE(p.original_created_at, p.created_at)');
@@ -87,6 +91,7 @@ test('ditbinmas recap counts only ditbinmas-scoped posts and respects tanggal fi
 
 test('getRekapKomentarByClient orders nama by priority list', async () => {
   mockClientType();
+  mockQuery.mockResolvedValueOnce({ rows: [] });
   mockQuery.mockResolvedValueOnce({ rows: [] });
   await getRekapKomentarByClient('POLRES');
   const sql = mockQuery.mock.calls[1][0];

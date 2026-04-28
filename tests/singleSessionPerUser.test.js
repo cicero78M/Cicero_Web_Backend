@@ -196,7 +196,7 @@ describe('Single Session Per User', () => {
 
     const res = await request(app)
       .post('/api/auth/user-login')
-      .send({ nrp: 'user-1', whatsapp: '0812345678' });
+      .send({ user_id: 'user-1', whatsapp: '0812345678' });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);

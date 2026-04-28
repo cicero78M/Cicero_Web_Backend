@@ -1,58 +1,33 @@
 // src/service/telegramService.js
 
 import TelegramBot from './telegramBotAdapter.js';
+import {
+  DEFAULT_TIMEZONE,
+  escapeMarkdown,
+  REJECTION_REASONS,
+} from './telegram/formatters.js';
+import {
+  sendTelegramAdminMessage as sendTelegramAdminMessageHelper,
+  sendLoginLogNotification as sendLoginLogNotificationHelper,
+  sendPasswordResetFailureNotification as sendPasswordResetFailureNotificationHelper,
+  sendUserApprovalConfirmation as sendUserApprovalConfirmationHelper,
+  sendUserApprovalRequest as sendUserApprovalRequestHelper,
+  sendUserRejectionConfirmation as sendUserRejectionConfirmationHelper,
+} from './telegram/adminNotifications.js';
+import {
+  handlePremiumPendingCommand as handlePremiumPendingCommandHelper,
+  processPremiumApproval as processPremiumApprovalHelper,
+  processPremiumDenial as processPremiumDenialHelper,
+  sendDashboardPremiumRequestNotification as sendDashboardPremiumRequestNotificationHelper,
+  sendPremiumRequestNotification as sendPremiumRequestNotificationHelper,
+} from './telegram/premiumNotifications.js';
+import { createTelegramCallbackHandlers } from './telegram/callbackHandlers.js';
+import { createTelegramCommandHandlers } from './telegram/commandHandlers.js';
+import { createTelegramLifecycle } from './telegram/lifecycle.js';
 
 let bot = null;
 let botReady = false;
 let isInitializing = false;
-
-// Configuration constants
-const DEFAULT_TIMEZONE = process.env.TIMEZONE || 'Asia/Jakarta';
-
-/**
- * Rejection reason options shown to admin in Telegram
- */
-export const REJECTION_REASONS = [
-  'Penggunaan username dan role tidak sesuai',
-  'Penggunaan username tidak sesuai',
-  'Role tidak sesuai',
-  'Wilayah tidak sesuai',
-];
-
-/**
- * Escape Markdown special characters for Telegram
- * @param {string} text - Text to escape
- * @returns {string} Escaped text safe for Markdown parsing
- */
-function escapeMarkdown(text) {
-  if (!text) return '';
-  
-  // Convert to string if not already
-  const str = String(text);
-  
-  // Escape special Markdown characters: _ * [ ] ( ) ~ ` > # + - = | { } . !
-  // Note: We need to be careful with backslashes - escape them first
-  return str
-    .replace(/\\/g, '\\\\')  // Backslash must be escaped first
-    .replace(/_/g, '\\_')     // Underscore
-    .replace(/\*/g, '\\*')    // Asterisk
-    .replace(/\[/g, '\\[')    // Left bracket
-    .replace(/\]/g, '\\]')    // Right bracket
-    .replace(/\(/g, '\\(')    // Left parenthesis
-    .replace(/\)/g, '\\)')    // Right parenthesis
-    .replace(/~/g, '\\~')     // Tilde
-    .replace(/`/g, '\\`')     // Backtick
-    .replace(/>/g, '\\>')     // Greater than
-    .replace(/#/g, '\\#')     // Hash
-    .replace(/\+/g, '\\+')    // Plus
-    .replace(/-/g, '\\-')     // Minus
-    .replace(/=/g, '\\=')     // Equal
-    .replace(/\|/g, '\\|')    // Pipe
-    .replace(/\{/g, '\\{')    // Left brace
-    .replace(/\}/g, '\\}')    // Right brace
-    .replace(/\./g, '\\.')    // Dot
-    .replace(/!/g, '\\!');    // Exclamation mark
-}
 
 /**
  * Check if a chat ID is authorized as admin
@@ -69,113 +44,45 @@ export function isTelegramAdmin(chatId) {
   return adminChatIds.includes(String(chatId));
 }
 
-/**
- * Initialize Telegram bot
- */
-export function initializeTelegramBot() {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  
-  // Skip initialization if token is not provided or in test mode
-  if (!token || process.env.TELEGRAM_SERVICE_SKIP_INIT === 'true') {
-    console.log('[Telegram] Bot initialization skipped (no token or skip flag set)');
-    return null;
-  }
+const commandHandlers = createTelegramCommandHandlers({
+  getBot: () => bot,
+  isTelegramAdmin,
+  processApproval,
+  processRejection,
+  processPremiumApproval,
+  processPremiumDenial,
+  handlePremiumPendingCommand,
+});
 
-  // Prevent multiple simultaneous initializations (singleton pattern)
-  if (isInitializing) {
-    console.log('[Telegram] Bot initialization already in progress, skipping duplicate call');
-    return bot;
-  }
-  
-  // If bot is already initialized and polling, return existing instance
-  if (bot && botReady) {
-    console.log('[Telegram] Bot already initialized, returning existing instance');
-    return bot;
-  }
+const {
+  setupCommandHandlers,
+} = commandHandlers;
 
-  isInitializing = true;
-
-  try {
-    // Stop existing bot if any to prevent conflicts
-    if (bot) {
-      try {
-        bot.stopPolling();
-        console.log('[Telegram] Stopped existing bot polling');
-      } catch (stopError) {
-        console.warn('[Telegram] Error stopping existing bot:', stopError.message);
-      }
-    }
-    
-    // Enable polling to receive messages and callbacks
-    bot = new TelegramBot(token, { 
-      polling: {
-        interval: 1000,
-        autoStart: true,
-        params: {
-          timeout: 10
-        }
-      }
-    });
-    
-    botReady = true;
-    console.log('[Telegram] Bot initialized successfully (interactive mode with polling)');
-    
-    // Set up polling error handler
-    bot.on('polling_error', (error) => {
-      console.error('[Telegram] Polling error:', error.message);
-      
-      // Handle 409 Conflict specifically
-      // Check for HTTP 409 status or error message indicating conflict
-      const is409Conflict = 
-        (error.response && error.response.statusCode === 409) ||
-        (error.code === 'ETELEGRAM' && error.message.includes('409 Conflict'));
-      
-      if (is409Conflict) {
-        console.warn('[Telegram] Detected 409 Conflict - another bot instance may be running');
-        console.warn('[Telegram] Stopping this instance to prevent conflicts');
-        
-        // Set botReady to false first to prevent race conditions
-        botReady = false;
-        
-        // Stop polling on this instance
-        try {
-          bot.stopPolling();
-          console.log('[Telegram] Polling stopped due to conflict');
-        } catch (stopErr) {
-          console.error('[Telegram] Error stopping polling:', stopErr.message);
-        }
-      }
-    });
-    
-    // Set up command and callback handlers
-    setupCommandHandlers();
-    setupCallbackHandlers();
-    
-    return bot;
-  } catch (error) {
-    console.error('[Telegram] Failed to initialize bot:', error.message);
-    botReady = false;
-    return null;
-  } finally {
-    isInitializing = false;
-  }
+function setupCallbackHandlers() {
+  return callbackHandlers.setupCallbackHandlers();
 }
 
-/**
- * Get the Telegram bot instance
- * @returns {TelegramBot|null}
- */
-export function getTelegramBot() {
-  return bot;
-}
+const lifecycle = createTelegramLifecycle({
+  TelegramBot,
+  getBot: () => bot,
+  setBot: (value) => {
+    bot = value;
+  },
+  getBotReady: () => botReady,
+  setBotReady: (value) => {
+    botReady = value;
+  },
+  getIsInitializing: () => isInitializing,
+  setIsInitializing: (value) => {
+    isInitializing = value;
+  },
+  setupCommandHandlers,
+  setupCallbackHandlers,
+});
 
-/**
- * Check if Telegram bot is ready
- * @returns {boolean}
- */
-export function isTelegramReady() {
-  return botReady && bot !== null;
-}
+export const initializeTelegramBot = lifecycle.initializeTelegramBot;
+export const getTelegramBot = lifecycle.getTelegramBot;
+export const isTelegramReady = lifecycle.isTelegramReady;
 
 /**
  * Send a message to a Telegram chat
@@ -341,35 +248,7 @@ export async function sendUserRejectionConfirmation(userData) {
  * @returns {Promise<object|null>}
  */
 export async function sendPremiumRequestNotification(requestData) {
-  const { request_id, user_id, sender_name, account_number, bank_name } = requestData;
-  
-  let message = `🔔 *Permintaan Subscription Premium*\n\n`;
-  message += `*User:* ${escapeMarkdown(String(user_id))}\n`;
-  message += `*Nama:* ${escapeMarkdown(sender_name)}\n`;
-  message += `*Rekening:* ${escapeMarkdown(account_number)}\n`;
-  message += `*Bank:* ${escapeMarkdown(bank_name)}\n`;
-  message += `*Request ID:* ${escapeMarkdown(String(request_id))}\n`;
-  
-  return sendTelegramAdminMessage(message);
-}
-
-/**
- * Format currency in Indonesian Rupiah
- * @param {number} amount - Amount to format
- * @returns {string}
- */
-function formatCurrencyId(amount) {
-  if (!amount) return 'Rp 0';
-  try {
-    return new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  } catch (err) {
-    return `Rp ${amount}`;
-  }
+  return sendPremiumRequestNotificationHelper(sendTelegramAdminMessage, requestData);
 }
 
 /**
@@ -378,168 +257,19 @@ function formatCurrencyId(amount) {
  * @returns {Promise<boolean>}
  */
 export async function sendDashboardPremiumRequestNotification(request) {
-  if (!request) return false;
-  
-  const commandUsername = request.username || request.dashboard_user_id || 'unknown';
-  const paymentProofStatus = request.proof_url
-    ? '✅ sudah upload bukti transfer'
-    : '⚠️ belum upload bukti transfer';
-  const paymentProofLink = request.proof_url || 'Belum upload bukti';
-  
-  let message = `📢 *Permintaan Akses Premium*\n\n`;
-  message += `*User Dashboard:*\n`;
-  message += `• Username: ${escapeMarkdown(commandUsername)}\n`;
-  message += `• WhatsApp: ${escapeMarkdown(request.whatsapp || '-')}\n`;
-  message += `• User ID: ${escapeMarkdown(String(request.dashboard_user_id || '-'))}\n\n`;
-  
-  message += `*Detail Permintaan:*\n`;
-  message += `• Tier: ${escapeMarkdown(request.premium_tier || '-')}\n`;
-  message += `• Client ID: ${escapeMarkdown(String(request.client_id || '-'))}\n`;
-  message += `• Request Token: ${escapeMarkdown(request.request_token || '-')}\n`;
-  message += `• Status Bukti: ${escapeMarkdown(paymentProofStatus)}\n\n`;
-  
-  message += `*Detail Transfer:*\n`;
-  message += `• Bank: ${escapeMarkdown(request.bank_name || '-')}\n`;
-  message += `• Nomor Rekening: ${escapeMarkdown(request.account_number || '-')}\n`;
-  message += `• Nama Pengirim: ${escapeMarkdown(request.sender_name || '-')}\n`;
-  message += `• Jumlah: ${escapeMarkdown(formatCurrencyId(request.transfer_amount))}\n`;
-  
-  if (request.proof_url) {
-    // For URLs in Markdown, we need to escape the URL text but not the URL itself
-    message += `• [Lihat Bukti Transfer](${paymentProofLink})\n`;
-  }
-  
-  const requestToken = request.request_token || '-';
-  message += `\n*Request ID:* ${escapeMarkdown(String(request.request_id || '-'))}\n`;
-  message += `*Token:* \`${escapeMarkdown(requestToken)}\`\n\n`;
-  message += `Gunakan tombol di bawah atau ketik:\n`;
-  message += `\`/approvepremium ${escapeMarkdown(requestToken)}\` untuk menyetujui\n`;
-  message += `\`/denypremium ${escapeMarkdown(requestToken)}\` untuk menolak`;
-
-  const inlineKeyboard = {
-    inline_keyboard: [
-      [
-        { text: '✅ Approve Premium', callback_data: `premium_approve:${requestToken}` },
-        { text: '❌ Deny Premium', callback_data: `premium_deny:${requestToken}` },
-      ],
-    ],
-  };
-  
-  try {
-    const result = await sendTelegramAdminMessage(message, { reply_markup: inlineKeyboard });
-    return result !== null;
-  } catch (err) {
-    console.warn(
-      `[Telegram] Failed to send dashboard premium request ${request.request_id}: ${err?.message || err}`
-    );
-    return false;
-  }
+  return sendDashboardPremiumRequestNotificationHelper(sendTelegramAdminMessage, request);
 }
 
 async function processPremiumApproval(chatId, token) {
-  try {
-    const { approveDashboardPremiumRequest } = await import('./dashboardPremiumRequestService.js');
-    const result = await approveDashboardPremiumRequest(token, {
-      actor: 'telegram_admin',
-      channel: 'telegram',
-    });
-    const approvedRequest = result?.request;
-    await bot.sendMessage(
-      chatId,
-      `✅ Premium request berhasil disetujui.\n` +
-        `• Token: \`${escapeMarkdown(token)}\`\n` +
-        `• Username: ${escapeMarkdown(approvedRequest?.username || '-')}\n` +
-        `• Tier: ${escapeMarkdown(approvedRequest?.premium_tier || 'premium')}`,
-      { parse_mode: 'Markdown' },
-    );
-  } catch (err) {
-    await bot.sendMessage(chatId, `❌ Gagal approve premium request: ${escapeMarkdown(err.message)}`);
-  }
+  return processPremiumApprovalHelper((...args) => bot.sendMessage(...args), chatId, token);
 }
 
 async function processPremiumDenial(chatId, token) {
-  try {
-    const { denyDashboardPremiumRequest } = await import('./dashboardPremiumRequestService.js');
-    const deniedRequest = await denyDashboardPremiumRequest(token, {
-      actor: 'telegram_admin',
-      channel: 'telegram',
-      note: 'Denied via Telegram',
-      metadata: { denied_via: 'telegram' },
-    });
-
-    await bot.sendMessage(
-      chatId,
-      `✅ Premium request berhasil ditolak.\n` +
-        `• Token: \`${escapeMarkdown(token)}\`\n` +
-        `• Username: ${escapeMarkdown(deniedRequest?.username || '-')}`,
-      { parse_mode: 'Markdown' },
-    );
-  } catch (err) {
-    await bot.sendMessage(chatId, `❌ Gagal deny premium request: ${escapeMarkdown(err.message)}`);
-  }
-}
-
-function buildPremiumPendingListMessage(requests = []) {
-  if (!requests.length) {
-    return '📭 Tidak ada premium request pending/confirmed saat ini.';
-  }
-
-  const lines = requests.map((request, index) => (
-    `${index + 1}. *${escapeMarkdown(request.username || '-')}* (${escapeMarkdown(request.status || '-')})\n` +
-    `   • Token: \`${escapeMarkdown(request.request_token || '-')}\`\n` +
-    `   • Tier: ${escapeMarkdown(request.premium_tier || '-')}\n` +
-    `   • Nominal: ${escapeMarkdown(formatCurrencyId(request.transfer_amount))}\n` +
-    `   • Dibuat: ${escapeMarkdown(new Date(request.created_at).toLocaleString('id-ID', { timeZone: DEFAULT_TIMEZONE }))}`
-  ));
-
-  return `📋 *Premium Pending Requests*\n\n${lines.join('\n\n')}`;
-}
-
-async function handleApprovePremiumCommand(msg) {
-  const chatId = msg.chat.id;
-  const token = msg.text.split(' ')[1];
-  if (!isTelegramAdmin(chatId)) {
-    await bot.sendMessage(chatId, '❌ Anda tidak memiliki akses ke sistem ini.');
-    return;
-  }
-  if (!token) {
-    await bot.sendMessage(chatId, '❌ Format salah. Gunakan: `/approvepremium request_token`', {
-      parse_mode: 'Markdown',
-    });
-    return;
-  }
-  await processPremiumApproval(chatId, token);
-}
-
-async function handleDenyPremiumCommand(msg) {
-  const chatId = msg.chat.id;
-  const token = msg.text.split(' ')[1];
-  if (!isTelegramAdmin(chatId)) {
-    await bot.sendMessage(chatId, '❌ Anda tidak memiliki akses ke sistem ini.');
-    return;
-  }
-  if (!token) {
-    await bot.sendMessage(chatId, '❌ Format salah. Gunakan: `/denypremium request_token`', {
-      parse_mode: 'Markdown',
-    });
-    return;
-  }
-  await processPremiumDenial(chatId, token);
+  return processPremiumDenialHelper((...args) => bot.sendMessage(...args), chatId, token);
 }
 
 async function handlePremiumPendingCommand(msg) {
-  const chatId = msg.chat.id;
-  if (!isTelegramAdmin(chatId)) {
-    await bot.sendMessage(chatId, '❌ Anda tidak memiliki akses ke sistem ini.');
-    return;
-  }
-  try {
-    const { listPendingDashboardPremiumRequests } = await import('./dashboardPremiumRequestService.js');
-    const requests = await listPendingDashboardPremiumRequests(20);
-    await bot.sendMessage(chatId, buildPremiumPendingListMessage(requests), { parse_mode: 'Markdown' });
-  } catch (err) {
-    await bot.sendMessage(chatId, `❌ Gagal mengambil premium pending: ${escapeMarkdown(err.message)}`);
-  }
+  return handlePremiumPendingCommandHelper((...args) => bot.sendMessage(...args), isTelegramAdmin, msg);
 }
 
 /**
@@ -598,59 +328,7 @@ export async function sendPasswordResetToken(chatId, resetData) {
  * @returns {Promise<object|null>}
  */
 export async function sendPasswordResetFailureNotification(message) {
-  return sendTelegramAdminMessage(message);
-}
-
-/**
- * Handle /approvedash command
- * @param {object} msg - Telegram message object
- */
-async function handleApproveDashCommand(msg) {
-  const chatId = msg.chat.id;
-  const username = msg.text.split(' ')[1];
-  
-  // Check if sender is admin
-  if (!isTelegramAdmin(chatId)) {
-    await bot.sendMessage(chatId, '❌ Anda tidak memiliki akses ke sistem ini.');
-    return;
-  }
-  
-  if (!username) {
-    await bot.sendMessage(
-      chatId, 
-      '❌ Format salah. Gunakan: `/approvedash username`',
-      { parse_mode: 'Markdown' }
-    );
-    return;
-  }
-  
-  await processApproval(chatId, username);
-}
-
-/**
- * Handle /denydash command
- * @param {object} msg - Telegram message object
- */
-async function handleDenyDashCommand(msg) {
-  const chatId = msg.chat.id;
-  const username = msg.text.split(' ')[1];
-  
-  // Check if sender is admin
-  if (!isTelegramAdmin(chatId)) {
-    await bot.sendMessage(chatId, '❌ Anda tidak memiliki akses ke sistem ini.');
-    return;
-  }
-  
-  if (!username) {
-    await bot.sendMessage(
-      chatId, 
-      '❌ Format salah. Gunakan: `/denydash username`',
-      { parse_mode: 'Markdown' }
-    );
-    return;
-  }
-  
-  await processRejection(chatId, username);
+  return sendPasswordResetFailureNotificationHelper(sendTelegramAdminMessage, message);
 }
 
 /**
@@ -890,184 +568,16 @@ async function finalizeRejection(chatId, username, reason) {
   }
 }
 
-/**
- * Setup command handlers for the bot
- */
-function setupCommandHandlers() {
-  if (!bot) return;
-  
-  // Handle /approvedash command
-  bot.onText(/\/approvedash/, handleApproveDashCommand);
-  
-  // Handle /denydash command
-  bot.onText(/\/denydash/, handleDenyDashCommand);
-
-  // Handle premium approval commands
-  bot.onText(/\/approvepremium/, handleApprovePremiumCommand);
-  bot.onText(/\/denypremium/, handleDenyPremiumCommand);
-  bot.onText(/\/premiumpending/, handlePremiumPendingCommand);
-  
-  // Handle /start command
-  bot.onText(/\/start/, async (msg) => {
-    const chatId = msg.chat.id;
-    if (isTelegramAdmin(chatId)) {
-      await bot.sendMessage(
-        chatId,
-        'Selamat datang di Cicero Admin Bot!\n\n' +
-        'Perintah yang tersedia:\n' +
-        '/approvedash <username> - Setujui registrasi user\n' +
-        '/denydash <username> - Tolak registrasi user\n' +
-        '/approvepremium <request_token> - Setujui premium request\n' +
-        '/denypremium <request_token> - Tolak premium request\n' +
-        '/premiumpending - Lihat daftar premium pending'
-      );
-    } else {
-      await bot.sendMessage(chatId, '❌ Anda tidak memiliki akses ke sistem ini.');
-    }
-  });
-  
-  console.log('[Telegram] Command handlers registered');
-}
-
-/**
- * Setup callback query handlers for inline buttons
- */
-function setupCallbackHandlers() {
-  if (!bot) return;
-  
-  bot.on('callback_query', async (callbackQuery) => {
-    const chatId = callbackQuery.message.chat.id;
-    const messageId = callbackQuery.message.message_id;
-    const data = callbackQuery.data;
-    
-    // Check if sender is admin
-    if (!isTelegramAdmin(chatId)) {
-      await bot.answerCallbackQuery(callbackQuery.id, {
-        text: '❌ Anda tidak memiliki akses ke sistem ini.',
-        show_alert: true
-      });
-      return;
-    }
-    
-    // Handle reject_reason:username:index callback
-    if (data.startsWith('reject_reason:')) {
-      const parts = data.split(':');
-      // parts = ['reject_reason', ...usernameParts, index]
-      const reasonIndex = parseInt(parts[parts.length - 1], 10);
-      const username = parts.slice(1, parts.length - 1).join(':');
-      
-      if (!username || isNaN(reasonIndex) || reasonIndex < 0 || reasonIndex >= REJECTION_REASONS.length) {
-        await bot.answerCallbackQuery(callbackQuery.id, {
-          text: '❌ Data tidak valid',
-          show_alert: true
-        });
-        return;
-      }
-      
-      const reason = REJECTION_REASONS[reasonIndex];
-      
-      await bot.answerCallbackQuery(callbackQuery.id, {
-        text: `Memproses penolakan dengan alasan: ${reason}...`
-      });
-      
-      await finalizeRejection(chatId, username, reason);
-      
-      // Edit the message to remove buttons
-      try {
-        await bot.editMessageReplyMarkup(
-          { inline_keyboard: [] },
-          { chat_id: chatId, message_id: messageId }
-        );
-      } catch (err) {
-        console.warn('[Telegram] Failed to remove inline keyboard:', err.message);
-      }
-      return;
-    }
-
-    if (data.startsWith('premium_approve:') || data.startsWith('premium_deny:')) {
-      const [action, token] = data.split(':');
-      if (!token) {
-        await bot.answerCallbackQuery(callbackQuery.id, {
-          text: '❌ Token tidak valid',
-          show_alert: true,
-        });
-        return;
-      }
-
-      await bot.answerCallbackQuery(callbackQuery.id, {
-        text: action === 'premium_approve' ? 'Memproses approve premium...' : 'Memproses deny premium...',
-      });
-
-      if (action === 'premium_approve') {
-        await processPremiumApproval(chatId, token);
-      } else {
-        await processPremiumDenial(chatId, token);
-      }
-
-      try {
-        await bot.editMessageReplyMarkup(
-          { inline_keyboard: [] },
-          { chat_id: chatId, message_id: messageId }
-        );
-      } catch (err) {
-        console.warn('[Telegram] Failed to remove premium inline keyboard:', err.message);
-      }
-      return;
-    }
-    
-    // Parse callback data: "approve:username" or "deny:username"
-    const colonIndex = data.indexOf(':');
-    if (colonIndex === -1) {
-      await bot.answerCallbackQuery(callbackQuery.id, {
-        text: '❌ Data tidak valid',
-        show_alert: true
-      });
-      return;
-    }
-    const action = data.slice(0, colonIndex);
-    const username = data.slice(colonIndex + 1);
-    
-    if (!username) {
-      await bot.answerCallbackQuery(callbackQuery.id, {
-        text: '❌ Data tidak valid',
-        show_alert: true
-      });
-      return;
-    }
-    
-    // Answer callback query immediately
-    await bot.answerCallbackQuery(callbackQuery.id, {
-      text: `Memproses ${action === 'approve' ? 'persetujuan' : 'penolakan'}...`
-    });
-    
-    // Process the action
-    if (action === 'approve') {
-      await processApproval(chatId, username);
-      // Edit the message to remove buttons
-      try {
-        await bot.editMessageReplyMarkup(
-          { inline_keyboard: [] },
-          { chat_id: chatId, message_id: messageId }
-        );
-      } catch (err) {
-        console.warn('[Telegram] Failed to remove inline keyboard:', err.message);
-      }
-    } else if (action === 'deny') {
-      await processRejection(chatId, username);
-      // Remove original buttons - rejection reason list will appear in new message
-      try {
-        await bot.editMessageReplyMarkup(
-          { inline_keyboard: [] },
-          { chat_id: chatId, message_id: messageId }
-        );
-      } catch (err) {
-        console.warn('[Telegram] Failed to remove inline keyboard:', err.message);
-      }
-    }
-  });
-  
-  console.log('[Telegram] Callback handlers registered');
-}
+const callbackHandlers = createTelegramCallbackHandlers({
+  getBot: () => bot,
+  isTelegramAdmin,
+  rejectionReasons: REJECTION_REASONS,
+  finalizeRejection,
+  processPremiumApproval,
+  processPremiumDenial,
+  processApproval,
+  processRejection,
+});
 
 // Initialize bot on module load
 initializeTelegramBot();
