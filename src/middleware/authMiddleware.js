@@ -1,5 +1,6 @@
 // src/middleware/authMiddleware.js
 import jwt from 'jsonwebtoken';
+import redis from '../config/redis.js';
 
 const authLogEvent = 'auth.middleware.denied';
 const maxUserAgentLength = 120;
@@ -104,6 +105,29 @@ function sendAuthError(res, req, statusCode, message, reason) {
   return res.status(statusCode).json({ success: false, message, reason });
 }
 
+async function ensureSessionTokenStillActive(token, req, res) {
+  try {
+    const exists = await redis.get(`login_token:${token}`);
+    if (!exists) {
+      return sendAuthError(res, req, 401, 'Invalid token', 'invalid_token');
+    }
+    return null;
+  } catch (err) {
+    console.error('auth.middleware.redis_failed', {
+      message: err?.message || 'Unknown error',
+      method: req.method,
+      path: req.originalUrl || req.path,
+    });
+    return sendAuthError(
+      res,
+      req,
+      503,
+      'Service temporarily unavailable',
+      'auth_backend_unavailable',
+    );
+  }
+}
+
 function getNumericEnv(name, fallbackValue) {
   const rawValue = process.env[name];
   if (rawValue === undefined || rawValue === null || rawValue === '') {
@@ -143,7 +167,7 @@ function decodeExpiredTokenWithinGrace(token) {
   return decoded;
 }
 
-export function authRequired(req, res, next) {
+export async function authRequired(req, res, next) {
   const authorizationHeader = req.headers.authorization;
   if (authorizationHeader && !authorizationHeader.startsWith('Bearer ')) {
     return sendAuthError(res, req, 401, 'Authorization harus format Bearer token', 'invalid_token');
@@ -162,6 +186,10 @@ export function authRequired(req, res, next) {
       ),
       algorithms: jwtAllowedAlgorithms,
     });
+    const sessionError = await ensureSessionTokenStillActive(token, req, res);
+    if (sessionError) {
+      return sessionError;
+    }
     req.user = decoded;
     if (decoded.role === 'operator' && !isOperatorAllowedPath(req.method, req.path)) {
       return sendAuthError(res, req, 403, 'Forbidden', 'forbidden_operator_path');
@@ -178,6 +206,10 @@ export function authRequired(req, res, next) {
             !isOperatorAllowedPath(req.method, req.path)
           ) {
             return sendAuthError(res, req, 403, 'Forbidden', 'forbidden_operator_path');
+          }
+          const sessionError = await ensureSessionTokenStillActive(token, req, res);
+          if (sessionError) {
+            return sessionError;
           }
           return next();
         }

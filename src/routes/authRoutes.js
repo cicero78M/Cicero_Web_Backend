@@ -24,11 +24,14 @@ import {
 } from "../service/telegramService.js";
 
 import {
+  clearAuthCookie,
   clearClientSessions,
   clearDashboardSessions,
   clearPenmasSessions,
   clearUserSessions,
   cookieOptions,
+  getAuthSessionTtlSeconds,
+  revokeSessionToken,
 } from './auth/shared.js';
 import {
   handleDashboardPasswordResetConfirm,
@@ -41,6 +44,23 @@ export {
 };
 
 const router = express.Router();
+
+function getRequestToken(req) {
+  const authorizationHeader = req.headers.authorization;
+  if (authorizationHeader?.startsWith('Bearer ')) {
+    return authorizationHeader.split(' ')[1];
+  }
+  return req.cookies?.token || null;
+}
+
+router.post('/logout', async (req, res) => {
+  const token = getRequestToken(req);
+  if (token) {
+    await revokeSessionToken(token);
+  }
+  clearAuthCookie(res);
+  return res.json({ success: true, message: 'Logout berhasil' });
+});
 
 router.post('/penmas-register', async (req, res) => {
   const { username, password, role = 'penulis' } = req.body;
@@ -93,7 +113,7 @@ router.post('/penmas-login', async (req, res) => {
   try {
     await redis.sAdd(`penmas_login:${user.user_id}`, token);
     await redis.set(`login_token:${token}`, `penmas:${user.user_id}`, {
-      EX: 2 * 60 * 60,
+      EX: getAuthSessionTtlSeconds(),
     });
   } catch (err) {
     console.error('[AUTH] Gagal menyimpan token login penmas:', err.message);
@@ -284,7 +304,7 @@ router.post('/dashboard-login', async (req, res) => {
   try {
     await redis.sAdd(`dashboard_login:${user.dashboard_user_id}`, token);
     await redis.set(`login_token:${token}`, `dashboard:${user.dashboard_user_id}`, {
-      EX: 2 * 60 * 60,
+      EX: getAuthSessionTtlSeconds(),
     });
   } catch (err) {
     console.error('[AUTH] Gagal menyimpan token login dashboard:', err.message);
@@ -398,7 +418,7 @@ router.post("/login", async (req, res) => {
   try {
     const setKey = `login:${client_id}`;
     await redis.sAdd(setKey, token);
-    await redis.set(`login_token:${token}`, client_id, { EX: 2 * 60 * 60 });
+    await redis.set(`login_token:${token}`, client_id, { EX: getAuthSessionTtlSeconds() });
   } catch (err) {
     console.error('[AUTH] Gagal menyimpan token login:', err.message);
   }
@@ -506,7 +526,7 @@ router.post('/user-login', async (req, res) => {
     try {
       await redis.sAdd(`user_login:${user.user_id}`, token);
       await redis.set(`login_token:${token}`, `user:${user.user_id}`, {
-        EX: 2 * 60 * 60
+        EX: getAuthSessionTtlSeconds()
       });
     } catch (err) {
       console.error('[AUTH] Gagal menyimpan token login user:', err.message);
@@ -559,7 +579,7 @@ router.post('/user-login', async (req, res) => {
     try {
       await redis.sAdd(`user_login:${user.user_id}`, token);
       await redis.set(`login_token:${token}`, `user:${user.user_id}`, {
-        EX: 2 * 60 * 60
+        EX: getAuthSessionTtlSeconds()
       });
     } catch (err) {
       console.error('[AUTH] Gagal menyimpan token login user:', err.message);

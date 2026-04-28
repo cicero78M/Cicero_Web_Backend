@@ -2,7 +2,16 @@ import { jest } from '@jest/globals';
 import request from 'supertest';
 import express from 'express';
 import jwt from 'jsonwebtoken';
-import { authRequired } from '../src/middleware/authMiddleware.js';
+
+const redisMock = {
+  get: jest.fn(),
+};
+
+jest.unstable_mockModule('../src/config/redis.js', () => ({
+  default: redisMock,
+}));
+
+const { authRequired } = await import('../src/middleware/authMiddleware.js');
 
 describe('authRequired middleware', () => {
   let app;
@@ -39,6 +48,8 @@ describe('authRequired middleware', () => {
   beforeEach(() => {
     delete process.env.JWT_EXPIRED_GRACE_SECONDS;
     delete process.env.JWT_CLOCK_TOLERANCE_SECONDS;
+    redisMock.get.mockReset();
+    redisMock.get.mockResolvedValue('session:active');
   });
 
   test('blocks operator role on claim routes when protected by authRequired', async () => {
@@ -294,6 +305,19 @@ describe('authRequired middleware', () => {
     expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
     expect(res.body.reason).toBe('expired_token');
+  });
+
+  test('rejects token when login session has been revoked', async () => {
+    redisMock.get.mockResolvedValueOnce(null);
+    const token = jwt.sign({ user_id: 'u5', role: 'user' }, process.env.JWT_SECRET);
+
+    const res = await request(app)
+      .get('/api/other')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(401);
+    expect(res.body.success).toBe(false);
+    expect(res.body.reason).toBe('invalid_token');
   });
 
 });

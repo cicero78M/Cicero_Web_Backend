@@ -1,3 +1,4 @@
+import jwt from 'jsonwebtoken';
 import { env } from '../../config/env.js';
 import redis from '../../config/redis.js';
 import { normalizeWhatsappNumber } from '../../utils/waHelper.js';
@@ -5,6 +6,8 @@ import { normalizeWhatsappNumber } from '../../utils/waHelper.js';
 export const RESET_TOKEN_EXPIRY_MINUTES = Number(
   process.env.DASHBOARD_RESET_TOKEN_EXPIRY_MINUTES || 15,
 );
+
+export const AUTH_TOKEN_LIFETIME_SECONDS = 2 * 60 * 60;
 
 export const DEFAULT_RESET_BASE_URL = 'https://papiqo.com';
 
@@ -90,6 +93,95 @@ export function clearUserSessions(userId) {
   return clearSessions(userId, 'user_login');
 }
 
+function getNumericEnv(name, fallbackValue) {
+  const rawValue = process.env[name];
+  if (rawValue === undefined || rawValue === null || rawValue === '') {
+    return fallbackValue;
+  }
+  const parsedValue = Number(rawValue);
+  if (Number.isNaN(parsedValue) || parsedValue < 0) {
+    return fallbackValue;
+  }
+  return parsedValue;
+}
+
+export function getAuthSessionTtlSeconds() {
+  return AUTH_TOKEN_LIFETIME_SECONDS + getNumericEnv('JWT_EXPIRED_GRACE_SECONDS', 0);
+}
+
+function inferSessionKeyFromDecodedToken(decodedToken) {
+  if (!decodedToken || typeof decodedToken !== 'object') {
+    return null;
+  }
+  if (decodedToken.dashboard_user_id) {
+    return `dashboard_login:${decodedToken.dashboard_user_id}`;
+  }
+  if (decodedToken.user_id && decodedToken.role === 'user') {
+    return `user_login:${decodedToken.user_id}`;
+  }
+  if (decodedToken.user_id) {
+    return `penmas_login:${decodedToken.user_id}`;
+  }
+  if (decodedToken.client_id) {
+    return `login:${decodedToken.client_id}`;
+  }
+  return null;
+}
+
+export async function revokeSessionToken(token) {
+  if (!token) return;
+
+  let tokenOwner = null;
+  try {
+    tokenOwner = await redis.get(`login_token:${token}`);
+  } catch (err) {
+    console.error(`[AUTH] Gagal membaca token login ${token}: ${err.message}`);
+  }
+
+  const cleanupTargets = [];
+  if (typeof tokenOwner === 'string' && tokenOwner) {
+    if (tokenOwner.startsWith('dashboard:')) {
+      cleanupTargets.push(`dashboard_login:${tokenOwner.slice('dashboard:'.length)}`);
+    } else if (tokenOwner.startsWith('penmas:')) {
+      cleanupTargets.push(`penmas_login:${tokenOwner.slice('penmas:'.length)}`);
+    } else if (tokenOwner.startsWith('user:')) {
+      cleanupTargets.push(`user_login:${tokenOwner.slice('user:'.length)}`);
+    } else if (!tokenOwner.includes(':')) {
+      cleanupTargets.push(`login:${tokenOwner}`);
+    }
+  }
+
+  if (cleanupTargets.length === 0) {
+    try {
+      const decodedToken = jwt.verify(token, process.env.JWT_SECRET, {
+        ignoreExpiration: true,
+        algorithms: ['HS256'],
+      });
+      const inferredKey = inferSessionKeyFromDecodedToken(decodedToken);
+      if (inferredKey) {
+        cleanupTargets.push(inferredKey);
+      }
+    } catch {
+      // Ignore decode failures so logout stays idempotent.
+    }
+  }
+
+  try {
+    await Promise.all([
+      ...cleanupTargets.map((sessionKey) =>
+        redis.sRem(sessionKey, token).catch((err) =>
+          console.error(
+            `[AUTH] Gagal menghapus token ${token} dari sesi ${sessionKey}: ${err.message}`,
+          ),
+        ),
+      ),
+      redis.del(`login_token:${token}`),
+    ]);
+  } catch (err) {
+    console.error(`[AUTH] Gagal mencabut token login ${token}: ${err.message}`);
+  }
+}
+
 const cookieSameSite = ['lax', 'strict', 'none'].includes(env.AUTH_COOKIE_SAME_SITE.toLowerCase())
   ? env.AUTH_COOKIE_SAME_SITE.toLowerCase()
   : 'lax';
@@ -101,10 +193,17 @@ const cookieSecure = isProduction || cookieSameSite === 'none' ? true : requeste
 export const cookieOptions = {
   httpOnly: true,
   sameSite: cookieSameSite,
-  maxAge: 2 * 60 * 60 * 1000,
+  maxAge: AUTH_TOKEN_LIFETIME_SECONDS * 1000,
   secure: cookieSecure,
 };
 
 if (env.AUTH_COOKIE_DOMAIN) {
   cookieOptions.domain = env.AUTH_COOKIE_DOMAIN;
+}
+
+export function clearAuthCookie(res) {
+  res.clearCookie('token', {
+    ...cookieOptions,
+    maxAge: undefined,
+  });
 }
