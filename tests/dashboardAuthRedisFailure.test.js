@@ -109,6 +109,31 @@ describe('verifyDashboardOrClientToken - Redis failure', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
   });
+
+  test('reuses dashboard validation path without double Redis lookup', async () => {
+    const token = jwt.sign(
+      { dashboard_user_id: 'u1', role: 'operator' },
+      process.env.JWT_SECRET,
+    );
+    mockRedis.get.mockResolvedValueOnce('dashboard:u1');
+    mockDashboardUserModel.findById.mockResolvedValueOnce({
+      dashboard_user_id: 'u1',
+      role: 'operator',
+      status: true,
+      client_ids: ['DITBINMAS'],
+      password_hash: 'secret',
+    });
+    mockQuery.mockResolvedValueOnce({ rows: [{ client_type: 'direktorat' }] });
+
+    const app = makeApp(verifyDashboardOrClientToken);
+    const res = await request(app)
+      .get('/protected')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockRedis.get).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('verifyPenmasToken - Redis failure', () => {

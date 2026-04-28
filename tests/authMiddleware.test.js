@@ -79,13 +79,14 @@ describe('authRequired middleware', () => {
     expect(res.body.success).toBe(true);
   });
 
-  test('allows operator role on dashboard stats route', async () => {
+  test('skips global auth on dashboard stats route because route has dedicated auth', async () => {
     const token = jwt.sign({ user_id: 'o1', role: 'operator' }, process.env.JWT_SECRET);
     const res = await request(app)
       .get('/api/dashboard/stats')
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
+    expect(redisMock.get).not.toHaveBeenCalled();
   });
 
   test('allows operator role on dashboard login recap route', async () => {
@@ -106,23 +107,24 @@ describe('authRequired middleware', () => {
     expect(res.body.success).toBe(true);
   });
 
-  test('allows operator role on insta posts khusus route', async () => {
+  test('skips global auth on insta posts khusus route because route has dedicated auth', async () => {
     const token = jwt.sign({ user_id: 'o1', role: 'operator' }, process.env.JWT_SECRET);
     const res = await request(app)
       .get('/api/insta/posts-khusus')
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
+    expect(redisMock.get).not.toHaveBeenCalled();
   });
 
-  test('blocks operator role on similar insta path outside allowlist', async () => {
+  test('skips global auth on similar insta path because insta routes have dedicated auth', async () => {
     const token = jwt.sign({ user_id: 'o1', role: 'operator' }, process.env.JWT_SECRET);
     const res = await request(app)
       .get('/api/insta/posts-khusus-arsip')
       .set('Authorization', `Bearer ${token}`);
-    expect(res.status).toBe(403);
-    expect(res.body.success).toBe(false);
-    expect(res.body.reason).toBe('forbidden_operator_path');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(redisMock.get).not.toHaveBeenCalled();
   });
 
   test('allows operator role on amplify rekap route', async () => {

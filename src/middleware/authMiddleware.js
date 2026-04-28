@@ -36,6 +36,13 @@ const operatorMethodAllowlist = [
   { method: 'PUT', pattern: /^\/link-reports-khusus\/[^/]+$/ },
 ];
 
+const dedicatedAuthPrefixes = [
+  '/dashboard',
+  '/insta',
+  '/tiktok',
+  '/premium',
+];
+
 function isOperatorAllowedPath(method, pathname) {
   const isPathAllowed = operatorAllowlist.some(({ path, type }) => {
     if (type === 'prefix') {
@@ -52,6 +59,12 @@ function isOperatorAllowedPath(method, pathname) {
     }
     return pattern.test(pathname);
   });
+}
+
+function shouldSkipGlobalAuth(pathname) {
+  return dedicatedAuthPrefixes.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
 }
 
 function summarizeUserAgent(userAgent) {
@@ -168,6 +181,10 @@ function decodeExpiredTokenWithinGrace(token) {
 }
 
 export async function authRequired(req, res, next) {
+  if (shouldSkipGlobalAuth(req.path)) {
+    return next();
+  }
+
   const authorizationHeader = req.headers.authorization;
   if (authorizationHeader && !authorizationHeader.startsWith('Bearer ')) {
     return sendAuthError(res, req, 401, 'Authorization harus format Bearer token', 'invalid_token');
