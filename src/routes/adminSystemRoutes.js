@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 import jwt from 'jsonwebtoken';
+import fetch from 'node-fetch';
 import { query } from '../db/index.js';
 import redis from '../config/redis.js';
 import { sendTelegramMessage, isTelegramAdmin } from '../service/telegramService.js';
@@ -381,6 +382,33 @@ router.post('/auth/telegram/widget-login', async (req, res) => {
       auth_source: 'telegram_widget',
     },
   });
+});
+
+router.get('/auth/telegram/widget-config', async (_req, res) => {
+  const botToken = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
+  if (!botToken) {
+    return res.status(500).json({ success: false, message: 'TELEGRAM_BOT_TOKEN belum dikonfigurasi' });
+  }
+
+  const configuredUsername = String(process.env.TELEGRAM_BOT_USERNAME || '').trim();
+  if (configuredUsername) {
+    return res.json({ success: true, data: { bot_username: configuredUsername.replace(/^@/, '') } });
+  }
+
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
+    const payload = await response.json();
+    if (!payload?.ok || !payload?.result?.username) {
+      return res.status(502).json({ success: false, message: 'Gagal mengambil username bot Telegram' });
+    }
+    return res.json({
+      success: true,
+      data: { bot_username: String(payload.result.username).replace(/^@/, '') },
+    });
+  } catch (err) {
+    console.error('[ADMIN AUTH] Failed to resolve Telegram bot username:', err);
+    return res.status(502).json({ success: false, message: 'Gagal menghubungi Telegram API' });
+  }
 });
 
 router.use(verifySystemAdminToken);
