@@ -650,6 +650,148 @@ router.get('/management/clients/summary', async (_req, res) => {
   });
 });
 
+router.get('/management/clients', async (req, res) => {
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(config.paginationMaxLimit, Math.max(1, Number(req.query.limit) || config.paginationDefaultLimit));
+  const offset = (page - 1) * limit;
+  const q = String(req.query.q || '').trim();
+
+  const values = [];
+  let whereClause = '';
+  if (q) {
+    values.push(`%${q.toLowerCase()}%`);
+    whereClause = `WHERE LOWER(client_id) LIKE $1 OR LOWER(nama) LIKE $1 OR LOWER(COALESCE(client_group,'')) LIKE $1`;
+  }
+
+  const [countResult, dataResult] = await Promise.all([
+    query(`SELECT COUNT(*)::int AS total FROM clients ${whereClause}`, values),
+    query(
+      `SELECT client_id, nama, client_type, client_status, client_group, regional_id,
+              client_insta, client_insta_status, client_tiktok, client_tiktok_status,
+              client_amplify_status, client_operator, client_level, tiktok_secuid, client_super, parent_client_id
+       FROM clients
+       ${whereClause}
+       ORDER BY client_id
+       LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+      [...values, limit, offset],
+    ),
+  ]);
+
+  return res.json({
+    success: true,
+    data: dataResult.rows,
+    pagination: {
+      page,
+      limit,
+      total: countResult.rows[0]?.total || 0,
+      total_pages: Math.ceil((countResult.rows[0]?.total || 0) / limit),
+    },
+  });
+});
+
+router.post('/management/clients', requireSystemAdminRoles('super_admin'), async (req, res) => {
+  const body = req.body || {};
+  const clientId = String(body.client_id || '').trim();
+  const nama = String(body.nama || '').trim();
+
+  if (!clientId || !nama) {
+    return res.status(400).json({ success: false, message: 'client_id dan nama wajib diisi' });
+  }
+
+  const exists = await query('SELECT 1 FROM clients WHERE LOWER(client_id)=LOWER($1) LIMIT 1', [clientId]);
+  if (exists.rows[0]) {
+    return res.status(409).json({ success: false, message: 'client_id sudah ada' });
+  }
+
+  const insert = await query(
+    `INSERT INTO clients (
+      client_id, nama, client_type, client_status, client_insta, client_insta_status,
+      client_tiktok, client_tiktok_status, client_amplify_status, client_operator,
+      client_group, regional_id, parent_client_id, client_level, tiktok_secuid, client_super
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+    RETURNING *`,
+    [
+      clientId,
+      nama,
+      body.client_type || null,
+      body.client_status !== false,
+      body.client_insta || null,
+      body.client_insta_status !== false,
+      body.client_tiktok || null,
+      body.client_tiktok_status !== false,
+      body.client_amplify_status !== false,
+      body.client_operator || null,
+      body.client_group || null,
+      body.regional_id || null,
+      body.parent_client_id || null,
+      body.client_level || null,
+      body.tiktok_secuid || null,
+      body.client_super || null,
+    ],
+  );
+
+  return res.status(201).json({ success: true, data: insert.rows[0] });
+});
+
+router.put('/management/clients/:clientId', requireSystemAdminRoles('super_admin'), async (req, res) => {
+  const { clientId } = req.params;
+  const body = req.body || {};
+
+  const updated = await query(
+    `UPDATE clients SET
+      nama = COALESCE($2, nama),
+      client_type = COALESCE($3, client_type),
+      client_status = COALESCE($4, client_status),
+      client_insta = COALESCE($5, client_insta),
+      client_insta_status = COALESCE($6, client_insta_status),
+      client_tiktok = COALESCE($7, client_tiktok),
+      client_tiktok_status = COALESCE($8, client_tiktok_status),
+      client_amplify_status = COALESCE($9, client_amplify_status),
+      client_operator = COALESCE($10, client_operator),
+      client_group = COALESCE($11, client_group),
+      regional_id = COALESCE($12, regional_id),
+      parent_client_id = COALESCE($13, parent_client_id),
+      client_level = COALESCE($14, client_level),
+      tiktok_secuid = COALESCE($15, tiktok_secuid),
+      client_super = COALESCE($16, client_super)
+     WHERE LOWER(client_id)=LOWER($1)
+     RETURNING *`,
+    [
+      clientId,
+      body.nama ?? null,
+      body.client_type ?? null,
+      typeof body.client_status === 'boolean' ? body.client_status : null,
+      body.client_insta ?? null,
+      typeof body.client_insta_status === 'boolean' ? body.client_insta_status : null,
+      body.client_tiktok ?? null,
+      typeof body.client_tiktok_status === 'boolean' ? body.client_tiktok_status : null,
+      typeof body.client_amplify_status === 'boolean' ? body.client_amplify_status : null,
+      body.client_operator ?? null,
+      body.client_group ?? null,
+      body.regional_id ?? null,
+      body.parent_client_id ?? null,
+      body.client_level ?? null,
+      body.tiktok_secuid ?? null,
+      body.client_super ?? null,
+    ],
+  );
+
+  if (!updated.rows[0]) {
+    return res.status(404).json({ success: false, message: 'Client tidak ditemukan' });
+  }
+
+  return res.json({ success: true, data: updated.rows[0] });
+});
+
+router.delete('/management/clients/:clientId', requireSystemAdminRoles('super_admin'), async (req, res) => {
+  const { clientId } = req.params;
+  const deleted = await query('DELETE FROM clients WHERE LOWER(client_id)=LOWER($1) RETURNING client_id', [clientId]);
+  if (!deleted.rows[0]) {
+    return res.status(404).json({ success: false, message: 'Client tidak ditemukan' });
+  }
+  return res.json({ success: true, message: 'Client berhasil dihapus' });
+});
+
 router.get('/management/system-audit', async (_req, res) => {
   const cfg = getAdminSystemConfig();
   const analysis = analyzeAdminSystemConfig(cfg);
@@ -702,6 +844,98 @@ router.get('/management/system-audit', async (_req, res) => {
       recent_config_audit: authAudit.rows || [],
     },
   });
+});
+
+router.get('/management/payments/requests', async (req, res) => {
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(config.paginationMaxLimit, Math.max(1, Number(req.query.limit) || config.paginationDefaultLimit));
+  const offset = (page - 1) * limit;
+  const status = String(req.query.status || '').trim().toLowerCase();
+  const allowed = new Set(['pending', 'confirmed', 'approved', 'rejected', 'expired']);
+
+  const values = [];
+  let whereClause = '';
+  if (status && allowed.has(status)) {
+    values.push(status);
+    whereClause = `WHERE status = $1`;
+  }
+
+  const [countResult, dataResult, totals] = await Promise.all([
+    query(`SELECT COUNT(*)::int AS total FROM dashboard_premium_request ${whereClause}`, values),
+    query(
+      `SELECT request_id, dashboard_user_id, client_id, username, whatsapp, bank_name, account_number,
+              sender_name, transfer_amount, premium_tier, proof_url, status, created_at, responded_at, admin_whatsapp
+       FROM dashboard_premium_request
+       ${whereClause}
+       ORDER BY created_at DESC
+       LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+      [...values, limit, offset],
+    ),
+    query(
+      `SELECT
+        COUNT(*) FILTER (WHERE status = 'pending')::int AS pending,
+        COUNT(*) FILTER (WHERE status = 'approved')::int AS approved,
+        COUNT(*) FILTER (WHERE status = 'rejected')::int AS rejected,
+        COUNT(*) FILTER (WHERE status = 'confirmed')::int AS confirmed,
+        COALESCE(SUM(transfer_amount) FILTER (WHERE status IN ('pending','confirmed')),0)::numeric AS pending_amount
+       FROM dashboard_premium_request`,
+    ),
+  ]);
+
+  return res.json({
+    success: true,
+    data: dataResult.rows,
+    summary: totals.rows[0] || {},
+    pagination: {
+      page,
+      limit,
+      total: countResult.rows[0]?.total || 0,
+      total_pages: Math.ceil((countResult.rows[0]?.total || 0) / limit),
+    },
+  });
+});
+
+router.post('/management/payments/requests/:requestId/decision', requireSystemAdminRoles('super_admin', 'finance_admin'), async (req, res) => {
+  const { requestId } = req.params;
+  const { status, note = null } = req.body || {};
+  const nextStatus = String(status || '').trim().toLowerCase();
+  if (!['approved', 'rejected'].includes(nextStatus)) {
+    return res.status(400).json({ success: false, message: 'status harus approved atau rejected' });
+  }
+
+  const existing = await query('SELECT request_id, status, dashboard_user_id FROM dashboard_premium_request WHERE request_id = $1', [requestId]);
+  if (!existing.rows[0]) {
+    return res.status(404).json({ success: false, message: 'Request payment tidak ditemukan' });
+  }
+
+  const prevStatus = existing.rows[0].status;
+  const updated = await query(
+    `UPDATE dashboard_premium_request
+     SET status = $2, responded_at = NOW(), admin_whatsapp = $3, updated_at = NOW(),
+         metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('admin_note', $4)
+     WHERE request_id = $1
+     RETURNING *`,
+    [requestId, nextStatus, req.systemAdmin.telegram_chat_id, note],
+  );
+
+  await query(
+    `INSERT INTO dashboard_premium_request_audit (
+      request_id, dashboard_user_id, action, actor, note, status_from, status_to, admin_whatsapp, metadata
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [
+      requestId,
+      existing.rows[0].dashboard_user_id || null,
+      'admin_decision',
+      `system_admin:${req.systemAdmin.telegram_chat_id}`,
+      note,
+      prevStatus,
+      nextStatus,
+      req.systemAdmin.telegram_chat_id,
+      JSON.stringify({ source: 'admin_system' }),
+    ],
+  ).catch(() => null);
+
+  return res.json({ success: true, data: updated.rows[0] });
 });
 
 router.get('/management/funds', async (req, res) => {
