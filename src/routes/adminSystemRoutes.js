@@ -3,10 +3,9 @@ import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 import jwt from 'jsonwebtoken';
-import fetch from 'node-fetch';
 import { query } from '../db/index.js';
 import redis from '../config/redis.js';
-import { isTelegramAdmin } from '../service/telegramService.js';
+import { isTelegramAdmin, sendTelegramMessage } from '../service/telegramService.js';
 import { requireSystemAdminRoles, verifySystemAdminToken } from '../middleware/systemAdminAuth.js';
 import {
   ADMIN_SYSTEM_CONFIG_ALLOWLIST,
@@ -95,6 +94,7 @@ function parseDateRangeFilter(req, values, whereParts, fieldName = 'created_at')
 }
 
 const config = getAdminSystemConfig();
+const OTP_TTL_SECONDS = config.otpTtlSeconds;
 const ADMIN_SESSION_TTL_SECONDS = config.sessionTtlSeconds;
 
 function buildAdminChatIds() {
@@ -117,44 +117,8 @@ function getRequiredWidgetUsername() {
   return String(process.env.ADMIN_SYSTEM_TELEGRAM_USERNAME || 'Cicero_Papiqo').trim();
 }
 
-function verifyTelegramWidgetPayload(payload = {}) {
-  const botToken = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
-  if (!botToken) {
-    return { ok: false, message: 'TELEGRAM_BOT_TOKEN belum dikonfigurasi' };
-  }
-
-  const hash = String(payload.hash || '');
-  if (!hash) {
-    return { ok: false, message: 'Hash Telegram tidak ditemukan' };
-  }
-
-  const authDate = Number(payload.auth_date || 0);
-  if (!Number.isFinite(authDate) || authDate <= 0) {
-    return { ok: false, message: 'auth_date tidak valid' };
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-  if (now - authDate > 300) {
-    return { ok: false, message: 'Data login Telegram kedaluwarsa' };
-  }
-
-  const secret = crypto.createHash('sha256').update(botToken).digest();
-  const checkString = Object.keys(payload)
-    .filter(key => key !== 'hash' && payload[key] !== undefined && payload[key] !== null)
-    .sort()
-    .map(key => `${key}=${payload[key]}`)
-    .join('\n');
-
-  const computedHash = crypto.createHmac('sha256', secret).update(checkString).digest('hex');
-  const isMatch =
-    computedHash.length === hash.length &&
-    crypto.timingSafeEqual(Buffer.from(computedHash), Buffer.from(hash));
-
-  if (!isMatch) {
-    return { ok: false, message: 'Verifikasi Telegram widget gagal' };
-  }
-
-  return { ok: true };
+function generateOtp() {
+  return String(Math.floor(100000 + Math.random() * 900000));
 }
 
 function mapAdminRoleToScope(adminRole) {
@@ -197,54 +161,124 @@ async function insertFundAuditLog({ actionType, actorChatId, actorRole, entityTy
   );
 }
 
-router.post('/auth/telegram/request', async (_req, res) => {
-  return res.status(403).json({
-    success: false,
-    message: 'Login OTP dinonaktifkan. Gunakan Telegram Login Widget.',
-  });
-});
-
-router.post('/auth/telegram/verify', async (_req, res) => {
-  return res.status(403).json({
-    success: false,
-    message: 'Login OTP dinonaktifkan. Gunakan Telegram Login Widget.',
-  });
-});
-
-router.post('/auth/telegram/widget-login', async (req, res) => {
-  const payload = req.body || {};
-  const verified = verifyTelegramWidgetPayload(payload);
-  if (!verified.ok) {
-    return res.status(401).json({ success: false, message: verified.message });
-  }
-
-  const telegramChatId = String(payload.id || '').trim();
-  const telegramUsername = String(payload.username || '').trim();
+router.post('/auth/telegram/request', async (req, res) => {
+  const { telegram_username } = req.body || {};
   const requiredUsername = getRequiredWidgetUsername();
+  const username = String(telegram_username || '').trim().replace(/^@/, '');
 
-  if (!telegramChatId) {
-    return res.status(401).json({ success: false, message: 'ID Telegram tidak valid' });
+  if (!username) {
+    return res.status(400).json({ success: false, message: 'telegram_username wajib diisi' });
   }
-
-  if (!telegramUsername || telegramUsername.toLowerCase() !== requiredUsername.toLowerCase()) {
+  if (username.toLowerCase() !== requiredUsername.toLowerCase()) {
     return res.status(403).json({ success: false, message: `Akses hanya untuk @${requiredUsername}` });
   }
 
-  if (!isAllowedAdminChatId(telegramChatId)) {
-    return res.status(403).json({ success: false, message: 'Chat ID Telegram admin tidak diizinkan' });
+  const [adminChatId] = buildAdminChatIds();
+  if (!adminChatId || !isAllowedAdminChatId(adminChatId)) {
+    return res.status(403).json({ success: false, message: 'Chat ID Telegram admin tidak valid' });
   }
 
+  const requestId = crypto.randomUUID();
+  const otp = generateOtp();
+
+  try {
+    await redis.set(
+      `admin_otp:${requestId}`,
+      JSON.stringify({
+        code: otp,
+        telegram_chat_id: String(adminChatId),
+        telegram_username: requiredUsername,
+        failed_attempts: 0,
+      }),
+      { EX: OTP_TTL_SECONDS },
+    );
+  } catch (err) {
+    console.error('[ADMIN AUTH] Failed to store OTP:', err);
+    return res.status(503).json({ success: false, message: 'Service temporarily unavailable' });
+  }
+
+  const message = [
+    '🔐 *Kode Login Admin System*',
+    '',
+    `Kode OTP: *${otp}*`,
+    `Request ID: \`${requestId}\``,
+    '',
+    'Kode berlaku 5 menit. Jangan bagikan ke siapa pun.',
+  ].join('\n');
+
+  const sent = await isTelegramAdmin(adminChatId) ? sendTelegramMessage(adminChatId, message) : null;
+  if (!sent) {
+    return res.status(502).json({ success: false, message: 'Gagal mengirim OTP ke Telegram admin' });
+  }
+
+  return res.json({
+    success: true,
+    request_id: requestId,
+    expires_in_seconds: OTP_TTL_SECONDS,
+    message: 'OTP terkirim ke Telegram admin',
+  });
+});
+
+router.post('/auth/telegram/verify', async (req, res) => {
+  const { request_id, otp_code, telegram_username } = req.body || {};
+
+  if (!request_id || !otp_code || !telegram_username) {
+    return res.status(400).json({ success: false, message: 'request_id, otp_code, telegram_username wajib diisi' });
+  }
+
+  const requiredUsername = getRequiredWidgetUsername();
+  const username = String(telegram_username).trim().replace(/^@/, '');
+  if (username.toLowerCase() !== requiredUsername.toLowerCase()) {
+    return res.status(403).json({ success: false, message: `Akses hanya untuk @${requiredUsername}` });
+  }
+
+  let raw;
+  try {
+    raw = await redis.get(`admin_otp:${request_id}`);
+  } catch (err) {
+    console.error('[ADMIN AUTH] Failed to read OTP:', err);
+    return res.status(503).json({ success: false, message: 'Service temporarily unavailable' });
+  }
+  if (!raw) {
+    return res.status(401).json({ success: false, message: 'OTP tidak valid atau sudah kedaluwarsa' });
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    return res.status(401).json({ success: false, message: 'OTP tidak valid' });
+  }
+
+  if (String(payload.telegram_username || '').toLowerCase() !== requiredUsername.toLowerCase()) {
+    return res.status(403).json({ success: false, message: 'Username Telegram tidak sesuai' });
+  }
+
+  if (String(payload.code) !== String(otp_code).trim()) {
+    const nextFailed = Number(payload.failed_attempts || 0) + 1;
+    if (nextFailed >= 3) {
+      await redis.del(`admin_otp:${request_id}`);
+      return res.status(429).json({ success: false, message: 'OTP salah 3x, silakan request ulang' });
+    }
+    await redis.set(`admin_otp:${request_id}`, JSON.stringify({ ...payload, failed_attempts: nextFailed }), {
+      EX: OTP_TTL_SECONDS,
+    });
+    return res.status(401).json({ success: false, message: 'OTP salah' });
+  }
+
+  await redis.del(`admin_otp:${request_id}`);
+
   const sessionId = crypto.randomUUID();
-  const adminRole = resolveAdminRole(telegramChatId);
+  const adminRole = resolveAdminRole(payload.telegram_chat_id);
   const scope = mapAdminRoleToScope(adminRole);
   const tokenPayload = {
     role: 'system_admin',
     admin_role: adminRole,
-    telegram_chat_id: telegramChatId,
-    username: telegramUsername,
+    telegram_chat_id: String(payload.telegram_chat_id),
+    username: requiredUsername,
     scope,
     session_id: sessionId,
-    auth_source: 'telegram_widget',
+    auth_source: 'telegram_otp',
   };
 
   const superAdminSessionTtl = Math.min(ADMIN_SESSION_TTL_SECONDS, 3600);
@@ -252,9 +286,9 @@ router.post('/auth/telegram/widget-login', async (req, res) => {
   const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: tokenTtlSeconds });
 
   try {
-    await redis.set(`login_token:${token}`, `admin:${telegramChatId}`, { EX: tokenTtlSeconds });
+    await redis.set(`login_token:${token}`, `admin:${payload.telegram_chat_id}`, { EX: tokenTtlSeconds });
   } catch (err) {
-    console.error('[ADMIN AUTH] Failed to persist admin token (widget):', err);
+    console.error('[ADMIN AUTH] Failed to persist admin token:', err);
     return res.status(503).json({ success: false, message: 'Service temporarily unavailable' });
   }
 
@@ -264,42 +298,26 @@ router.post('/auth/telegram/widget-login', async (req, res) => {
     admin: {
       role: 'system_admin',
       admin_role: adminRole,
-      telegram_chat_id: telegramChatId,
-      username: telegramUsername,
+      telegram_chat_id: String(payload.telegram_chat_id),
+      username: requiredUsername,
       scope,
-      auth_source: 'telegram_widget',
+      auth_source: 'telegram_otp',
     },
   });
 });
 
+router.post('/auth/telegram/widget-login', async (req, res) => {
+  return res.status(403).json({
+    success: false,
+    message: 'Telegram widget login dinonaktifkan. Gunakan login OTP.',
+  });
+});
+
 router.get('/auth/telegram/widget-config', async (_req, res) => {
-  const botToken = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
-  if (!botToken) {
-    return res.status(500).json({ success: false, message: 'TELEGRAM_BOT_TOKEN belum dikonfigurasi' });
-  }
-
-  const configuredUsername = String(process.env.TELEGRAM_BOT_USERNAME || '').trim();
-  if (configuredUsername) {
-    return res.json({ success: true, data: { bot_username: configuredUsername.replace(/^@/, '') } });
-  }
-
-  try {
-    const response = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
-    const payload = await response.json();
-    if (!payload?.ok || !payload?.result?.username) {
-      return res.status(502).json({ success: false, message: 'Gagal mengambil username bot Telegram' });
-    }
-    return res.json({
-      success: true,
-      data: {
-        bot_username: String(payload.result.username).replace(/^@/, ''),
-        required_admin_username: getRequiredWidgetUsername(),
-      },
-    });
-  } catch (err) {
-    console.error('[ADMIN AUTH] Failed to resolve Telegram bot username:', err);
-    return res.status(502).json({ success: false, message: 'Gagal menghubungi Telegram API' });
-  }
+  return res.status(403).json({
+    success: false,
+    message: 'Telegram widget login dinonaktifkan.',
+  });
 });
 
 router.use(verifySystemAdminToken);

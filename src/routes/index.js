@@ -21,7 +21,6 @@ import likesRoutes from './likesRoutes.js';
 import userRolesRoutes from './userRolesRoutes.js';
 import instagramRoutes from './instagramRoutes.js';
 import dashboardPremiumRequestRoutes from './dashboardPremiumRequestRoutes.js';
-import adminSystemRoutes from './adminSystemRoutes.js';
 
 const router = express.Router();
 
@@ -47,5 +46,4 @@ router.use('/amplify-khusus', amplifyKhususRoutes);
 router.use('/premium-requests', premiumRequestRoutes);
 router.use('/premium', dashboardPremiumRequestRoutes);
 router.use('/user_roles', userRolesRoutes);
-router.use('/admin-system', adminSystemRoutes);
 export default router;

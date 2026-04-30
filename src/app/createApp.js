@@ -10,6 +10,7 @@ import routes from '../routes/index.js';
 import authRoutes from '../routes/authRoutes.js';
 import passwordResetAliasRoutes from '../routes/passwordResetAliasRoutes.js';
 import claimRoutes from '../routes/claimRoutes.js';
+import adminSystemRoutes from '../routes/adminSystemRoutes.js';
 import { notFound, errorHandler } from '../middleware/errorHandler.js';
 import { authRequired } from '../middleware/authMiddleware.js';
 import { dedupRequest } from '../middleware/dedupRequestMiddleware.js';
@@ -124,6 +125,10 @@ export function createApp() {
   app.use('/api/auth', authRateLimiter, authRoutes);
   app.use('/api/claim', authRateLimiter, claimRoutes);
   app.use('/api/password-reset', authRateLimiter, passwordResetAliasRoutes);
+
+  // Admin-system has its own auth middleware inside route module.
+  // Keep it outside global `authRequired` so login endpoints remain public.
+  app.use('/api/admin-system', adminSystemRoutes);
 
   app.use('/api', authRequired, routes);
 
