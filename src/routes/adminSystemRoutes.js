@@ -322,6 +322,21 @@ router.get('/auth/telegram/widget-config', async (_req, res) => {
 
 router.use(verifySystemAdminToken);
 
+router.get('/auth/me', async (req, res) => {
+  return res.json({
+    success: true,
+    data: {
+      role: req.systemAdmin?.role,
+      admin_role: req.systemAdmin?.admin_role,
+      telegram_chat_id: req.systemAdmin?.telegram_chat_id,
+      username: req.systemAdmin?.username,
+      scope: req.systemAdmin?.scope || [],
+      auth_source: req.systemAdmin?.auth_source,
+      session_id: req.systemAdmin?.session_id,
+    },
+  });
+});
+
 router.get('/management/config', async (_req, res) => {
   const cfg = getAdminSystemConfig();
   const analysis = analyzeAdminSystemConfig(cfg);
