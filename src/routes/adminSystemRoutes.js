@@ -117,6 +117,46 @@ function generateOtp() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
+function verifyTelegramWidgetPayload(payload = {}) {
+  const botToken = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
+  if (!botToken) {
+    return { ok: false, message: 'TELEGRAM_BOT_TOKEN belum dikonfigurasi' };
+  }
+
+  const hash = String(payload.hash || '');
+  if (!hash) {
+    return { ok: false, message: 'Hash Telegram tidak ditemukan' };
+  }
+
+  const authDate = Number(payload.auth_date || 0);
+  if (!Number.isFinite(authDate) || authDate <= 0) {
+    return { ok: false, message: 'auth_date tidak valid' };
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  if (now - authDate > 300) {
+    return { ok: false, message: 'Data login Telegram kedaluwarsa' };
+  }
+
+  const secret = crypto.createHash('sha256').update(botToken).digest();
+  const checkString = Object.keys(payload)
+    .filter(key => key !== 'hash' && payload[key] !== undefined && payload[key] !== null)
+    .sort()
+    .map(key => `${key}=${payload[key]}`)
+    .join('\n');
+
+  const computedHash = crypto.createHmac('sha256', secret).update(checkString).digest('hex');
+  const isMatch =
+    computedHash.length === hash.length &&
+    crypto.timingSafeEqual(Buffer.from(computedHash), Buffer.from(hash));
+
+  if (!isMatch) {
+    return { ok: false, message: 'Verifikasi Telegram widget gagal' };
+  }
+
+  return { ok: true };
+}
+
 function mapAdminRoleToScope(adminRole) {
   if (adminRole === 'auditor') {
     return ['management:funds:read', 'management:audit:read'];
@@ -278,6 +318,67 @@ router.post('/auth/telegram/verify', async (req, res) => {
       admin_role: adminRole,
       telegram_chat_id: payload.telegram_chat_id,
       scope,
+    },
+  });
+});
+
+router.post('/auth/telegram/widget-login', async (req, res) => {
+  const payload = req.body || {};
+  const verified = verifyTelegramWidgetPayload(payload);
+  if (!verified.ok) {
+    return res.status(401).json({ success: false, message: verified.message });
+  }
+
+  const telegramChatId = String(payload.id || '').trim();
+  const telegramUsername = String(payload.username || '').trim();
+  const requiredUsername = String(process.env.ADMIN_SYSTEM_TELEGRAM_USERNAME || 'Cicero_Papiqo').trim();
+
+  if (!telegramChatId) {
+    return res.status(401).json({ success: false, message: 'ID Telegram tidak valid' });
+  }
+
+  if (!telegramUsername || telegramUsername.toLowerCase() !== requiredUsername.toLowerCase()) {
+    return res.status(403).json({ success: false, message: `Akses hanya untuk @${requiredUsername}` });
+  }
+
+  if (!isAllowedAdminChatId(telegramChatId)) {
+    return res.status(403).json({ success: false, message: 'Chat ID Telegram admin tidak diizinkan' });
+  }
+
+  const sessionId = crypto.randomUUID();
+  const adminRole = resolveAdminRole(telegramChatId);
+  const scope = mapAdminRoleToScope(adminRole);
+  const tokenPayload = {
+    role: 'system_admin',
+    admin_role: adminRole,
+    telegram_chat_id: telegramChatId,
+    username: telegramUsername,
+    scope,
+    session_id: sessionId,
+    auth_source: 'telegram_widget',
+  };
+
+  const superAdminSessionTtl = Math.min(ADMIN_SESSION_TTL_SECONDS, 3600);
+  const tokenTtlSeconds = adminRole === 'super_admin' ? superAdminSessionTtl : ADMIN_SESSION_TTL_SECONDS;
+  const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: tokenTtlSeconds });
+
+  try {
+    await redis.set(`login_token:${token}`, `admin:${telegramChatId}`, { EX: tokenTtlSeconds });
+  } catch (err) {
+    console.error('[ADMIN AUTH] Failed to persist admin token (widget):', err);
+    return res.status(503).json({ success: false, message: 'Service temporarily unavailable' });
+  }
+
+  return res.json({
+    success: true,
+    token,
+    admin: {
+      role: 'system_admin',
+      admin_role: adminRole,
+      telegram_chat_id: telegramChatId,
+      username: telegramUsername,
+      scope,
+      auth_source: 'telegram_widget',
     },
   });
 });
