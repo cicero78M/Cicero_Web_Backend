@@ -599,6 +599,111 @@ router.get('/management/overview', async (_req, res) => {
   });
 });
 
+router.get('/management/clients/summary', async (_req, res) => {
+  const [totals, byType, byStatus, hierarchy, topGroups] = await Promise.all([
+    query('SELECT COUNT(*)::int AS total_clients FROM clients'),
+    query(
+      `SELECT COALESCE(client_type, 'UNKNOWN') AS client_type, COUNT(*)::int AS total
+       FROM clients
+       GROUP BY COALESCE(client_type, 'UNKNOWN')
+       ORDER BY total DESC`,
+    ),
+    query(
+      `SELECT
+        COUNT(*) FILTER (WHERE client_status = true)::int AS active_clients,
+        COUNT(*) FILTER (WHERE client_status = false)::int AS inactive_clients,
+        COUNT(*) FILTER (WHERE client_insta_status = true)::int AS insta_enabled,
+        COUNT(*) FILTER (WHERE client_tiktok_status = true)::int AS tiktok_enabled,
+        COUNT(*) FILTER (WHERE client_amplify_status = true)::int AS amplify_enabled
+       FROM clients`,
+    ),
+    query(
+      `SELECT
+        COUNT(*) FILTER (WHERE parent_client_id IS NULL)::int AS root_clients,
+        COUNT(*) FILTER (WHERE parent_client_id IS NOT NULL)::int AS child_clients
+       FROM clients`,
+    ),
+    query(
+      `SELECT COALESCE(client_group, 'UNKNOWN') AS client_group, COUNT(*)::int AS total
+       FROM clients
+       GROUP BY COALESCE(client_group, 'UNKNOWN')
+       ORDER BY total DESC
+       LIMIT 10`,
+    ),
+  ]);
+
+  return res.json({
+    success: true,
+    data: {
+      totals: totals.rows[0] || { total_clients: 0 },
+      status: byStatus.rows[0] || {
+        active_clients: 0,
+        inactive_clients: 0,
+        insta_enabled: 0,
+        tiktok_enabled: 0,
+        amplify_enabled: 0,
+      },
+      hierarchy: hierarchy.rows[0] || { root_clients: 0, child_clients: 0 },
+      by_type: byType.rows,
+      top_groups: topGroups.rows,
+    },
+  });
+});
+
+router.get('/management/system-audit', async (_req, res) => {
+  const cfg = getAdminSystemConfig();
+  const analysis = analyzeAdminSystemConfig(cfg);
+
+  const [overview, clients, funds, authAudit] = await Promise.all([
+    query(
+      `SELECT
+        (SELECT COUNT(*)::int FROM dashboard_user) AS total_dashboard_users,
+        (SELECT COUNT(*)::int FROM roles) AS total_roles,
+        (SELECT COUNT(*)::int FROM user_roles) AS total_user_role_links`,
+    ),
+    query(
+      `SELECT
+        COUNT(*)::int AS total_clients,
+        COUNT(*) FILTER (WHERE client_status = true)::int AS active_clients,
+        COUNT(*) FILTER (WHERE client_status = false)::int AS inactive_clients
+       FROM clients`,
+    ),
+    query(
+      `SELECT
+        COUNT(*)::int AS total_fund_transactions,
+        COALESCE(SUM(CASE WHEN direction='inflow' THEN amount ELSE 0 END),0)::numeric AS total_inflow,
+        COALESCE(SUM(CASE WHEN direction='outflow' THEN amount ELSE 0 END),0)::numeric AS total_outflow
+       FROM system_management_fund_transaction`,
+    ).catch(() => ({ rows: [{ total_fund_transactions: 0, total_inflow: 0, total_outflow: 0 }] })),
+    query(
+      `SELECT audit_id, action_type, config_key, actor_telegram_chat_id, created_at
+       FROM system_management_config_audit
+       ORDER BY created_at DESC
+       LIMIT 20`,
+    ).catch(() => ({ rows: [] })),
+  ]);
+
+  return res.json({
+    success: true,
+    data: {
+      config_snapshot: {
+        otp_ttl_seconds: cfg.otpTtlSeconds,
+        session_ttl_seconds: cfg.sessionTtlSeconds,
+        pagination_default_limit: cfg.paginationDefaultLimit,
+        pagination_max_limit: cfg.paginationMaxLimit,
+        timezone: cfg.timezone,
+        total_admin_chat_ids: cfg.adminChatIds.length,
+        total_role_mappings: Object.keys(cfg.roleMap || {}).length,
+      },
+      config_analysis: analysis,
+      system_overview: overview.rows[0] || {},
+      client_overview: clients.rows[0] || {},
+      fund_overview: funds.rows[0] || {},
+      recent_config_audit: authAudit.rows || [],
+    },
+  });
+});
+
 router.get('/management/funds', async (req, res) => {
   const [transactionResult, requestResult, balanceResult] = await Promise.all([
     query('SELECT COUNT(*)::int AS total_transactions FROM system_management_fund_transaction').catch(() => ({ rows: [{ total_transactions: 0 }] })),
