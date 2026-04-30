@@ -127,6 +127,18 @@ function mapAdminRoleToScope(adminRole) {
   return ['management:system', 'management:funds:read', 'management:funds:write', 'management:requests:approve', 'management:audit:read'];
 }
 
+function maskConfigValue(configKey, value) {
+  const key = String(configKey || '').trim();
+  if (value == null) return value;
+  if (['JWT_SECRET'].includes(key)) {
+    return '********';
+  }
+  if (key === 'ADMIN_SYSTEM_ROLE_MAP') {
+    return '[masked-json]';
+  }
+  return value;
+}
+
 async function insertFundAuditLog({ actionType, actorChatId, actorRole, entityType, entityId, notes, metadata }) {
   await query(
     `INSERT INTO system_management_fund_audit (
@@ -245,11 +257,13 @@ router.post('/auth/telegram/verify', async (req, res) => {
     session_id: sessionId,
   };
 
-  const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '2h' });
+  const superAdminSessionTtl = Math.min(ADMIN_SESSION_TTL_SECONDS, 3600);
+  const tokenTtlSeconds = adminRole === 'super_admin' ? superAdminSessionTtl : ADMIN_SESSION_TTL_SECONDS;
+  const token = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: tokenTtlSeconds });
 
   try {
     await redis.set(`login_token:${token}`, `admin:${payload.telegram_chat_id}`, {
-      EX: ADMIN_SESSION_TTL_SECONDS,
+      EX: tokenTtlSeconds,
     });
   } catch (err) {
     console.error('[ADMIN AUTH] Failed to persist admin token:', err);
@@ -327,8 +341,8 @@ router.post('/management/config/preview', requireSystemAdminRoles('super_admin')
     success: true,
     data: {
       config_key: key,
-      old_value: currentValue,
-      new_value: value,
+      old_value: maskConfigValue(key, currentValue),
+      new_value: maskConfigValue(key, value),
       would_change: String(currentValue ?? '') !== value,
       next_analysis: previewAnalysis,
       is_critical: isCritical,
@@ -348,6 +362,9 @@ router.post('/management/config/apply', requireSystemAdminRoles('super_admin'), 
 
   if (!key) {
     return res.status(400).json({ success: false, message: 'config_key wajib diisi' });
+  }
+  if (!notes || !String(notes).trim()) {
+    return res.status(400).json({ success: false, message: 'notes wajib diisi untuk perubahan konfigurasi' });
   }
 
   if (!ADMIN_SYSTEM_CONFIG_ALLOWLIST.has(key)) {
@@ -402,7 +419,7 @@ router.post('/management/config/apply', requireSystemAdminRoles('super_admin'), 
       key,
       oldValue,
       value,
-      notes,
+      String(notes).trim(),
     ],
   ).catch(err => {
     console.error('[ADMIN CONFIG] failed to insert config audit:', err);
@@ -412,8 +429,8 @@ router.post('/management/config/apply', requireSystemAdminRoles('super_admin'), 
     success: true,
     data: {
       config_key: key,
-      old_value: oldValue,
-      new_value: value,
+      old_value: maskConfigValue(key, oldValue),
+      new_value: maskConfigValue(key, value),
       applied_runtime_only: false,
       persisted_to_env: persist_to_env !== false,
       message: 'Konfigurasi diterapkan dan dipersist ke .env',
@@ -430,6 +447,9 @@ router.post('/management/config/rollback', requireSystemAdminRoles('super_admin'
   }
   if (!ADMIN_SYSTEM_CONFIG_ALLOWLIST.has(key)) {
     return res.status(400).json({ success: false, message: 'config_key tidak diizinkan' });
+  }
+  if (!notes || !String(notes).trim()) {
+    return res.status(400).json({ success: false, message: 'notes wajib diisi untuk rollback' });
   }
 
   const lookupSql = target_audit_id
@@ -471,7 +491,7 @@ router.post('/management/config/rollback', requireSystemAdminRoles('super_admin'
       key,
       oldValue,
       String(revertTo),
-      notes,
+      String(notes).trim(),
     ],
   ).catch(() => null);
 
@@ -479,8 +499,8 @@ router.post('/management/config/rollback', requireSystemAdminRoles('super_admin'
     success: true,
     data: {
       config_key: key,
-      reverted_from: oldValue,
-      reverted_to: String(revertTo),
+      reverted_from: maskConfigValue(key, oldValue),
+      reverted_to: maskConfigValue(key, String(revertTo)),
       source_audit_id: latest.rows[0].audit_id,
     },
   });
@@ -502,9 +522,15 @@ router.get('/management/config/audit', async (req, res) => {
     ).catch(() => ({ rows: [] })),
   ]);
 
+  const sanitizedRows = (dataResult.rows || []).map(row => ({
+    ...row,
+    old_value: maskConfigValue(row.config_key, row.old_value),
+    new_value: maskConfigValue(row.config_key, row.new_value),
+  }));
+
   return res.json({
     success: true,
-    data: dataResult.rows,
+    data: sanitizedRows,
     pagination: {
       page,
       limit,
