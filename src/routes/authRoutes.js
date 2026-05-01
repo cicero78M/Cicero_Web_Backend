@@ -32,6 +32,7 @@ import {
   cookieOptions,
   getAuthSessionTtlSeconds,
   revokeSessionToken,
+  AUTH_TOKEN_LIFETIME_SECONDS,
 } from './auth/shared.js';
 import {
   handleDashboardPasswordResetConfirm,
@@ -107,7 +108,7 @@ router.post('/penmas-login', async (req, res) => {
   }
   const payload = { user_id: user.user_id, role: user.role };
   const token = jwt.sign(payload, process.env.JWT_SECRET, {
-    expiresIn: '2h',
+    expiresIn: AUTH_TOKEN_LIFETIME_SECONDS,
   });
   await clearPenmasSessions(user.user_id);
   try {
@@ -298,7 +299,7 @@ router.post('/dashboard-login', async (req, res) => {
     payload.client_id = user.client_ids[0];
   }
   const token = jwt.sign(payload, process.env.JWT_SECRET, {
-    expiresIn: '2h',
+    expiresIn: AUTH_TOKEN_LIFETIME_SECONDS,
   });
   await clearDashboardSessions(user.dashboard_user_id);
   try {
@@ -412,7 +413,7 @@ router.post("/login", async (req, res) => {
     role,
   };
   const token = jwt.sign(payload, process.env.JWT_SECRET, {
-    expiresIn: "2h",
+    expiresIn: AUTH_TOKEN_LIFETIME_SECONDS,
   });
   await clearClientSessions(client_id);
   try {
@@ -520,7 +521,7 @@ router.post('/user-login', async (req, res) => {
 
     const payload = { user_id: user.user_id, nama: user.nama, role: 'user' };
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
-      expiresIn: '2h'
+      expiresIn: AUTH_TOKEN_LIFETIME_SECONDS
     });
     await clearUserSessions(user.user_id);
     try {
@@ -573,7 +574,7 @@ router.post('/user-login', async (req, res) => {
     }
     const payload = { user_id: user.user_id, nama: user.nama, role: 'user' };
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
-      expiresIn: '2h'
+      expiresIn: AUTH_TOKEN_LIFETIME_SECONDS
     });
     await clearUserSessions(user.user_id);
     try {

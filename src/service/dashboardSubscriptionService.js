@@ -1,6 +1,8 @@
 import * as dashboardSubscriptionModel from '../model/dashboardSubscriptionModel.js';
 import { query } from '../repository/db.js';
 
+const REGULAR_TIER = 'regular';
+
 function getExecutor(dbClient = query) {
   if (typeof dbClient?.query === 'function') {
     return (...args) => dbClient.query(...args);
@@ -14,7 +16,7 @@ async function updatePremiumCache(dashboardUserId, activeSubscription = null, db
     activeSubscription || (await dashboardSubscriptionModel.findActiveByUser(dashboardUserId, dbClient));
 
   const premiumStatus = Boolean(active);
-  const premiumTier = active?.tier || null;
+  const premiumTier = active?.tier || REGULAR_TIER;
   const premiumExpiresAt = active?.expires_at || null;
 
   const { rows } = await exec(
@@ -112,7 +114,7 @@ export async function getActiveSubscription(dashboardUserId) {
 
 export async function getPremiumSnapshot(dashboardUser) {
   if (!dashboardUser) {
-    return { premiumStatus: false, premiumTier: null, premiumExpiresAt: null };
+    return { premiumStatus: false, premiumTier: REGULAR_TIER, premiumExpiresAt: null };
   }
   const active = await dashboardSubscriptionModel.findActiveByUser(
     dashboardUser.dashboard_user_id,
@@ -125,9 +127,25 @@ export async function getPremiumSnapshot(dashboardUser) {
     };
   }
 
+  const needsCacheRefresh =
+    Boolean(dashboardUser.premium_status) ||
+    Boolean(dashboardUser.premium_expires_at) ||
+    (typeof dashboardUser.premium_tier === 'string' &&
+      dashboardUser.premium_tier.trim() !== '' &&
+      dashboardUser.premium_tier.trim().toLowerCase() !== REGULAR_TIER);
+
+  if (needsCacheRefresh) {
+    const refreshed = await updatePremiumCache(dashboardUser.dashboard_user_id);
+    return {
+      premiumStatus: Boolean(refreshed.premium_status),
+      premiumTier: refreshed.premium_tier || REGULAR_TIER,
+      premiumExpiresAt: refreshed.premium_expires_at || null,
+    };
+  }
+
   return {
     premiumStatus: Boolean(dashboardUser.premium_status),
-    premiumTier: dashboardUser.premium_tier || null,
+    premiumTier: dashboardUser.premium_tier || REGULAR_TIER,
     premiumExpiresAt: dashboardUser.premium_expires_at || null,
   };
 }

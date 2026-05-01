@@ -88,6 +88,32 @@ export async function getLinkReports({ userId, postId } = {}) {
   return res.rows;
 }
 
+export async function findDuplicateLinks(links = []) {
+  const normalized = Array.from(
+    new Set(
+      links
+        .map((value) => String(value || '').trim().toLowerCase())
+        .filter(Boolean)
+    )
+  );
+
+  if (normalized.length === 0) return [];
+
+  const placeholders = normalized.map((_, index) => `$${index + 1}`).join(', ');
+  const res = await query(
+    `SELECT DISTINCT LOWER(value) AS link
+     FROM link_report_khusus r
+     CROSS JOIN LATERAL unnest(
+       ARRAY[r.instagram_link, r.facebook_link, r.twitter_link, r.tiktok_link, r.youtube_link]
+     ) AS value
+     WHERE value IS NOT NULL
+       AND LOWER(value) IN (${placeholders})`,
+    normalized
+  );
+
+  return res.rows.map((row) => String(row.link || '').trim().toLowerCase()).filter(Boolean);
+}
+
 export async function findLinkReportByShortcode(shortcode, user_id) {
   const params = [shortcode];
   const condition = user_id ? 'AND r.user_id = $2' : '';

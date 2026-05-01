@@ -7,7 +7,9 @@ export const RESET_TOKEN_EXPIRY_MINUTES = Number(
   process.env.DASHBOARD_RESET_TOKEN_EXPIRY_MINUTES || 15,
 );
 
-export const AUTH_TOKEN_LIFETIME_SECONDS = 2 * 60 * 60;
+export const AUTH_TOKEN_LIFETIME_SECONDS = Number(
+  process.env.AUTH_TOKEN_LIFETIME_SECONDS || 2 * 60 * 60,
+);
 
 export const DEFAULT_RESET_BASE_URL = 'https://papiqo.com';
 

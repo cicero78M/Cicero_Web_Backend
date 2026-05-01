@@ -5,6 +5,18 @@ import { generateLinkReportExcelBuffer } from '../service/amplifyExportService.j
 
 export async function getAllLinkReports(req, res, next) {
   try {
+    const duplicateLinksRaw = req.query['links[]'] ?? req.query.links;
+    const duplicateLinks = Array.isArray(duplicateLinksRaw)
+      ? duplicateLinksRaw
+      : duplicateLinksRaw
+        ? [duplicateLinksRaw]
+        : [];
+
+    if (duplicateLinks.length > 0) {
+      const duplicates = await linkReportModel.findDuplicateLinks(duplicateLinks);
+      return sendSuccess(res, { duplicates });
+    }
+
     const DEFAULT_LIMIT = 20;
     const DEFAULT_PAGE = 1;
     const userId = req.query.user_id;

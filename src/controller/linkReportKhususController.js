@@ -78,6 +78,18 @@ async function resolveUserIdForCreateLinkReport(data, req, resolvedClientId) {
 
 export async function getAllLinkReports(req, res, next) {
   try {
+    const duplicateLinksRaw = req.query['links[]'] ?? req.query.links;
+    const duplicateLinks = Array.isArray(duplicateLinksRaw)
+      ? duplicateLinksRaw
+      : duplicateLinksRaw
+        ? [duplicateLinksRaw]
+        : [];
+
+    if (duplicateLinks.length > 0) {
+      const duplicates = await linkReportModel.findDuplicateLinks(duplicateLinks);
+      return sendSuccess(res, { duplicates });
+    }
+
     const userId = req.query.user_id;
     const postId = req.query.post_id || req.query.shortcode;
     const data = await linkReportModel.getLinkReports({ userId, postId });
