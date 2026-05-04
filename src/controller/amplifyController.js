@@ -27,6 +27,23 @@ export async function getAmplifyRekap(req, res) {
   ];
   const usesStandardPayload = Boolean(requestedScope || req.query.role);
 
+  sendConsoleDebug({
+    tag: 'AMPLIFY',
+    msg: JSON.stringify({
+      stage: 'handler_start',
+      handler: 'getAmplifyRekap',
+      client_id,
+      periode,
+      tanggal,
+      start_date: startDate,
+      end_date: endDate,
+      role: requestedRole,
+      scope: requestedScope,
+      regional_id: requestedRegionalId,
+      user_client_id: req.user?.client_id || null
+    })
+  });
+
   if (!usesStandardPayload && roleLower === 'ditbinmas') {
     client_id = 'ditbinmas';
   }
@@ -62,6 +79,18 @@ export async function getAmplifyRekap(req, res) {
   try {
     let rekapOptions = { regionalId };
     let roleForQuery = requestedRole;
+
+    sendConsoleDebug({
+      tag: 'AMPLIFY',
+      msg: JSON.stringify({
+        stage: 'before_scope_transform',
+        usesStandardPayload,
+        client_id,
+        roleLower,
+        scopeLower,
+        regionalId
+      })
+    });
 
     if (usesStandardPayload) {
       const resolvedRole = roleLower || null;
@@ -120,7 +149,18 @@ export async function getAmplifyRekap(req, res) {
 
     sendConsoleDebug({
       tag: 'AMPLIFY',
-      msg: `getAmplifyRekap ${client_id} ${periode} ${tanggal || ''} ${startDate || ''} ${endDate || ''} ${roleLower || ''} ${scopeLower || ''} ${regionalId || ''}`
+      msg: JSON.stringify({
+        stage: 'before_query',
+        client_id,
+        periode,
+        tanggal,
+        start_date: startDate,
+        end_date: endDate,
+        role: roleForQuery,
+        scope: scopeLower,
+        regional_id: regionalId,
+        rekapOptions
+      })
     });
     const data = await getRekapLinkByClient(
       client_id,
@@ -133,10 +173,27 @@ export async function getAmplifyRekap(req, res) {
     );
     const length = Array.isArray(data) ? data.length : 0;
     const chartHeight = Math.max(length * 30, 300);
+    sendConsoleDebug({
+      tag: 'AMPLIFY',
+      msg: JSON.stringify({
+        stage: 'after_query',
+        rowCount: length,
+        chartHeight
+      })
+    });
     res.json({ success: true, data, chartHeight });
   } catch (err) {
-    sendConsoleDebug({ tag: 'AMPLIFY', msg: `Error getAmplifyRekap: ${err.message}` });
+    const message = err?.message || 'Terjadi kesalahan internal server';
+    sendConsoleDebug({
+      tag: 'AMPLIFY',
+      msg: JSON.stringify({
+        stage: 'handler_error',
+        message,
+        stack: err?.stack,
+        statusCode: err?.statusCode || err?.response?.status || 500
+      })
+    });
     const code = err.statusCode || err.response?.status || 500;
-    res.status(code).json({ success: false, message: err.message });
+    res.status(code).json({ success: false, message });
   }
 }
