@@ -3,7 +3,8 @@ import { sendConsoleDebug } from '../middleware/debugHandler.js';
 import { normalizeClientId } from '../utils/utilsHelper.js';
 
 export async function getAmplifyRekap(req, res) {
-  let client_id = req.query.client_id;
+  let client_id =
+    req.query.client_id || req.user?.client_id || req.user?.client_ids?.[0];
   const periode = req.query.periode || 'harian';
   const tanggal = req.query.tanggal;
   const startDate =

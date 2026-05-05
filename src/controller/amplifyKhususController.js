@@ -1,10 +1,22 @@
 import { getRekapLinkByClient } from '../model/linkReportKhususModel.js';
 import { sendConsoleDebug } from '../middleware/debugHandler.js';
+import { normalizeClientId } from '../utils/utilsHelper.js';
 
 const OPERATOR_ROLE = 'operator';
 
+function normalizeClientIdList(value) {
+  const list = Array.isArray(value) ? value : value ? [value] : [];
+  return list
+    .map((entry) => normalizeClientId(entry))
+    .filter(Boolean)
+    .map((entry) => String(entry).toLowerCase());
+}
+
 export async function getAmplifyKhususRekap(req, res) {
-  const client_id = req.query.client_id;
+  const requestedClientId =
+    req.query.client_id || req.user?.client_id || req.user?.client_ids?.[0];
+  const normalizedClientId = normalizeClientId(requestedClientId);
+  const client_id = normalizedClientId;
   const periode = req.query.periode || 'harian';
   const tanggal = req.query.tanggal;
   const requestedRole = req.query.role || req.user?.role;
@@ -18,7 +30,14 @@ export async function getAmplifyKhususRekap(req, res) {
   if (!client_id) {
     return res.status(400).json({ success: false, message: 'client_id wajib diisi' });
   }
-  if (req.user?.client_ids && !req.user.client_ids.includes(client_id)) {
+
+  const allowedClientIds = new Set(normalizeClientIdList(req.user?.client_ids));
+  const tokenClientId = normalizeClientId(req.user?.client_id);
+  if (tokenClientId) {
+    allowedClientIds.add(String(tokenClientId).toLowerCase());
+  }
+
+  if (allowedClientIds.size > 0 && !allowedClientIds.has(String(client_id).toLowerCase())) {
     return res.status(403).json({ success: false, message: 'client_id tidak diizinkan' });
   }
 
