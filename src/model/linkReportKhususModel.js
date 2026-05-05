@@ -292,7 +292,12 @@ export async function getRekapLinkByClient(
            (CASE WHEN r.twitter_link IS NOT NULL AND r.twitter_link <> '' THEN 1 ELSE 0 END) +
            (CASE WHEN r.tiktok_link IS NOT NULL AND r.tiktok_link <> '' THEN 1 ELSE 0 END) +
            (CASE WHEN r.youtube_link IS NOT NULL AND r.youtube_link <> '' THEN 1 ELSE 0 END)
-         ) AS jumlah_link
+         ) AS jumlah_link,
+         MAX(NULLIF(r.instagram_link, '')) AS instagram_link,
+         MAX(NULLIF(r.facebook_link, '')) AS facebook_link,
+         MAX(NULLIF(r.twitter_link, '')) AS twitter_link,
+         MAX(NULLIF(r.tiktok_link, '')) AS tiktok_link,
+         MAX(NULLIF(r.youtube_link, '')) AS youtube_link
        FROM link_report_khusus r
        JOIN insta_post_khusus p ON p.shortcode = r.shortcode
        WHERE p.client_id = $1 AND ${dateFilterReport}
@@ -305,7 +310,12 @@ export async function getRekapLinkByClient(
        u.insta AS username,
        u.divisi,
        u.exception,
-       COALESCE(ls.jumlah_link, 0) AS jumlah_link
+       COALESCE(ls.jumlah_link, 0) AS jumlah_link,
+       COALESCE(ls.instagram_link, NULL) AS instagram_link,
+       COALESCE(ls.facebook_link, NULL) AS facebook_link,
+       COALESCE(ls.twitter_link, NULL) AS twitter_link,
+       COALESCE(ls.tiktok_link, NULL) AS tiktok_link,
+       COALESCE(ls.youtube_link, NULL) AS youtube_link
      FROM "user" u
      LEFT JOIN link_sum ls ON ls.user_id = u.user_id
      WHERE u.status = true
