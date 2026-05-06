@@ -128,6 +128,42 @@ export async function findLinkReportByShortcode(shortcode, user_id) {
   return res.rows[0] || null;
 }
 
+export async function findLinkReportsByUserAndShortcode({ user_id, shortcode, client_id }) {
+  const params = [];
+  const addParam = (value) => {
+    params.push(value);
+    return `$${params.length}`;
+  };
+
+  const userIdx = addParam(user_id);
+  const shortcodeIdx = addParam(shortcode);
+
+  let clientFilter = '';
+  if (client_id) {
+    const clientIdx = addParam(client_id);
+    clientFilter = `AND LOWER(u.client_id) = LOWER(${clientIdx})`;
+  }
+
+  const res = await query(
+    `SELECT r.*, p.caption, p.image_url, p.thumbnail_url,
+            COALESCE(u.nama, '') AS nama,
+            COALESCE(u.title, '') AS title,
+            COALESCE(u.username, '') AS username,
+            COALESCE(u.divisi, '') AS divisi,
+            COALESCE(u.client_id, '') AS client_id
+     FROM link_report_khusus r
+     LEFT JOIN insta_post_khusus p ON p.shortcode = r.shortcode
+     LEFT JOIN "user" u ON u.user_id = r.user_id
+     WHERE r.user_id = ${userIdx}
+       AND r.shortcode = ${shortcodeIdx}
+       ${clientFilter}
+     ORDER BY r.created_at DESC`,
+    params
+  );
+
+  return res.rows;
+}
+
 export async function updateLinkReport(shortcode, user_id, data) {
   const old = await findLinkReportByShortcode(shortcode, user_id);
   if (!old) return null;

@@ -4,6 +4,7 @@ import { extractFirstUrl, extractInstagramShortcode } from '../utils/utilsHelper
 import { resolveClientIdForLinkReportKhusus } from '../service/userClientService.js';
 import { findClientIdByUserId } from '../model/userModel.js';
 import { sendDebug } from '../middleware/debugHandler.js';
+import { generateExcelBuffer } from '../service/amplifyExportService.js';
 
 function normalizeOptionalField(value) {
   if (value == null) return null;
@@ -228,5 +229,67 @@ export async function deleteLinkReport(req, res, next) {
     sendSuccess(res, report);
   } catch (err) {
     next(err);
+  }
+}
+
+export async function downloadLinkReportExcelByUserAndShortcode(req, res, next) {
+  try {
+    const userId = String(req.query.user_id || '').trim();
+    const shortcode = String(req.query.shortcode || '').trim();
+    const clientId = String(req.query.client_id || '').trim();
+
+    if (!userId || !shortcode) {
+      return res.status(400).json({
+        success: false,
+        message: 'user_id dan shortcode wajib diisi',
+      });
+    }
+
+    const rows = await linkReportModel.findLinkReportsByUserAndShortcode({
+      user_id: userId,
+      shortcode,
+      client_id: clientId || null,
+    });
+
+    if (!rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: 'Data pelaksanaan tugas khusus tidak ditemukan untuk user_id + shortcode tersebut.',
+      });
+    }
+
+    const excelRows = rows.map((r, index) => ({
+      no: index + 1,
+      user_id: r.user_id || '',
+      nama: [r.title, r.nama].filter(Boolean).join(' ').trim(),
+      username: r.username ? `@${r.username}` : '',
+      divisi_satfung: r.divisi || '',
+      client_id: r.client_id || '',
+      shortcode: r.shortcode || '',
+      task_link: r.shortcode ? `https://www.instagram.com/p/${r.shortcode}/` : '',
+      instagram_link: r.instagram_link || '',
+      facebook_link: r.facebook_link || '',
+      twitter_link: r.twitter_link || '',
+      tiktok_link: r.tiktok_link || '',
+      youtube_link: r.youtube_link || '',
+      created_at: r.created_at || '',
+      caption: r.caption || '',
+    }));
+
+    const buffer = await generateExcelBuffer(excelRows);
+    const safeShortcode = shortcode.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeUserId = userId.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="link_report_khusus_${safeUserId}_${safeShortcode}.xlsx"`
+    );
+    return res.send(buffer);
+  } catch (err) {
+    return next(err);
   }
 }

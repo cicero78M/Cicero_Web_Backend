@@ -13,23 +13,13 @@ export async function generateLinkReportExcelBuffer(rows) {
     'Date',
     'Pangkat Nama',
     'NRP',
-    'Satfung',
-    'Link Instagram',
-    'Link Facebook',
-    'Link Twitter',
-    'Link Tiktok',
-    'Link Youtube'
+    'Satfung'
   ];
   const data = rows.map((r) => [
     r.date || '',
     r.pangkat_nama || '',
     r.nrp || '',
-    r.satfung || '',
-    r.instagram || '',
-    r.facebook || '',
-    r.twitter || '',
-    r.tiktok || '',
-    r.youtube || ''
+    r.satfung || ''
   ]);
   const worksheet = XLSX.utils.aoa_to_sheet([header, ...data]);
   const workbook = XLSX.utils.book_new();

@@ -5,6 +5,7 @@ const router = express.Router();
 
 router.get('/', controller.getAllLinkReports);
 router.get('/excel', controller.downloadMonthlyLinkReportExcel);
+router.get('/excel/by-user-shortcode', controller.downloadLinkReportExcelByUserAndShortcode);
 router.get('/:shortcode', controller.getLinkReportByShortcode);
 router.post('/', controller.createLinkReport);
 router.put('/:shortcode', controller.updateLinkReport);
