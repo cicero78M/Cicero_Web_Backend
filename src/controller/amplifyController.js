@@ -233,7 +233,7 @@ async function fetchAmplifyLinkRowsForExport(context) {
       r.user_id,
       COALESCE(u.title, '') AS title,
       COALESCE(u.nama, '') AS nama,
-      COALESCE(u.username, '') AS username,
+      COALESCE(u.insta, '') AS username,
       COALESCE(u.divisi, '') AS divisi,
       COALESCE(u.client_id, '') AS client_id,
       COALESCE(u.client_id, '') AS client_name,
