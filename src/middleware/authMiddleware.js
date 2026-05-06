@@ -13,6 +13,7 @@ const operatorAllowlist = [
   { path: '/aggregator', type: 'prefix' },
   { path: '/social/aggregator', type: 'prefix' },
   { path: '/amplify/rekap', type: 'exact' },
+  { path: '/amplify/rekap/excel', type: 'exact' },
   { path: '/amplify/rekap-khusus', type: 'exact' },
   { path: '/amplify-khusus/rekap', type: 'exact' },
   { path: '/dashboard/stats', type: 'exact' },
