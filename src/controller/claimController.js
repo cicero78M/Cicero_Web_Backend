@@ -6,15 +6,10 @@ import * as userModel from '../model/userModel.js';
 import * as claimPasswordResetModel from '../model/claimPasswordResetModel.js';
 import redis from '../config/redis.js';
 import { sendOtpEmail } from '../service/emailService.js';
-import { sendTelegramAdminMessage, sendTelegramMessage } from '../service/telegramService.js';
+import { sendTelegramAdminMessage } from '../service/telegramService.js';
 import { sendSuccess } from '../utils/response.js';
 import { normalizeEmail, normalizeUserId } from '../utils/utilsHelper.js';
-import {
-  normalizeWhatsappNumber,
-  minPhoneDigitLength,
-  formatToWhatsAppId,
-  safeSendMessage,
-} from '../utils/waHelper.js';
+import { normalizeWhatsappNumber, minPhoneDigitLength } from '../utils/waHelper.js';
 
 const validationErrorCodes = {
   invalidWhatsappFormat: 'CLAIM_INVALID_WHATSAPP_FORMAT',
@@ -549,10 +544,9 @@ export async function updateUserData(req, res, next) {
 
 export async function requestClaimPasswordReset(req, res, next) {
   try {
-    const { nrp: rawNrp, channel: rawChannel, destination: rawDestination } = req.body || {};
+    const { nrp: rawNrp, email: rawEmail } = req.body || {};
     const nrp = normalizeUserId(rawNrp);
-    const channel = String(rawChannel || '').trim().toLowerCase();
-    const destination = String(rawDestination || '').trim();
+    const inputEmail = normalizeEmail(rawEmail || '');
     const smtpEnabled = isSmtpEnabled();
 
     if (!nrp) {
@@ -573,56 +567,21 @@ export async function requestClaimPasswordReset(req, res, next) {
       return sendSuccess(res, { message: claimPasswordResetNeutralMessage });
     }
 
-    const hasWhatsapp = Boolean(normalizeWhatsappNumber(user?.whatsapp || ''));
-    const hasEmail = Boolean(smtpEnabled && normalizeEmail(user?.email || ''));
-    const hasTelegram = Boolean(String(user?.telegram_chat_id || '').trim());
-    const availableChannels = [];
-    if (hasWhatsapp) availableChannels.push('whatsapp');
-    if (hasEmail) availableChannels.push('email');
-    if (hasTelegram) availableChannels.push('telegram');
-
-    const allowedChannels = new Set(['whatsapp', 'email', 'telegram']);
-    const selectedChannel =
-      channel || (hasWhatsapp ? 'whatsapp' : hasEmail ? 'email' : hasTelegram ? 'telegram' : '');
-
-    if (selectedChannel && !allowedChannels.has(selectedChannel)) {
-      return res.status(400).json({
+    if (!smtpEnabled) {
+      return res.status(503).json({
         success: false,
-        message: 'Kanal pengiriman OTP tidak dikenali.',
-        available_channels: ['whatsapp', 'email', 'telegram'],
+        message: 'Layanan email OTP sedang tidak tersedia. Silakan hubungi admin.',
       });
     }
 
-    if (!selectedChannel) {
+    const existingEmail = normalizeEmail(user?.email || '');
+    const deliveryTarget = existingEmail || inputEmail;
+
+    if (!deliveryTarget || !isValidEmailFormat(deliveryTarget)) {
       return res.status(400).json({
         success: false,
-        message: 'Kontak belum tersedia. Pilih kanal pengiriman OTP dan isi tujuan pengiriman.',
-        requires_destination: true,
-        available_channels: ['whatsapp', 'email', 'telegram'],
-      });
-    }
-
-    let deliveryTarget = '';
-    if (selectedChannel === 'whatsapp') {
-      deliveryTarget = normalizeWhatsappNumber(destination || user?.whatsapp || '') || '';
-      if (deliveryTarget && deliveryTarget.length < minPhoneDigitLength) {
-        deliveryTarget = '';
-      }
-    } else if (selectedChannel === 'email') {
-      deliveryTarget = normalizeEmail(destination || user?.email || '') || '';
-      if (deliveryTarget && !isValidEmailFormat(deliveryTarget)) {
-        deliveryTarget = '';
-      }
-    } else if (selectedChannel === 'telegram') {
-      deliveryTarget = String(destination || user?.telegram_chat_id || '').trim();
-    }
-
-    if (!deliveryTarget) {
-      return res.status(400).json({
-        success: false,
-        message: 'Tujuan pengiriman OTP tidak valid untuk kanal yang dipilih.',
-        requires_destination: true,
-        available_channels: availableChannels.length ? availableChannels : ['whatsapp', 'email', 'telegram'],
+        message: 'Email aktif wajib diisi dengan format yang valid.',
+        requires_email: true,
       });
     }
 
@@ -645,7 +604,7 @@ export async function requestClaimPasswordReset(req, res, next) {
       `claim_reset_otp:${requestId}`,
       JSON.stringify({
         user_id: user.user_id,
-        channel: selectedChannel,
+        channel: 'email',
         delivery_target: deliveryTarget,
         otp_hash: otpHash,
         failed_attempts: 0,
@@ -654,35 +613,14 @@ export async function requestClaimPasswordReset(req, res, next) {
     );
     await redis.set(cooldownKey, '1', { EX: CLAIM_RESET_REQUEST_COOLDOWN_SECONDS });
 
-    const otpMessage = `Kode OTP reset password CICERO Anda: ${otp}. Berlaku 10 menit.`;
-    let deliveredChannel = selectedChannel;
-
-    if (selectedChannel === 'email') {
-      await sendOtpEmail(deliveryTarget, otp);
-    } else if (selectedChannel === 'telegram') {
-      await sendTelegramMessage(deliveryTarget, otpMessage);
-    } else if (selectedChannel === 'whatsapp') {
-      const waClient = globalThis?.waClient;
-      const target = formatToWhatsAppId(deliveryTarget);
-      const sent = await safeSendMessage(waClient, target, otpMessage);
-      if (!sent) {
-        if (hasEmail) {
-          await sendOtpEmail(normalizeEmail(user?.email || ''), otp);
-          deliveredChannel = 'email';
-        } else if (hasTelegram) {
-          await sendTelegramMessage(String(user?.telegram_chat_id), otpMessage);
-          deliveredChannel = 'telegram';
-        } else {
-          throw new Error('Pengiriman OTP WhatsApp gagal');
-        }
-      }
-    }
+    await sendOtpEmail(deliveryTarget, otp);
 
     return sendSuccess(res, {
-      message: `OTP berhasil dikirim melalui ${deliveredChannel}.`,
+      message: `OTP berhasil dikirim ke email ${deliveryTarget}.`,
       request_id: requestId,
-      delivery_channel: deliveredChannel,
-      available_channels: availableChannels,
+      delivery_channel: 'email',
+      email: deliveryTarget,
+      has_registered_email: Boolean(existingEmail),
       otp_ttl_seconds: CLAIM_RESET_OTP_TTL_SECONDS,
     });
   } catch (err) {
