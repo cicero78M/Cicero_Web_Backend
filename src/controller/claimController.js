@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import * as userModel from '../model/userModel.js';
 import * as claimPasswordResetModel from '../model/claimPasswordResetModel.js';
 import redis from '../config/redis.js';
-import { sendOtpEmail } from '../service/emailService.js';
+import { sendClaimPasswordResetEmail, sendOtpEmail } from '../service/emailService.js';
 import { sendTelegramAdminMessage } from '../service/telegramService.js';
 import { sendSuccess } from '../utils/response.js';
 import { normalizeEmail, normalizeUserId } from '../utils/utilsHelper.js';
@@ -575,15 +575,17 @@ export async function requestClaimPasswordReset(req, res, next) {
     }
 
     const existingEmail = normalizeEmail(user?.email || '');
-    const deliveryTarget = existingEmail || inputEmail;
+    const hasRegisteredEmail = Boolean(existingEmail && isValidEmailFormat(existingEmail));
 
-    if (!deliveryTarget || !isValidEmailFormat(deliveryTarget)) {
+    if (!hasRegisteredEmail && (!inputEmail || !isValidEmailFormat(inputEmail))) {
       return res.status(400).json({
         success: false,
         message: 'Email aktif wajib diisi dengan format yang valid.',
         requires_email: true,
       });
     }
+
+    const deliveryTarget = hasRegisteredEmail ? existingEmail : inputEmail;
 
     const cooldownKey = `claim_reset_req_cooldown:${nrp}`;
     const cooldownExists = await redis.get(cooldownKey);
@@ -608,6 +610,7 @@ export async function requestClaimPasswordReset(req, res, next) {
         delivery_target: deliveryTarget,
         otp_hash: otpHash,
         failed_attempts: 0,
+        pending_email: hasRegisteredEmail ? null : inputEmail,
       }),
       { EX: CLAIM_RESET_OTP_TTL_SECONDS }
     );
@@ -615,12 +618,18 @@ export async function requestClaimPasswordReset(req, res, next) {
 
     await sendOtpEmail(deliveryTarget, otp);
 
+    const message = hasRegisteredEmail
+      ? (inputEmail && inputEmail !== existingEmail
+          ? `NRP Anda terhubung dengan email ${existingEmail}. OTP dikirim ke email tersebut.`
+          : `OTP berhasil dikirim ke email ${existingEmail}.`)
+      : `Email pada NRP belum terdaftar. OTP dikirim ke ${inputEmail}. Setelah verifikasi, email ini akan ditautkan.`;
+
     return sendSuccess(res, {
-      message: `OTP berhasil dikirim ke email ${deliveryTarget}.`,
+      message,
       request_id: requestId,
       delivery_channel: 'email',
       email: deliveryTarget,
-      has_registered_email: Boolean(existingEmail),
+      has_registered_email: hasRegisteredEmail,
       otp_ttl_seconds: CLAIM_RESET_OTP_TTL_SECONDS,
     });
   } catch (err) {
@@ -674,9 +683,21 @@ export async function verifyClaimPasswordResetOtp(req, res, next) {
       expiresAt,
     });
 
+    if (payload?.pending_email && isValidEmailFormat(payload.pending_email)) {
+      await userModel.updateUserField(payload.user_id, 'email', payload.pending_email);
+    }
+
+    const resetBaseUrl = (process.env.CLAIM_PASSWORD_RESET_URL || process.env.DASHBOARD_PASSWORD_RESET_URL || '').trim();
+    await sendClaimPasswordResetEmail(payload.delivery_target, token, {
+      nrp: payload.user_id,
+      expiryMinutes: 15,
+      resetBaseUrl,
+    });
+
     return sendSuccess(res, {
-      message: 'OTP valid. Silakan buat password baru.',
+      message: 'OTP valid. Link ganti password sudah dikirim ke email Anda.',
       reset_token: token,
+      reset_link: resetBaseUrl ? `${resetBaseUrl.replace(/\/$/, '')}?token=${encodeURIComponent(token)}` : null,
     });
   } catch (err) {
     next(err);
