@@ -1,13 +1,20 @@
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
 import * as userModel from '../model/userModel.js';
 import * as claimPasswordResetModel from '../model/claimPasswordResetModel.js';
-import { sendClaimPasswordResetEmail } from '../service/emailService.js';
-import { sendTelegramAdminMessage } from '../service/telegramService.js';
+import redis from '../config/redis.js';
+import { sendOtpEmail } from '../service/emailService.js';
+import { sendTelegramAdminMessage, sendTelegramMessage } from '../service/telegramService.js';
 import { sendSuccess } from '../utils/response.js';
 import { normalizeEmail, normalizeUserId } from '../utils/utilsHelper.js';
-import { normalizeWhatsappNumber, minPhoneDigitLength } from '../utils/waHelper.js';
+import {
+  normalizeWhatsappNumber,
+  minPhoneDigitLength,
+  formatToWhatsAppId,
+  safeSendMessage,
+} from '../utils/waHelper.js';
 
 const validationErrorCodes = {
   invalidWhatsappFormat: 'CLAIM_INVALID_WHATSAPP_FORMAT',
@@ -77,6 +84,9 @@ const claimPasswordResetMessage =
   'Permintaan reset password tidak valid. Periksa kembali data yang dimasukkan.';
 const claimPasswordResetNeutralMessage =
   'Jika data valid dan terdaftar, instruksi reset password akan dikirim melalui kanal yang tersedia.';
+const CLAIM_RESET_OTP_TTL_SECONDS = 10 * 60;
+const CLAIM_RESET_OTP_MAX_ATTEMPTS = 5;
+const CLAIM_RESET_REQUEST_COOLDOWN_SECONDS = 45;
 
 function getClaimResetSecret() {
   if (!process.env.JWT_SECRET) {
@@ -97,26 +107,6 @@ function isSmtpEnabled() {
   return requiredSmtpEnv.every((value) => typeof value === 'string' && value.trim() !== '');
 }
 
-function maskEmail(email) {
-  const [localPart, domainPart] = String(email || '').split('@');
-  if (!localPart || !domainPart) return 'invalid-email';
-  const visibleLocal = localPart.length <= 2 ? `${localPart[0] || '*'}*` : `${localPart.slice(0, 2)}***`;
-  return `${visibleLocal}@${domainPart}`;
-}
-
-function obfuscateNrp(nrp) {
-  const text = String(nrp || '');
-  if (text.length <= 3) return '***';
-  return `${text.slice(0, 2)}***${text.slice(-1)}`;
-}
-
-function hashToken(token) {
-  return crypto.createHash('sha256').update(token).digest('hex').slice(0, 12);
-}
-
-function logClaimPasswordReset(payload) {
-  console.info(JSON.stringify({ event: 'claim_password_reset_request', ...payload }));
-}
 
 function toSocialAccountList(rawValue) {
   if (rawValue === undefined) return undefined;
@@ -559,16 +549,14 @@ export async function updateUserData(req, res, next) {
 
 export async function requestClaimPasswordReset(req, res, next) {
   try {
-    const { nrp: rawNrp, email: rawEmail } = req.body;
+    const { nrp: rawNrp, channel: rawChannel, destination: rawDestination } = req.body || {};
     const nrp = normalizeUserId(rawNrp);
-    const email = normalizeEmail(rawEmail);
+    const channel = String(rawChannel || '').trim().toLowerCase();
+    const destination = String(rawDestination || '').trim();
     const smtpEnabled = isSmtpEnabled();
 
-    if (!nrp || !email) {
-      return res.status(400).json({
-        success: false,
-        message: claimPasswordResetMessage,
-      });
+    if (!nrp) {
+      return res.status(400).json({ success: false, message: claimPasswordResetMessage });
     }
 
     let user;
@@ -581,80 +569,176 @@ export async function requestClaimPasswordReset(req, res, next) {
       throw err;
     }
 
-    const normalizedUserEmail = normalizeEmail(user?.email || '');
-    const accountMatched = Boolean(user && normalizedUserEmail && normalizedUserEmail === email);
+    if (!user) {
+      return sendSuccess(res, { message: claimPasswordResetNeutralMessage });
+    }
 
-    if (accountMatched) {
-      const token = jwt.sign(
-        {
-          type: 'claim_password_reset',
-          user_id: user.user_id,
-        },
-        getClaimResetSecret(),
-        { expiresIn: '15m' }
-      );
-      const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    const hasWhatsapp = Boolean(normalizeWhatsappNumber(user?.whatsapp || ''));
+    const hasEmail = Boolean(smtpEnabled && normalizeEmail(user?.email || ''));
+    const hasTelegram = Boolean(String(user?.telegram_chat_id || '').trim());
+    const availableChannels = [];
+    if (hasWhatsapp) availableChannels.push('whatsapp');
+    if (hasEmail) availableChannels.push('email');
+    if (hasTelegram) availableChannels.push('telegram');
 
-      await claimPasswordResetModel.createResetRequest({
-        userId: user.user_id,
-        deliveryTarget: email,
-        resetToken: token,
-        expiresAt,
-      });
+    const allowedChannels = new Set(['whatsapp', 'email', 'telegram']);
+    const selectedChannel =
+      channel || (hasWhatsapp ? 'whatsapp' : hasEmail ? 'email' : hasTelegram ? 'telegram' : '');
 
-      if (smtpEnabled) {
-        try {
-          await sendClaimPasswordResetEmail(email, token, {
-            nrp,
-            expiryMinutes: 15,
-          });
-          logClaimPasswordReset({
-            outcome: 'delivered_email',
-            delivery_channel: 'smtp',
-            smtp_enabled: true,
-            nrp_masked: obfuscateNrp(nrp),
-            email_masked: maskEmail(email),
-            token_fingerprint: hashToken(token),
-          });
-        } catch (err) {
-          logClaimPasswordReset({
-            outcome: 'email_send_failed_fallback_telegram',
-            delivery_channel: 'smtp_to_telegram_fallback',
-            smtp_enabled: true,
-            nrp_masked: obfuscateNrp(nrp),
-            email_masked: maskEmail(email),
-            token_fingerprint: hashToken(token),
-            error: err?.message || 'unknown_error',
-          });
-          await sendTelegramAdminMessage(
-            `⚠️ CLAIM reset fallback (SMTP gagal)\nNRP: ${nrp}\nEmail: ${email}\nToken: ${token}`
-          );
-        }
-      } else {
-        await sendTelegramAdminMessage(
-          `⚠️ CLAIM reset manual flow (SMTP nonaktif)\nNRP: ${nrp}\nEmail: ${email}\nToken: ${token}`
-        );
-        logClaimPasswordReset({
-          outcome: 'delivered_admin_telegram',
-          delivery_channel: 'telegram_admin',
-          smtp_enabled: false,
-          nrp_masked: obfuscateNrp(nrp),
-          email_masked: maskEmail(email),
-          token_fingerprint: hashToken(token),
-        });
-      }
-    } else {
-      logClaimPasswordReset({
-        outcome: 'account_not_found_or_mismatch',
-        delivery_channel: 'none',
-        smtp_enabled: smtpEnabled,
-        nrp_masked: obfuscateNrp(nrp),
-        email_masked: maskEmail(email),
+    if (selectedChannel && !allowedChannels.has(selectedChannel)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Kanal pengiriman OTP tidak dikenali.',
+        available_channels: ['whatsapp', 'email', 'telegram'],
       });
     }
 
+    if (!selectedChannel) {
+      return res.status(400).json({
+        success: false,
+        message: 'Kontak belum tersedia. Pilih kanal pengiriman OTP dan isi tujuan pengiriman.',
+        requires_destination: true,
+        available_channels: ['whatsapp', 'email', 'telegram'],
+      });
+    }
+
+    let deliveryTarget = '';
+    if (selectedChannel === 'whatsapp') {
+      deliveryTarget = normalizeWhatsappNumber(destination || user?.whatsapp || '') || '';
+      if (deliveryTarget && deliveryTarget.length < minPhoneDigitLength) {
+        deliveryTarget = '';
+      }
+    } else if (selectedChannel === 'email') {
+      deliveryTarget = normalizeEmail(destination || user?.email || '') || '';
+      if (deliveryTarget && !isValidEmailFormat(deliveryTarget)) {
+        deliveryTarget = '';
+      }
+    } else if (selectedChannel === 'telegram') {
+      deliveryTarget = String(destination || user?.telegram_chat_id || '').trim();
+    }
+
+    if (!deliveryTarget) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tujuan pengiriman OTP tidak valid untuk kanal yang dipilih.',
+        requires_destination: true,
+        available_channels: availableChannels.length ? availableChannels : ['whatsapp', 'email', 'telegram'],
+      });
+    }
+
+    const cooldownKey = `claim_reset_req_cooldown:${nrp}`;
+    const cooldownExists = await redis.get(cooldownKey);
+    if (cooldownExists) {
+      const ttl = await redis.ttl(cooldownKey);
+      return res.status(429).json({
+        success: false,
+        message: 'Permintaan OTP terlalu sering. Coba beberapa saat lagi.',
+        retry_after_seconds: ttl > 0 ? ttl : CLAIM_RESET_REQUEST_COOLDOWN_SECONDS,
+      });
+    }
+
+    const requestId = uuidv4();
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+
+    await redis.set(
+      `claim_reset_otp:${requestId}`,
+      JSON.stringify({
+        user_id: user.user_id,
+        channel: selectedChannel,
+        delivery_target: deliveryTarget,
+        otp_hash: otpHash,
+        failed_attempts: 0,
+      }),
+      { EX: CLAIM_RESET_OTP_TTL_SECONDS }
+    );
+    await redis.set(cooldownKey, '1', { EX: CLAIM_RESET_REQUEST_COOLDOWN_SECONDS });
+
+    const otpMessage = `Kode OTP reset password CICERO Anda: ${otp}. Berlaku 10 menit.`;
+    let deliveredChannel = selectedChannel;
+
+    if (selectedChannel === 'email') {
+      await sendOtpEmail(deliveryTarget, otp);
+    } else if (selectedChannel === 'telegram') {
+      await sendTelegramMessage(deliveryTarget, otpMessage);
+    } else if (selectedChannel === 'whatsapp') {
+      const waClient = globalThis?.waClient;
+      const target = formatToWhatsAppId(deliveryTarget);
+      const sent = await safeSendMessage(waClient, target, otpMessage);
+      if (!sent) {
+        if (hasEmail) {
+          await sendOtpEmail(normalizeEmail(user?.email || ''), otp);
+          deliveredChannel = 'email';
+        } else if (hasTelegram) {
+          await sendTelegramMessage(String(user?.telegram_chat_id), otpMessage);
+          deliveredChannel = 'telegram';
+        } else {
+          throw new Error('Pengiriman OTP WhatsApp gagal');
+        }
+      }
+    }
+
     return sendSuccess(res, {
-      message: claimPasswordResetNeutralMessage,
+      message: `OTP berhasil dikirim melalui ${deliveredChannel}.`,
+      request_id: requestId,
+      delivery_channel: deliveredChannel,
+      available_channels: availableChannels,
+      otp_ttl_seconds: CLAIM_RESET_OTP_TTL_SECONDS,
+    });
+  } catch (err) {
+    await sendTelegramAdminMessage(`⚠️ CLAIM reset OTP gagal dikirim: ${err?.message || 'unknown_error'}`);
+    next(err);
+  }
+}
+
+export async function verifyClaimPasswordResetOtp(req, res, next) {
+  try {
+    const { request_id, otp } = req.body || {};
+    if (!request_id || !otp) {
+      return res.status(400).json({ success: false, message: 'request_id dan otp wajib diisi' });
+    }
+
+    const raw = await redis.get(`claim_reset_otp:${request_id}`);
+    if (!raw) {
+      return res.status(400).json({ success: false, message: 'OTP tidak valid atau sudah kedaluwarsa.' });
+    }
+
+    const payload = JSON.parse(raw);
+    const otpHash = crypto.createHash('sha256').update(String(otp)).digest('hex');
+    if (payload.otp_hash !== otpHash) {
+      const nextFailed = Number(payload.failed_attempts || 0) + 1;
+      if (nextFailed >= CLAIM_RESET_OTP_MAX_ATTEMPTS) {
+        await redis.del(`claim_reset_otp:${request_id}`);
+      } else {
+        const ttl = await redis.ttl(`claim_reset_otp:${request_id}`);
+        await redis.set(
+          `claim_reset_otp:${request_id}`,
+          JSON.stringify({ ...payload, failed_attempts: nextFailed }),
+          { EX: ttl > 0 ? ttl : CLAIM_RESET_OTP_TTL_SECONDS }
+        );
+      }
+      return res.status(400).json({ success: false, message: 'OTP tidak valid atau sudah kedaluwarsa.' });
+    }
+
+    await redis.del(`claim_reset_otp:${request_id}`);
+
+    const token = jwt.sign(
+      { type: 'claim_password_reset', user_id: payload.user_id },
+      getClaimResetSecret(),
+      { expiresIn: '15m' }
+    );
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    await claimPasswordResetModel.createResetRequest({
+      userId: payload.user_id,
+      deliveryTarget: payload.delivery_target,
+      resetToken: token,
+      expiresAt,
+    });
+
+    return sendSuccess(res, {
+      message: 'OTP valid. Silakan buat password baru.',
+      reset_token: token,
     });
   } catch (err) {
     next(err);
