@@ -8,10 +8,14 @@ describe('telegram command handlers', () => {
   describe('parseDashboardCommandText', () => {
     it.each([
       ['/approvedash user1', 'approvedash', 'user1'],
+      ['/approvedash@CiceroAdminBot user1', 'approvedash', 'user1'],
       ['/approvedash#user1', 'approvedash', 'user1'],
+      ['/approvedash@CiceroAdminBot#user1', 'approvedash', 'user1'],
       ['approvedash#user1', 'approvedash', 'user1'],
       ['/denydash user1', 'denydash', 'user1'],
+      ['/denydash@CiceroAdminBot user1', 'denydash', 'user1'],
       ['/denydash#user1', 'denydash', 'user1'],
+      ['/denydash@CiceroAdminBot#user1', 'denydash', 'user1'],
       ['denydash#user1', 'denydash', 'user1'],
     ])('parses %s with command %s', (text, commandName, expectedUsername) => {
       expect(parseDashboardCommandText(text, commandName)).toBe(
@@ -70,10 +74,14 @@ describe('telegram command handlers', () => {
 
     expect(approveRegex.test('approvedash#user1')).toBe(true);
     expect(approveRegex.test('/approvedash user1')).toBe(true);
+    expect(approveRegex.test('/approvedash@CiceroAdminBot user1')).toBe(true);
+    expect(approveRegex.test('/approvedash@CiceroAdminBot#user1')).toBe(true);
     expect(approveRegex.test('x /approvedash user1')).toBe(false);
     expect(approveRegex.test('/approvedashboard user1')).toBe(false);
     expect(denyRegex.test('denydash#user1')).toBe(true);
     expect(denyRegex.test('/denydash user1')).toBe(true);
+    expect(denyRegex.test('/denydash@CiceroAdminBot user1')).toBe(true);
+    expect(denyRegex.test('/denydash@CiceroAdminBot#user1')).toBe(true);
     expect(denyRegex.test('x /denydash user1')).toBe(false);
     expect(denyRegex.test('/denydashboard user1')).toBe(false);
   });
