@@ -8,6 +8,22 @@ const BASE_SELECT =
 
 const BASE_GROUP_BY = 'GROUP BY du.dashboard_user_id, r.role_name';
 
+export function getEffectiveApprovalStatus(user) {
+  if (!user) {
+    return null;
+  }
+
+  if (user.status === true || user.approval_status === 'approved') {
+    return 'approved';
+  }
+
+  if (user.approval_status === 'rejected') {
+    return 'rejected';
+  }
+
+  return 'pending';
+}
+
 function normalizeDashboardUserId(value) {
   if (value == null) return null;
   const trimmed = String(value).trim();
@@ -76,6 +92,7 @@ export async function findPendingDashboardUsers(limit = 20) {
   const safeLimit = Number.isInteger(normalizedLimit) && normalizedLimit > 0 ? normalizedLimit : 20;
   const queryText = `${BASE_SELECT}
    WHERE du.approval_status = 'pending'
+     AND du.status IS NOT TRUE
    ${BASE_GROUP_BY}
    ORDER BY du.created_at ASC
    LIMIT $1`;
@@ -131,7 +148,7 @@ export async function updateApprovalStatus(id, approvalStatus, { onlyPending = f
     throw new Error('approval_status must be pending, approved, or rejected');
   }
 
-  const pendingClause = onlyPending ? " AND approval_status = 'pending'" : '';
+  const pendingClause = onlyPending ? " AND approval_status = 'pending' AND status IS NOT TRUE" : '';
   const res = await query(
     `UPDATE dashboard_user
      SET status=$2, approval_status=$3, updated_at=NOW()

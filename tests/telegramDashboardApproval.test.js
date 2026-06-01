@@ -7,6 +7,11 @@ const mockAnswerCallbackQuery = jest.fn();
 const mockEditMessageReplyMarkup = jest.fn();
 const mockFindByUsername = jest.fn();
 const mockUpdateApprovalStatus = jest.fn();
+const getEffectiveApprovalStatus = user => {
+  if (user?.status === true || user?.approval_status === 'approved') return 'approved';
+  if (user?.approval_status === 'rejected') return 'rejected';
+  return 'pending';
+};
 const mockSendApprovalEmail = jest.fn();
 const mockSendRejectionEmail = jest.fn();
 
@@ -25,6 +30,7 @@ jest.unstable_mockModule('../src/service/telegramBotAdapter.js', () => ({
 jest.unstable_mockModule('../src/model/dashboardUserModel.js', () => ({
   findByUsername: mockFindByUsername,
   updateApprovalStatus: mockUpdateApprovalStatus,
+  getEffectiveApprovalStatus,
 }));
 
 jest.unstable_mockModule('../src/service/emailService.js', () => ({
@@ -70,7 +76,6 @@ test('processApproval approves only pending dashboard users', async () => {
     expect.stringContaining('berhasil disetujui'),
   );
 });
-
 
 test('processApproval sends user Telegram notification when telegram_chat_id exists', async () => {
   mockFindByUsername.mockResolvedValue({
@@ -127,6 +132,23 @@ test('processApproval succeeds without user Telegram notification when telegram_
   expect(mockSendMessage).toHaveBeenCalledWith(
     'admin-chat',
     expect.stringContaining('berhasil disetujui'),
+  );
+});
+
+test('processApproval does not reapprove legacy active dashboard users', async () => {
+  mockFindByUsername.mockResolvedValue({
+    dashboard_user_id: 'dash-legacy',
+    username: 'legacy_user',
+    status: true,
+    approval_status: 'pending',
+  });
+
+  await processApproval('admin-chat', 'legacy_user');
+
+  expect(mockUpdateApprovalStatus).not.toHaveBeenCalled();
+  expect(mockSendMessage).toHaveBeenCalledWith(
+    'admin-chat',
+    expect.stringContaining('sudah disetujui sebelumnya'),
   );
 });
 
