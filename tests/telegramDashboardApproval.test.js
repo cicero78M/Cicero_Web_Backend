@@ -1,0 +1,127 @@
+import { jest } from '@jest/globals';
+
+const mockSendMessage = jest.fn();
+const mockOnText = jest.fn();
+const mockOn = jest.fn();
+const mockAnswerCallbackQuery = jest.fn();
+const mockEditMessageReplyMarkup = jest.fn();
+const mockFindByUsername = jest.fn();
+const mockUpdateApprovalStatus = jest.fn();
+const mockSendApprovalEmail = jest.fn();
+const mockSendRejectionEmail = jest.fn();
+
+const mockBot = {
+  sendMessage: mockSendMessage,
+  onText: mockOnText,
+  on: mockOn,
+  answerCallbackQuery: mockAnswerCallbackQuery,
+  editMessageReplyMarkup: mockEditMessageReplyMarkup,
+};
+
+jest.unstable_mockModule('../src/service/telegramBotAdapter.js', () => ({
+  default: jest.fn(() => mockBot),
+}));
+
+jest.unstable_mockModule('../src/model/dashboardUserModel.js', () => ({
+  findByUsername: mockFindByUsername,
+  updateApprovalStatus: mockUpdateApprovalStatus,
+}));
+
+jest.unstable_mockModule('../src/service/emailService.js', () => ({
+  sendApprovalEmail: mockSendApprovalEmail,
+  sendRejectionEmail: mockSendRejectionEmail,
+}));
+
+process.env.TELEGRAM_BOT_TOKEN = 'test-token';
+process.env.TELEGRAM_ADMIN_CHAT_ID = 'admin-chat';
+
+const {
+  initializeTelegramBot,
+  processApproval,
+  processRejection,
+  finalizeRejection,
+} = await import('../src/service/telegramService.js');
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  process.env.TELEGRAM_BOT_TOKEN = 'test-token';
+  initializeTelegramBot();
+});
+
+test('processApproval approves only pending dashboard users', async () => {
+  mockFindByUsername.mockResolvedValue({
+    dashboard_user_id: 'dash-1',
+    username: 'pending_user',
+    approval_status: 'pending',
+  });
+  mockUpdateApprovalStatus.mockResolvedValue({
+    dashboard_user_id: 'dash-1',
+    status: true,
+    approval_status: 'approved',
+  });
+
+  await processApproval('admin-chat', 'pending_user');
+
+  expect(mockUpdateApprovalStatus).toHaveBeenCalledWith('dash-1', 'approved', {
+    onlyPending: true,
+  });
+  expect(mockSendMessage).toHaveBeenCalledWith(
+    'admin-chat',
+    expect.stringContaining('berhasil disetujui'),
+  );
+});
+
+test('processApproval does not approve rejected dashboard users', async () => {
+  mockFindByUsername.mockResolvedValue({
+    dashboard_user_id: 'dash-1',
+    username: 'rejected_user',
+    approval_status: 'rejected',
+  });
+
+  await processApproval('admin-chat', 'rejected_user');
+
+  expect(mockUpdateApprovalStatus).not.toHaveBeenCalled();
+  expect(mockSendMessage).toHaveBeenCalledWith(
+    'admin-chat',
+    expect.stringContaining('sudah ditolak sebelumnya'),
+  );
+});
+
+test('processRejection shows reason choices only for pending dashboard users', async () => {
+  mockFindByUsername.mockResolvedValue({
+    dashboard_user_id: 'dash-1',
+    username: 'pending_user',
+    approval_status: 'pending',
+  });
+
+  await processRejection('admin-chat', 'pending_user');
+
+  expect(mockSendMessage).toHaveBeenCalledWith(
+    'admin-chat',
+    expect.stringContaining('Pilih alasan penolakan'),
+    expect.objectContaining({ reply_markup: expect.any(Object) }),
+  );
+});
+
+test('finalizeRejection rejects only pending dashboard users', async () => {
+  mockFindByUsername.mockResolvedValue({
+    dashboard_user_id: 'dash-1',
+    username: 'pending_user',
+    approval_status: 'pending',
+  });
+  mockUpdateApprovalStatus.mockResolvedValue({
+    dashboard_user_id: 'dash-1',
+    status: false,
+    approval_status: 'rejected',
+  });
+
+  await finalizeRejection('admin-chat', 'pending_user', 'Data tidak valid');
+
+  expect(mockUpdateApprovalStatus).toHaveBeenCalledWith('dash-1', 'rejected', {
+    onlyPending: true,
+  });
+  expect(mockSendMessage).toHaveBeenCalledWith(
+    'admin-chat',
+    expect.stringContaining('berhasil ditolak'),
+  );
+});

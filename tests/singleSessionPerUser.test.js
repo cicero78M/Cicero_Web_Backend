@@ -75,6 +75,7 @@ describe('Single Session Per User', () => {
           username: 'dashuser',
           password_hash: passwordHash,
           status: true,
+          approval_status: 'approved',
           role: 'operator',
           role_id: 1,
           client_ids: ['client-1']
@@ -248,6 +249,7 @@ describe('Single Session Per User', () => {
           username: 'dashuser2',
           password_hash: passwordHash,
           status: true,
+          approval_status: 'approved',
           role: 'operator',
           role_id: 1,
           client_ids: ['client-1']

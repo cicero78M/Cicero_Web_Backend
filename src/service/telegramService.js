@@ -40,7 +40,7 @@ export function isTelegramAdmin(chatId) {
     .map(id => id.trim())
     .filter(Boolean)
     .map(id => String(id));
-  
+
   return adminChatIds.includes(String(chatId));
 }
 
@@ -106,7 +106,7 @@ export async function sendTelegramMessage(chatId, message, options = {}) {
     return result;
   } catch (error) {
     console.error(`[Telegram] Failed to send message to ${chatId}:`, error.message);
-    
+
     // If parse error, retry without Markdown formatting
     if (error.message && error.message.includes("can't parse entities")) {
       console.warn(`[Telegram] Retrying message to ${chatId} without Markdown formatting`);
@@ -121,7 +121,7 @@ export async function sendTelegramMessage(chatId, message, options = {}) {
         return null;
       }
     }
-    
+
     return null;
   }
 }
@@ -137,7 +137,7 @@ export async function sendTelegramAdminMessage(message, options = {}) {
     .split(',')
     .map(id => id.trim())
     .filter(Boolean);
-  
+
   if (adminChatIds.length === 0) {
     console.warn('[Telegram] TELEGRAM_ADMIN_CHAT_ID not configured');
     return [];
@@ -147,14 +147,14 @@ export async function sendTelegramAdminMessage(message, options = {}) {
   const results = await Promise.allSettled(
     adminChatIds.map(chatId => sendTelegramMessage(chatId, message, options))
   );
-  
+
   // Log any failures
   results.forEach((result, index) => {
     if (result.status === 'rejected') {
       console.error(`[Telegram] Failed to send message to admin ${adminChatIds[index]}:`, result.reason);
     }
   });
-  
+
   // Return array of successful results
   return results
     .filter(r => r.status === 'fulfilled')
@@ -168,11 +168,11 @@ export async function sendTelegramAdminMessage(message, options = {}) {
  */
 export async function sendLoginLogNotification(logData) {
   const { username, role, loginType, loginSource, timestamp, clientInfo } = logData;
-  
-  const time = new Date(timestamp || Date.now()).toLocaleString('id-ID', { 
+
+  const time = new Date(timestamp || Date.now()).toLocaleString('id-ID', {
     timeZone: DEFAULT_TIMEZONE
   });
-  
+
   let message = `🔑 *Login Dashboard*\n\n`;
   message += `*Username:* ${escapeMarkdown(username)}\n`;
   if (role) message += `*Role:* ${escapeMarkdown(role)}\n`;
@@ -180,7 +180,7 @@ export async function sendLoginLogNotification(logData) {
   message += `*Tipe:* ${escapeMarkdown(loginType)}\n`;
   message += `*Sumber:* ${escapeMarkdown(loginSource)}\n`;
   message += `*Waktu:* ${escapeMarkdown(time)}`;
-  
+
   return sendTelegramAdminMessage(message);
 }
 
@@ -191,7 +191,7 @@ export async function sendLoginLogNotification(logData) {
  */
 export async function sendUserApprovalRequest(userData) {
   const { dashboard_user_id, username, email, role, clientNames } = userData;
-  
+
   let message = `📋 *Permintaan Registrasi Dashboard*\n\n`;
   message += `*User ID:* ${escapeMarkdown(String(dashboard_user_id))}\n`;
   message += `*Username:* ${escapeMarkdown(username)}\n`;
@@ -202,7 +202,7 @@ export async function sendUserApprovalRequest(userData) {
   message += `Gunakan tombol di bawah atau ketik:\n`;
   message += `\`/approvedash ${escapeMarkdown(username)}\` untuk menyetujui\n`;
   message += `\`/denydash ${escapeMarkdown(username)}\` untuk menolak`;
-  
+
   // Add inline keyboard with approve/deny buttons
   const inlineKeyboard = {
     inline_keyboard: [
@@ -212,7 +212,7 @@ export async function sendUserApprovalRequest(userData) {
       ]
     ]
   };
-  
+
   return sendTelegramAdminMessage(message, { reply_markup: inlineKeyboard });
 }
 
@@ -223,9 +223,9 @@ export async function sendUserApprovalRequest(userData) {
  */
 export async function sendUserApprovalConfirmation(userData) {
   const { username } = userData;
-  
+
   const message = `✅ *Registrasi Dashboard Disetujui*\n\n*Username:* ${escapeMarkdown(username)}`;
-  
+
   return sendTelegramAdminMessage(message);
 }
 
@@ -236,9 +236,9 @@ export async function sendUserApprovalConfirmation(userData) {
  */
 export async function sendUserRejectionConfirmation(userData) {
   const { username } = userData;
-  
+
   const message = `❌ *Registrasi Dashboard Ditolak*\n\n*Username:* ${escapeMarkdown(username)}`;
-  
+
   return sendTelegramAdminMessage(message);
 }
 
@@ -280,12 +280,12 @@ async function handlePremiumPendingCommand(msg) {
  */
 export async function sendComplaintNotification(message, options = {}) {
   const { chatId } = options;
-  
+
   if (!chatId) {
     console.warn('[Telegram] No chatId provided for complaint notification');
     return null;
   }
-  
+
   return sendTelegramMessage(chatId, message);
 }
 
@@ -297,20 +297,20 @@ export async function sendComplaintNotification(message, options = {}) {
  */
 export async function sendPasswordResetToken(chatId, resetData) {
   const { username, token, expiryMinutes = 15, resetUrl } = resetData;
-  
+
   const RESET_TOKEN_EXPIRY_MINUTES = expiryMinutes;
   const DEFAULT_RESET_BASE_URL = 'https://papiqo.com';
-  
+
   const configuredBaseUrl = resetUrl || process.env.DASHBOARD_PASSWORD_RESET_URL || process.env.DASHBOARD_URL;
   const resetBaseUrl = configuredBaseUrl || DEFAULT_RESET_BASE_URL;
-  
+
   const baseUrlWithoutTrailingSlash = resetBaseUrl.replace(/\/$/, '');
   const baseResetPath = baseUrlWithoutTrailingSlash.endsWith('/reset-password')
     ? baseUrlWithoutTrailingSlash
     : `${baseUrlWithoutTrailingSlash}/reset-password`;
-  
+
   const url = `${baseResetPath}?token=${token}`;
-  
+
   let message = `🔐 *Reset Password Dashboard*\n\n`;
   message += `Silakan buka tautan berikut untuk mengatur ulang password Anda:\n`;
   message += `${url}\n\n`;
@@ -318,7 +318,7 @@ export async function sendPasswordResetToken(chatId, resetData) {
   message += `*Token:* \`${token}\`\n\n`;
   message += `Token berlaku selama ${RESET_TOKEN_EXPIRY_MINUTES} menit.\n`;
   message += `Base URL: ${escapeMarkdown(baseResetPath)}`;
-  
+
   return sendTelegramMessage(chatId, message);
 }
 
@@ -350,7 +350,7 @@ async function sendUserTelegramNotification(user, message) {
 
   try {
     const sent = await sendTelegramMessage(user.telegram_chat_id, message);
-    
+
     result.userNotified = sent !== null;
     if (!result.userNotified) {
       result.userNotificationError = 'Telegram message send returned null';
@@ -373,7 +373,7 @@ async function sendUserTelegramNotification(user, message) {
  */
 function buildConfirmationMessage(baseMessage, user, userNotified, userNotificationError) {
   let confirmationMessage = baseMessage;
-  
+
   if (user.telegram_chat_id) {
     if (userNotified) {
       confirmationMessage += `\n✅ Notifikasi telah dikirim ke Telegram user`;
@@ -386,7 +386,7 @@ function buildConfirmationMessage(baseMessage, user, userNotified, userNotificat
   } else {
     confirmationMessage += `\n⚠️ User tidak memiliki Telegram chat ID terdaftar`;
   }
-  
+
   return confirmationMessage;
 }
 
@@ -395,47 +395,52 @@ function buildConfirmationMessage(baseMessage, user, userNotified, userNotificat
  * @param {number|string} chatId - Telegram chat ID
  * @param {string} username - Username to approve
  */
-async function processApproval(chatId, username) {
+export async function processApproval(chatId, username) {
   try {
-    const { findByUsername, updateStatus } = await import('../model/dashboardUserModel.js');
+    const { findByUsername, updateApprovalStatus } = await import('../model/dashboardUserModel.js');
     const { sendApprovalEmail } = await import('./emailService.js');
-    
+
     // Find user by username
     const user = await findByUsername(username);
     if (!user) {
       await bot.sendMessage(
-        chatId, 
+        chatId,
         `❌ User dengan username "${escapeMarkdown(username)}" tidak ditemukan.`
       );
       return;
     }
-    
-    // Check if user is already approved (status = true means approved)
-    // Note: status = false means either pending or rejected (no distinction in DB)
-    if (user.status) {
+
+    if (user.approval_status !== 'pending') {
+      const message = user.approval_status === 'approved'
+        ? `✅ User "${escapeMarkdown(username)}" sudah disetujui sebelumnya.`
+        : `❌ User "${escapeMarkdown(username)}" sudah ditolak sebelumnya.`;
+      await bot.sendMessage(chatId, message);
+      return;
+    }
+
+    // Approve user (set status to true and approval_status to approved)
+    const updated = await updateApprovalStatus(user.dashboard_user_id, 'approved', { onlyPending: true });
+    if (!updated) {
       await bot.sendMessage(
-        chatId, 
-        `✅ User "${escapeMarkdown(username)}" sudah disetujui sebelumnya.`
+        chatId,
+        `⚠️ User "${escapeMarkdown(username)}" tidak lagi pending. Silakan cek status terbaru.`
       );
       return;
     }
-    
-    // Approve user (set status to true)
-    await updateStatus(user.dashboard_user_id, true);
-    
+
     // Send notification to user via Telegram if available
     const { userNotified, userNotificationError } = await sendUserTelegramNotification(
       user,
       `✅ Registrasi dashboard Anda telah disetujui.\nUsername: ${escapeMarkdown(user.username)}`
     );
-    
+
     // Send approval email to user if they have email
     if (user.email) {
       sendApprovalEmail(user.email, user.username).catch((err) => {
         console.warn(`[Email] Failed to send approval email to ${user.username}: ${err.message}`);
       });
     }
-    
+
     // Send confirmation to admin via Telegram with notification status
     const confirmationMessage = buildConfirmationMessage(
       `✅ User "${escapeMarkdown(username)}" berhasil disetujui.`,
@@ -443,13 +448,13 @@ async function processApproval(chatId, username) {
       userNotified,
       userNotificationError
     );
-    
+
     await bot.sendMessage(chatId, confirmationMessage);
-    
+
   } catch (err) {
     console.error('[Telegram] Error handling approve command:', err);
     await bot.sendMessage(
-      chatId, 
+      chatId,
       `❌ Terjadi kesalahan: ${escapeMarkdown(err.message)}`
     );
   }
@@ -460,46 +465,45 @@ async function processApproval(chatId, username) {
  * @param {number|string} chatId - Telegram chat ID
  * @param {string} username - Username to reject
  */
-async function processRejection(chatId, username) {
+export async function processRejection(chatId, username) {
   try {
     const { findByUsername } = await import('../model/dashboardUserModel.js');
-    
+
     // Find user by username
     const user = await findByUsername(username);
     if (!user) {
       await bot.sendMessage(
-        chatId, 
+        chatId,
         `❌ User dengan username "${escapeMarkdown(username)}" tidak ditemukan.`
       );
       return;
     }
-    
-    // Check if user is not approved (status = false means either pending or already rejected)
-    if (!user.status) {
-      await bot.sendMessage(
-        chatId, 
-        `✅ User "${escapeMarkdown(username)}" sudah ditolak sebelumnya.`
-      );
+
+    if (user.approval_status !== 'pending') {
+      const message = user.approval_status === 'approved'
+        ? `✅ User "${escapeMarkdown(username)}" sudah disetujui sebelumnya.`
+        : `❌ User "${escapeMarkdown(username)}" sudah ditolak sebelumnya.`;
+      await bot.sendMessage(chatId, message);
       return;
     }
-    
+
     // Show rejection reason selection
     const inlineKeyboard = {
       inline_keyboard: REJECTION_REASONS.map((reason, index) => [
         { text: reason, callback_data: `reject_reason:${username}:${index}` }
       ])
     };
-    
+
     await bot.sendMessage(
       chatId,
       `❌ Pilih alasan penolakan untuk user "${escapeMarkdown(username)}":`,
       { reply_markup: inlineKeyboard }
     );
-    
+
   } catch (err) {
     console.error('[Telegram] Error handling deny command:', err);
     await bot.sendMessage(
-      chatId, 
+      chatId,
       `❌ Terjadi kesalahan: ${escapeMarkdown(err.message)}`
     );
   }
@@ -511,11 +515,11 @@ async function processRejection(chatId, username) {
  * @param {string} username - Username to reject
  * @param {string} reason - Rejection reason text
  */
-async function finalizeRejection(chatId, username, reason) {
+export async function finalizeRejection(chatId, username, reason) {
   try {
-    const { findByUsername, updateStatus } = await import('../model/dashboardUserModel.js');
+    const { findByUsername, updateApprovalStatus } = await import('../model/dashboardUserModel.js');
     const { sendRejectionEmail } = await import('./emailService.js');
-    
+
     const user = await findByUsername(username);
     if (!user) {
       await bot.sendMessage(
@@ -524,31 +528,38 @@ async function finalizeRejection(chatId, username, reason) {
       );
       return;
     }
-    
-    if (!user.status) {
+
+    if (user.approval_status !== 'pending') {
+      const message = user.approval_status === 'approved'
+        ? `✅ User "${escapeMarkdown(username)}" sudah disetujui sebelumnya.`
+        : `❌ User "${escapeMarkdown(username)}" sudah ditolak sebelumnya.`;
+      await bot.sendMessage(chatId, message);
+      return;
+    }
+
+    // Reject user (set status to false and approval_status to rejected)
+    const updated = await updateApprovalStatus(user.dashboard_user_id, 'rejected', { onlyPending: true });
+    if (!updated) {
       await bot.sendMessage(
         chatId,
-        `✅ User "${escapeMarkdown(username)}" sudah ditolak sebelumnya.`
+        `⚠️ User "${escapeMarkdown(username)}" tidak lagi pending. Silakan cek status terbaru.`
       );
       return;
     }
-    
-    // Reject user (set status to false)
-    await updateStatus(user.dashboard_user_id, false);
-    
+
     // Send notification to user via Telegram if available
     const { userNotified, userNotificationError } = await sendUserTelegramNotification(
       user,
       `❌ Registrasi dashboard Anda ditolak.\nUsername: ${escapeMarkdown(user.username)}\nAlasan: ${escapeMarkdown(reason)}`
     );
-    
+
     // Send rejection email to user if they have email
     if (user.email) {
       sendRejectionEmail(user.email, user.username, reason).catch((err) => {
         console.warn(`[Email] Failed to send rejection email to ${user.username}: ${err.message}`);
       });
     }
-    
+
     // Send confirmation to admin via Telegram with notification status
     const confirmationMessage = buildConfirmationMessage(
       `✅ User "${escapeMarkdown(username)}" berhasil ditolak.\nAlasan: ${escapeMarkdown(reason)}`,
@@ -556,9 +567,9 @@ async function finalizeRejection(chatId, username, reason) {
       userNotified,
       userNotificationError
     );
-    
+
     await bot.sendMessage(chatId, confirmationMessage);
-    
+
   } catch (err) {
     console.error('[Telegram] Error finalizing rejection:', err);
     await bot.sendMessage(

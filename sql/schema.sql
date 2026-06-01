@@ -99,6 +99,7 @@ CREATE TABLE dashboard_user (
   password_hash TEXT NOT NULL,
   role_id INT NOT NULL REFERENCES roles(role_id),
   status BOOLEAN DEFAULT TRUE,
+  approval_status TEXT NOT NULL DEFAULT 'pending' CHECK (approval_status IN ('pending', 'approved', 'rejected')),
   whatsapp VARCHAR,
   premium_status BOOLEAN DEFAULT FALSE,
   premium_tier TEXT,
@@ -106,6 +107,8 @@ CREATE TABLE dashboard_user (
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_dashboard_user_approval_status_created_at ON dashboard_user (approval_status, created_at);
 
 CREATE TABLE dashboard_user_clients (
   dashboard_user_id UUID REFERENCES dashboard_user(dashboard_user_id),

@@ -202,6 +202,7 @@ router.post('/dashboard-register', async (req, res) => {
     password_hash,
     role_id,
     status,
+    approval_status: 'pending',
     email,
   });
   if (clientIds.length > 0) {
@@ -245,7 +246,12 @@ router.post('/dashboard-register', async (req, res) => {
 
   return res
     .status(201)
-    .json({ success: true, dashboard_user_id: user.dashboard_user_id, status: user.status });
+    .json({
+      success: true,
+      dashboard_user_id: user.dashboard_user_id,
+      status: user.status,
+      approval_status: user.approval_status
+    });
 });
 
 router.post('/dashboard-login', async (req, res) => {
@@ -267,10 +273,9 @@ router.post('/dashboard-login', async (req, res) => {
       .status(401)
       .json({ success: false, message: 'Login gagal: password salah' });
   }
-  if (!user.status) {
-    return res
-      .status(403)
-      .json({ success: false, message: 'Akun belum disetujui' });
+  if (user.approval_status !== 'approved') {
+    const message = user.approval_status === 'rejected' ? 'Akun ditolak' : 'Akun belum disetujui';
+    return res.status(403).json({ success: false, message });
   }
   if (!user.client_ids || user.client_ids.length === 0) {
     return res
