@@ -1,3 +1,33 @@
+export function parseDashboardCommandText(text, commandName) {
+  if (!text || !commandName) {
+    return null;
+  }
+
+  const escapedCommandName = commandName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const trimmedText = String(text).trim();
+  const slashCommandPattern = new RegExp(
+    `^/${escapedCommandName}(?:\\s+([^\\s#]+)|#([^\\s#]+))?\\s*$`,
+  );
+  const legacyHashPattern = new RegExp(`^${escapedCommandName}#([^\\s#]+)\\s*$`);
+  const slashMatch = trimmedText.match(slashCommandPattern);
+
+  if (slashMatch) {
+    return slashMatch[1] || slashMatch[2] || null;
+  }
+
+  const legacyHashMatch = trimmedText.match(legacyHashPattern);
+
+  if (legacyHashMatch) {
+    return legacyHashMatch[1];
+  }
+
+  return null;
+}
+
+const approveDashFormatMessage =
+  '❌ Format salah. Gunakan: `/approvedash username` atau `approvedash#username`';
+const denyDashFormatMessage = '❌ Format salah. Gunakan: `/denydash username` atau `denydash#username`';
+
 export function createTelegramCommandHandlers({
   getBot,
   isTelegramAdmin,
@@ -44,7 +74,7 @@ export function createTelegramCommandHandlers({
   async function handleApproveDashCommand(msg) {
     const bot = getBot();
     const chatId = msg.chat.id;
-    const username = msg.text.split(' ')[1];
+    const username = parseDashboardCommandText(msg.text, 'approvedash');
 
     if (!isTelegramAdmin(chatId)) {
       await bot.sendMessage(chatId, '❌ Anda tidak memiliki akses ke sistem ini.');
@@ -52,7 +82,7 @@ export function createTelegramCommandHandlers({
     }
 
     if (!username) {
-      await bot.sendMessage(chatId, '❌ Format salah. Gunakan: `/approvedash username`', {
+      await bot.sendMessage(chatId, approveDashFormatMessage, {
         parse_mode: 'Markdown',
       });
       return;
@@ -64,7 +94,7 @@ export function createTelegramCommandHandlers({
   async function handleDenyDashCommand(msg) {
     const bot = getBot();
     const chatId = msg.chat.id;
-    const username = msg.text.split(' ')[1];
+    const username = parseDashboardCommandText(msg.text, 'denydash');
 
     if (!isTelegramAdmin(chatId)) {
       await bot.sendMessage(chatId, '❌ Anda tidak memiliki akses ke sistem ini.');
@@ -72,7 +102,7 @@ export function createTelegramCommandHandlers({
     }
 
     if (!username) {
-      await bot.sendMessage(chatId, '❌ Format salah. Gunakan: `/denydash username`', {
+      await bot.sendMessage(chatId, denyDashFormatMessage, {
         parse_mode: 'Markdown',
       });
       return;
@@ -104,8 +134,14 @@ export function createTelegramCommandHandlers({
     const bot = getBot();
     if (!bot) return;
 
-    bot.onText(/\/approvedash/, handleApproveDashCommand);
-    bot.onText(/\/denydash/, handleDenyDashCommand);
+    bot.onText(
+      /^(?:\/approvedash(?:\s+[^\s#]+|#[^\s#]+)?|approvedash#[^\s#]+)\s*$/,
+      handleApproveDashCommand,
+    );
+    bot.onText(
+      /^(?:\/denydash(?:\s+[^\s#]+|#[^\s#]+)?|denydash#[^\s#]+)\s*$/,
+      handleDenyDashCommand,
+    );
     bot.onText(/\/approvepremium/, handleApprovePremiumCommand);
     bot.onText(/\/denypremium/, handleDenyPremiumCommand);
     bot.onText(/\/premiumpending/, handlePremiumPendingCommand);
