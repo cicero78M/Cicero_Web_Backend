@@ -49,6 +49,34 @@ export function formatCurrencyId(amount) {
   }
 }
 
+export function buildDashboardPendingListMessage(users = []) {
+  if (!users.length) {
+    return '📭 Tidak ada dashboard user pending saat ini.';
+  }
+
+  const lines = users.map((user, index) => {
+    const username = user.username || '-';
+    const createdAt = user.created_at
+      ? new Date(user.created_at).toLocaleString('id-ID', { timeZone: DEFAULT_TIMEZONE })
+      : '-';
+    const clientIds = Array.isArray(user.client_ids)
+      ? user.client_ids.join(', ')
+      : user.client_ids || '-';
+
+    return (
+      `${index + 1}. *${escapeMarkdown(username)}*\n` +
+      `   • Dashboard User ID: \`${escapeMarkdown(user.dashboard_user_id || '-')}\`\n` +
+      `   • Role: ${escapeMarkdown(user.role || '-')}\n` +
+      `   • Client IDs: ${escapeMarkdown(clientIds || '-')}\n` +
+      `   • Dibuat: ${escapeMarkdown(createdAt)}\n` +
+      `   • Action: \`/approvedash ${escapeMarkdown(username)}\` atau ` +
+      `\`/denydash ${escapeMarkdown(username)}\``
+    );
+  });
+
+  return `📋 *Dashboard User Pending*\n\n${lines.join('\n\n')}`;
+}
+
 export function buildPremiumPendingListMessage(requests = []) {
   if (!requests.length) {
     return '📭 Tidak ada premium request pending/confirmed saat ini.';

@@ -71,6 +71,18 @@ export async function findByEmail(email) {
   return findOneBy('email', email);
 }
 
+export async function findPendingDashboardUsers(limit = 20) {
+  const normalizedLimit = Number.parseInt(limit, 10);
+  const safeLimit = Number.isInteger(normalizedLimit) && normalizedLimit > 0 ? normalizedLimit : 20;
+  const queryText = `${BASE_SELECT}
+   WHERE du.status = false
+   ${BASE_GROUP_BY}
+   ORDER BY du.created_at ASC
+   LIMIT $1`;
+  const res = await query(queryText, [safeLimit]);
+  return res.rows;
+}
+
 export async function createUser(data) {
   const res = await query(
     `INSERT INTO dashboard_user (dashboard_user_id, username, password_hash, role_id, status, email)

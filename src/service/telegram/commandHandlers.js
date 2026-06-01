@@ -1,3 +1,8 @@
+import {
+  buildDashboardPendingListMessage as buildDashboardPendingListMessageFormatter,
+  escapeMarkdown,
+} from './formatters.js';
+
 export function parseDashboardCommandText(text, commandName) {
   if (!text || !commandName) {
     return null;
@@ -36,6 +41,8 @@ export function createTelegramCommandHandlers({
   processPremiumApproval,
   processPremiumDenial,
   handlePremiumPendingCommand,
+  findPendingDashboardUsers,
+  buildDashboardPendingListMessage = buildDashboardPendingListMessageFormatter,
 }) {
   async function handleApprovePremiumCommand(msg) {
     const bot = getBot();
@@ -111,6 +118,31 @@ export function createTelegramCommandHandlers({
     await processRejection(chatId, username);
   }
 
+
+  async function handleDashPendingCommand(msg) {
+    const bot = getBot();
+    const chatId = msg.chat.id;
+
+    if (!isTelegramAdmin(chatId)) {
+      await bot.sendMessage(chatId, '❌ Anda tidak memiliki akses ke sistem ini.');
+      return;
+    }
+
+    try {
+      const loadPendingDashboardUsers = findPendingDashboardUsers ||
+        (await import('../../model/dashboardUserModel.js')).findPendingDashboardUsers;
+      const pendingUsers = await loadPendingDashboardUsers(20);
+      await bot.sendMessage(chatId, buildDashboardPendingListMessage(pendingUsers), {
+        parse_mode: 'Markdown',
+      });
+    } catch (err) {
+      await bot.sendMessage(
+        chatId,
+        `❌ Gagal mengambil dashboard user pending: ${escapeMarkdown(err.message)}`,
+      );
+    }
+  }
+
   async function handleStartCommand(msg) {
     const bot = getBot();
     const chatId = msg.chat.id;
@@ -123,7 +155,8 @@ export function createTelegramCommandHandlers({
           '/denydash <username> - Tolak registrasi user\n' +
           '/approvepremium <request_token> - Setujui premium request\n' +
           '/denypremium <request_token> - Tolak premium request\n' +
-          '/premiumpending - Lihat daftar premium pending',
+          '/premiumpending - Lihat daftar premium pending\n' +
+          '/dashpending atau /pendingdash - Lihat dashboard user pending',
       );
     } else {
       await bot.sendMessage(chatId, '❌ Anda tidak memiliki akses ke sistem ini.');
@@ -145,6 +178,7 @@ export function createTelegramCommandHandlers({
     bot.onText(/\/approvepremium/, handleApprovePremiumCommand);
     bot.onText(/\/denypremium/, handleDenyPremiumCommand);
     bot.onText(/\/premiumpending/, handlePremiumPendingCommand);
+    bot.onText(/^\/(?:dashpending|pendingdash)\b/, handleDashPendingCommand);
     bot.onText(/\/start/, handleStartCommand);
 
     console.log('[Telegram] Command handlers registered');
@@ -155,6 +189,7 @@ export function createTelegramCommandHandlers({
     handleDenyPremiumCommand,
     handleApproveDashCommand,
     handleDenyDashCommand,
+    handleDashPendingCommand,
     handleStartCommand,
     setupCommandHandlers,
   };
