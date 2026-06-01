@@ -3,17 +3,25 @@ import {
   escapeMarkdown,
 } from './formatters.js';
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function getSlashCommandPattern(commandName) {
+  const escapedCommandName = escapeRegExp(commandName);
+  return `/${escapedCommandName}(?:@[A-Za-z0-9_]+)?`;
+}
+
 export function parseDashboardCommandText(text, commandName) {
   if (!text || !commandName) {
     return null;
   }
 
-  const escapedCommandName = commandName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const trimmedText = String(text).trim();
   const slashCommandPattern = new RegExp(
-    `^/${escapedCommandName}(?:\\s+([^\\s#]+)|#([^\\s#]+))?\\s*$`,
+    `^${getSlashCommandPattern(commandName)}(?:\\s+([^\\s#]+)|#([^\\s#]+))?\\s*$`,
   );
-  const legacyHashPattern = new RegExp(`^${escapedCommandName}#([^\\s#]+)\\s*$`);
+  const legacyHashPattern = new RegExp(`^${escapeRegExp(commandName)}#([^\\s#]+)\\s*$`);
   const slashMatch = trimmedText.match(slashCommandPattern);
 
   if (slashMatch) {
@@ -168,11 +176,11 @@ export function createTelegramCommandHandlers({
     if (!bot) return;
 
     bot.onText(
-      /^(?:\/approvedash(?:\s+[^\s#]+|#[^\s#]+)?|approvedash#[^\s#]+)\s*$/,
+      new RegExp(`^(?:${getSlashCommandPattern('approvedash')}(?:\\s+[^\\s#]+|#[^\\s#]+)?|approvedash#[^\\s#]+)\\s*$`),
       handleApproveDashCommand,
     );
     bot.onText(
-      /^(?:\/denydash(?:\s+[^\s#]+|#[^\s#]+)?|denydash#[^\s#]+)\s*$/,
+      new RegExp(`^(?:${getSlashCommandPattern('denydash')}(?:\\s+[^\\s#]+|#[^\\s#]+)?|denydash#[^\\s#]+)\\s*$`),
       handleDenyDashCommand,
     );
     bot.onText(/\/approvepremium/, handleApprovePremiumCommand);
