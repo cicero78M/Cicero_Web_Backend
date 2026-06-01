@@ -5,10 +5,24 @@ const BASE_SELECT = `SELECT du.*, r.role_name AS role, COALESCE(array_agg(duc.cl
    LEFT JOIN roles r ON du.role_id = r.role_id
    LEFT JOIN dashboard_user_clients duc ON du.dashboard_user_id = duc.dashboard_user_id`;
 
+const LEGACY_CLIENTS_BASE_SELECT = `SELECT du.*, r.role_name AS role, ARRAY[]::VARCHAR[] AS client_ids
+   FROM dashboard_user du
+   LEFT JOIN roles r ON du.role_id = r.role_id`;
+
 const BASE_GROUP_BY = 'GROUP BY du.dashboard_user_id, r.role_name';
 
 function isUndefinedApprovalStatusColumnError(err) {
   return err?.code === '42703' && /approval_status/i.test(err.message || '');
+}
+
+function isUndefinedDashboardUserClientIdColumnError(err) {
+  return err?.code === '42703' && /client_id/i.test(err.message || '');
+}
+
+function logMissingClientIdFallback() {
+  console.warn(
+    '[DashboardUserModel] dashboard_user_clients.client_id is missing; returning dashboard users without client_ids until the schema repair migration is applied.'
+  );
 }
 
 function withApprovalStatusFallback(user, approvalStatus) {
@@ -42,8 +56,10 @@ async function runDashboardUserQuery({
   params,
   sessionSettings,
   expectMany = false,
+  baseSelect = BASE_SELECT,
+  allowClientIdFallback = true,
 }) {
-  const queryText = `${BASE_SELECT} WHERE ${whereClause} ${BASE_GROUP_BY}`;
+  const queryText = `${baseSelect} WHERE ${whereClause} ${BASE_GROUP_BY}`;
 
   const executor = sessionSettings
     ? () =>
@@ -52,8 +68,23 @@ async function runDashboardUserQuery({
         })
     : () => query(queryText, params);
 
-  const res = await executor();
-  return expectMany ? res.rows : res.rows[0] || null;
+  try {
+    const res = await executor();
+    return expectMany ? res.rows : res.rows[0] || null;
+  } catch (err) {
+    if (allowClientIdFallback && isUndefinedDashboardUserClientIdColumnError(err)) {
+      logMissingClientIdFallback();
+      return runDashboardUserQuery({
+        whereClause,
+        params,
+        sessionSettings,
+        expectMany,
+        baseSelect: LEGACY_CLIENTS_BASE_SELECT,
+        allowClientIdFallback: false,
+      });
+    }
+    throw err;
+  }
 }
 
 async function findOneBy(field, value, { sessionSettings } = {}) {
@@ -114,40 +145,62 @@ export async function findByEmail(email) {
   return findOneBy('email', email);
 }
 
-export async function findPendingDashboardUsers(limit = 20) {
-  const normalizedLimit = Number.parseInt(limit, 10);
-  const safeLimit =
-    Number.isInteger(normalizedLimit) && normalizedLimit > 0
-      ? normalizedLimit
-      : 20;
-  const queryText = `${BASE_SELECT}
-   WHERE du.approval_status = 'pending'
-     AND du.status IS NOT TRUE
+async function queryPendingDashboardUsers({
+  safeLimit,
+  baseSelect = BASE_SELECT,
+  useApprovalStatus = true,
+  allowClientIdFallback = true,
+}) {
+  const whereClause = useApprovalStatus
+    ? `du.approval_status = 'pending'
+     AND du.status IS NOT TRUE`
+    : 'du.status IS NOT TRUE';
+  const queryText = `${baseSelect}
+   WHERE ${whereClause}
    ${BASE_GROUP_BY}
    ORDER BY du.created_at ASC
    LIMIT $1`;
 
   try {
     const res = await query(queryText, [safeLimit]);
-    return res.rows;
+    return useApprovalStatus
+      ? res.rows
+      : res.rows.map((row) => withApprovalStatusFallback(row, 'pending'));
   } catch (err) {
-    if (!isUndefinedApprovalStatusColumnError(err)) {
-      throw err;
+    if (allowClientIdFallback && isUndefinedDashboardUserClientIdColumnError(err)) {
+      logMissingClientIdFallback();
+      return queryPendingDashboardUsers({
+        safeLimit,
+        baseSelect: LEGACY_CLIENTS_BASE_SELECT,
+        useApprovalStatus,
+        allowClientIdFallback: false,
+      });
     }
 
-    console.warn(
-      '[DashboardUserModel] dashboard_user.approval_status is missing; falling back to legacy status filter for pending dashboard users.'
-    );
-    const fallbackQueryText = `${BASE_SELECT}
-     WHERE du.status IS NOT TRUE
-     ${BASE_GROUP_BY}
-     ORDER BY du.created_at ASC
-     LIMIT $1`;
-    const fallbackRes = await query(fallbackQueryText, [safeLimit]);
-    return fallbackRes.rows.map((row) =>
-      withApprovalStatusFallback(row, 'pending')
-    );
+    if (useApprovalStatus && isUndefinedApprovalStatusColumnError(err)) {
+      console.warn(
+        '[DashboardUserModel] dashboard_user.approval_status is missing; falling back to legacy status filter for pending dashboard users.'
+      );
+      return queryPendingDashboardUsers({
+        safeLimit,
+        baseSelect,
+        useApprovalStatus: false,
+        allowClientIdFallback,
+      });
+    }
+
+    throw err;
   }
+}
+
+export async function findPendingDashboardUsers(limit = 20) {
+  const normalizedLimit = Number.parseInt(limit, 10);
+  const safeLimit =
+    Number.isInteger(normalizedLimit) && normalizedLimit > 0
+      ? normalizedLimit
+      : 20;
+
+  return queryPendingDashboardUsers({ safeLimit });
 }
 
 export async function createUser(data) {

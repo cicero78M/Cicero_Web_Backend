@@ -224,3 +224,56 @@ test('updateApprovalStatus falls back to legacy status update when approval_stat
   expect(mockQuery.mock.calls[1][0]).not.toContain('approval_status');
   warnSpy.mockRestore();
 });
+
+test('findByUsername falls back without client_ids when dashboard_user_clients.client_id is missing', async () => {
+  const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  mockQuery
+    .mockRejectedValueOnce({
+      code: '42703',
+      message: 'column duc.client_id does not exist',
+    })
+    .mockResolvedValueOnce({
+      rows: [{ dashboard_user_id: 'dash-1', username: 'pending_user', client_ids: [] }],
+    });
+
+  const user = await dashboardUserModel.findByUsername('pending_user');
+
+  expect(user).toEqual({
+    dashboard_user_id: 'dash-1',
+    username: 'pending_user',
+    client_ids: [],
+  });
+  expect(mockQuery).toHaveBeenNthCalledWith(
+    2,
+    expect.stringContaining('ARRAY[]::VARCHAR[] AS client_ids'),
+    ['pending_user']
+  );
+  expect(mockQuery.mock.calls[1][0]).not.toContain('dashboard_user_clients duc');
+  warnSpy.mockRestore();
+});
+
+test('findPendingDashboardUsers falls back without client_ids when dashboard_user_clients.client_id is missing', async () => {
+  const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  mockQuery
+    .mockRejectedValueOnce({
+      code: '42703',
+      message: 'column duc.client_id does not exist',
+    })
+    .mockResolvedValueOnce({
+      rows: [{ username: 'pending_user', status: false, approval_status: 'pending', client_ids: [] }],
+    });
+
+  const rows = await dashboardUserModel.findPendingDashboardUsers(10);
+
+  expect(rows).toEqual([
+    { username: 'pending_user', status: false, approval_status: 'pending', client_ids: [] },
+  ]);
+  expect(mockQuery).toHaveBeenNthCalledWith(
+    2,
+    expect.stringContaining('ARRAY[]::VARCHAR[] AS client_ids'),
+    [10]
+  );
+  expect(mockQuery.mock.calls[1][0]).toContain("du.approval_status = 'pending'");
+  expect(mockQuery.mock.calls[1][0]).not.toContain('dashboard_user_clients duc');
+  warnSpy.mockRestore();
+});
