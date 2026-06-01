@@ -260,7 +260,8 @@ describe('POST /penmas-login', () => {
           username: 'dash',
           password_hash: await bcrypt.hash('pass', 10),
           role: 'admin',
-          status: false
+          status: false,
+          approval_status: 'pending'
         }
       ]
     });
@@ -316,7 +317,7 @@ describe('POST /dashboard-register', () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ role_id: 1, role_name: 'operator' }] })
-      .mockResolvedValueOnce({ rows: [{ dashboard_user_id: 'd1', status: false }] })
+      .mockResolvedValueOnce({ rows: [{ dashboard_user_id: 'd1', status: false, approval_status: 'pending' }] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ client_id: 'c1', nama: 'Client 1' }] });
 
@@ -327,6 +328,7 @@ describe('POST /dashboard-register', () => {
     expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
       expect(res.body.status).toBe(false);
+      expect(res.body.approval_status).toBe('pending');
       expect(res.body.dashboard_user_id).toBeDefined();
       expect(mockQuery).toHaveBeenNthCalledWith(
         1,
@@ -337,7 +339,7 @@ describe('POST /dashboard-register', () => {
       expect(mockQuery).toHaveBeenNthCalledWith(
         3,
         expect.stringContaining('INSERT INTO dashboard_user'),
-        [expect.any(String), 'dash', expect.any(String), 1, false, 'dash@example.com']
+        [expect.any(String), 'dash', expect.any(String), 1, false, 'pending', 'dash@example.com']
       );
       expect(mockQuery).toHaveBeenNthCalledWith(
         4,
@@ -350,7 +352,7 @@ describe('POST /dashboard-register', () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ role_id: 1, role_name: 'operator' }] })
-      .mockResolvedValueOnce({ rows: [{ dashboard_user_id: 'd1', status: false }] })
+      .mockResolvedValueOnce({ rows: [{ dashboard_user_id: 'd1', status: false, approval_status: 'pending' }] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] });
 
@@ -371,7 +373,7 @@ describe('POST /dashboard-register', () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ role_id: 5, role_name: 'ditbinmas' }] })
-      .mockResolvedValueOnce({ rows: [{ dashboard_user_id: 'd1', status: false }] });
+      .mockResolvedValueOnce({ rows: [{ dashboard_user_id: 'd1', status: false, approval_status: 'pending' }] });
 
     const res = await request(app)
       .post('/api/auth/dashboard-register')
@@ -389,7 +391,7 @@ describe('POST /dashboard-register', () => {
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ role_id: 2, role_name: 'operator' }] })
-      .mockResolvedValueOnce({ rows: [{ dashboard_user_id: 'd1', status: false }] })
+      .mockResolvedValueOnce({ rows: [{ dashboard_user_id: 'd1', status: false, approval_status: 'pending' }] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [] });
 
@@ -467,6 +469,58 @@ describe('POST /dashboard-register', () => {
 });
 
 describe('POST /dashboard-login', () => {
+  test('returns 403 when approval status pending', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          dashboard_user_id: 'd1',
+          username: 'dash',
+          password_hash: await bcrypt.hash('pass', 10),
+          role: 'admin',
+          role_id: 2,
+          status: false,
+          approval_status: 'pending',
+          client_ids: ['c1']
+        }
+      ]
+    });
+
+    const res = await request(app)
+      .post('/api/auth/dashboard-login')
+      .send({ username: 'dash', password: 'pass' });
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ success: false, message: 'Akun belum disetujui' });
+    expect(mockRedis.sAdd).not.toHaveBeenCalled();
+    expect(mockRedis.set).not.toHaveBeenCalled();
+  });
+
+  test('returns 403 when approval status rejected', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          dashboard_user_id: 'd1',
+          username: 'dash',
+          password_hash: await bcrypt.hash('pass', 10),
+          role: 'admin',
+          role_id: 2,
+          status: false,
+          approval_status: 'rejected',
+          client_ids: ['c1']
+        }
+      ]
+    });
+
+    const res = await request(app)
+      .post('/api/auth/dashboard-login')
+      .send({ username: 'dash', password: 'pass' });
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ success: false, message: 'Akun ditolak' });
+    expect(mockRedis.sAdd).not.toHaveBeenCalled();
+    expect(mockRedis.set).not.toHaveBeenCalled();
+  });
+
   test('logs in dashboard user with correct password', async () => {
     mockQuery
       .mockResolvedValueOnce({
@@ -478,6 +532,7 @@ describe('POST /dashboard-login', () => {
             role: 'admin',
             role_id: 2,
             status: true,
+            approval_status: 'approved',
             client_ids: ['c1']
           }
         ]
@@ -527,6 +582,7 @@ describe('POST /dashboard-login', () => {
             role: 'admin',
             role_id: 2,
             status: true,
+            approval_status: 'approved',
             client_ids: ['DIT1']
           }
         ]
@@ -566,6 +622,7 @@ describe('POST /dashboard-login', () => {
             role: 'admin',
             role_id: 2,
             status: true,
+            approval_status: 'approved',
             client_ids: ['c1']
           }
         ]
@@ -596,6 +653,7 @@ describe('POST /dashboard-login', () => {
             role: 'BIDHUMAS',
             role_id: 2,
             status: true,
+            approval_status: 'approved',
             client_ids: ['DITSAMAPTA']
           }
         ]
@@ -634,6 +692,7 @@ describe('POST /dashboard-login', () => {
             role: 'bidhumas',
             role_id: 4,
             status: true,
+            approval_status: 'approved',
             client_ids: ['ditsamapta']
           }
         ]
@@ -661,6 +720,7 @@ describe('POST /dashboard-login', () => {
               role: 'admin',
               role_id: 2,
               status: true,
+              approval_status: 'approved',
               client_ids: []
             }
         ]
@@ -687,6 +747,7 @@ describe('POST /dashboard-login', () => {
               role: 'admin',
               role_id: 2,
               status: true,
+              approval_status: 'approved',
               client_ids: ['c1']
             }
         ]

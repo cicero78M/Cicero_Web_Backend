@@ -17,7 +17,7 @@ export async function approveDashboardUser(req, res, next) {
     if (!usr) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
-    const updated = await dashboardUserModel.updateStatus(id, true);
+    const updated = await dashboardUserModel.updateApprovalStatus(id, 'approved');
     
     // Send Telegram notification to admin
     sendUserApprovalConfirmation(usr).catch((err) => {
@@ -62,7 +62,7 @@ export async function rejectDashboardUser(req, res, next) {
     if (!usr) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
-    const updated = await dashboardUserModel.updateStatus(id, false);
+    const updated = await dashboardUserModel.updateApprovalStatus(id, 'rejected');
     
     // Send Telegram notification to admin
     sendUserRejectionConfirmation(usr).catch((err) => {

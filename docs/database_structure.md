@@ -112,7 +112,8 @@ Credentials for the web dashboard login.
 - `username` – unique login name
 - `password_hash` – bcrypt hashed password
 - `role_id` – foreign key referencing `roles(role_id)`
-- `status` – boolean indicating whether the account is active
+- `status` – boolean legacy active flag retained for compatibility (`true` only when approved)
+- `approval_status` – textual approval state: `pending`, `approved`, or `rejected`
 - `whatsapp` – digits-only contact number normalized to the `62` prefix (min 8 digits, no `@c.us` suffix stored)
 - `created_at`, `updated_at` – timestamps
 - legacy `user_id` references have been removed; `dashboard_user_id` is the sole

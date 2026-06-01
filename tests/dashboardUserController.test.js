@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 
 const mockFindById = jest.fn();
-const mockUpdateStatus = jest.fn();
+const mockUpdateApprovalStatus = jest.fn();
 const mockSendTelegramMessage = jest.fn();
 const mockSendUserApprovalConfirmation = jest.fn();
 const mockSendUserRejectionConfirmation = jest.fn();
@@ -10,7 +10,7 @@ const mockSendRejectionEmail = jest.fn();
 
 jest.unstable_mockModule('../src/model/dashboardUserModel.js', () => ({
   findById: mockFindById,
-  updateStatus: mockUpdateStatus
+  updateApprovalStatus: mockUpdateApprovalStatus
 }));
 
 jest.unstable_mockModule('../src/service/telegramService.js', () => ({
@@ -32,7 +32,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   mockFindById.mockReset();
-  mockUpdateStatus.mockReset();
+  mockUpdateApprovalStatus.mockReset();
   mockSendTelegramMessage.mockReset();
   mockSendUserApprovalConfirmation.mockReset();
   mockSendUserRejectionConfirmation.mockReset();
@@ -42,7 +42,7 @@ beforeEach(() => {
 
 test('approveDashboardUser sends approval message', async () => {
   mockFindById.mockResolvedValue({ dashboard_user_id: '1', username: 'user', telegram_chat_id: '123456' });
-  mockUpdateStatus.mockResolvedValue({ dashboard_user_id: '1', status: true });
+  mockUpdateApprovalStatus.mockResolvedValue({ dashboard_user_id: '1', status: true, approval_status: 'approved' });
   mockSendTelegramMessage.mockResolvedValue({ ok: true });
   mockSendUserApprovalConfirmation.mockResolvedValue({ ok: true });
 
@@ -52,18 +52,18 @@ test('approveDashboardUser sends approval message', async () => {
 
   await controller.approveDashboardUser(req, res, next);
 
-  expect(mockUpdateStatus).toHaveBeenCalledWith('1', true);
+  expect(mockUpdateApprovalStatus).toHaveBeenCalledWith('1', 'approved');
   expect(mockSendTelegramMessage).toHaveBeenCalledWith(
     '123456',
     expect.stringContaining('disetujui')
   );
   expect(res.status).toHaveBeenCalledWith(200);
-  expect(res.json).toHaveBeenCalledWith({ success: true, data: { dashboard_user_id: '1', status: true } });
+  expect(res.json).toHaveBeenCalledWith({ success: true, data: { dashboard_user_id: '1', status: true, approval_status: 'approved' } });
 });
 
 test('approveDashboardUser sends approval email when email present', async () => {
   mockFindById.mockResolvedValue({ dashboard_user_id: '1', username: 'user', email: 'user@example.com' });
-  mockUpdateStatus.mockResolvedValue({ dashboard_user_id: '1', status: true });
+  mockUpdateApprovalStatus.mockResolvedValue({ dashboard_user_id: '1', status: true, approval_status: 'approved' });
   mockSendUserApprovalConfirmation.mockResolvedValue({ ok: true });
   mockSendApprovalEmail.mockResolvedValue();
 
@@ -76,14 +76,14 @@ test('approveDashboardUser sends approval email when email present', async () =>
   // Give the fire-and-forget promise time to resolve
   await new Promise(r => setTimeout(r, 10));
 
-  expect(mockUpdateStatus).toHaveBeenCalledWith('1', true);
+  expect(mockUpdateApprovalStatus).toHaveBeenCalledWith('1', 'approved');
   expect(mockSendApprovalEmail).toHaveBeenCalledWith('user@example.com', 'user');
   expect(res.status).toHaveBeenCalledWith(200);
 });
 
 test('rejectDashboardUser sends rejection message', async () => {
   mockFindById.mockResolvedValue({ dashboard_user_id: '1', username: 'user', telegram_chat_id: '123456' });
-  mockUpdateStatus.mockResolvedValue({ dashboard_user_id: '1', status: false });
+  mockUpdateApprovalStatus.mockResolvedValue({ dashboard_user_id: '1', status: false, approval_status: 'rejected' });
   mockSendTelegramMessage.mockResolvedValue({ ok: true });
   mockSendUserRejectionConfirmation.mockResolvedValue({ ok: true });
 
@@ -93,18 +93,18 @@ test('rejectDashboardUser sends rejection message', async () => {
 
   await controller.rejectDashboardUser(req, res, next);
 
-  expect(mockUpdateStatus).toHaveBeenCalledWith('1', false);
+  expect(mockUpdateApprovalStatus).toHaveBeenCalledWith('1', 'rejected');
   expect(mockSendTelegramMessage).toHaveBeenCalledWith(
     '123456',
     expect.stringContaining('ditolak')
   );
   expect(res.status).toHaveBeenCalledWith(200);
-  expect(res.json).toHaveBeenCalledWith({ success: true, data: { dashboard_user_id: '1', status: false } });
+  expect(res.json).toHaveBeenCalledWith({ success: true, data: { dashboard_user_id: '1', status: false, approval_status: 'rejected' } });
 });
 
 test('rejectDashboardUser sends rejection email with reason when email present', async () => {
   mockFindById.mockResolvedValue({ dashboard_user_id: '1', username: 'user', email: 'user@example.com' });
-  mockUpdateStatus.mockResolvedValue({ dashboard_user_id: '1', status: false });
+  mockUpdateApprovalStatus.mockResolvedValue({ dashboard_user_id: '1', status: false, approval_status: 'rejected' });
   mockSendUserRejectionConfirmation.mockResolvedValue({ ok: true });
   mockSendRejectionEmail.mockResolvedValue();
 
@@ -121,7 +121,7 @@ test('rejectDashboardUser sends rejection email with reason when email present',
   // Give the fire-and-forget promise time to resolve
   await new Promise(r => setTimeout(r, 10));
 
-  expect(mockUpdateStatus).toHaveBeenCalledWith('1', false);
+  expect(mockUpdateApprovalStatus).toHaveBeenCalledWith('1', 'rejected');
   expect(mockSendRejectionEmail).toHaveBeenCalledWith('user@example.com', 'user', 'Role tidak sesuai');
   expect(res.status).toHaveBeenCalledWith(200);
 });

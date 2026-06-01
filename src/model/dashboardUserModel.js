@@ -75,7 +75,7 @@ export async function findPendingDashboardUsers(limit = 20) {
   const normalizedLimit = Number.parseInt(limit, 10);
   const safeLimit = Number.isInteger(normalizedLimit) && normalizedLimit > 0 ? normalizedLimit : 20;
   const queryText = `${BASE_SELECT}
-   WHERE du.status = false
+   WHERE du.approval_status = 'pending'
    ${BASE_GROUP_BY}
    ORDER BY du.created_at ASC
    LIMIT $1`;
@@ -85,8 +85,8 @@ export async function findPendingDashboardUsers(limit = 20) {
 
 export async function createUser(data) {
   const res = await query(
-    `INSERT INTO dashboard_user (dashboard_user_id, username, password_hash, role_id, status, email)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO dashboard_user (dashboard_user_id, username, password_hash, role_id, status, approval_status, email)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING *`,
     [
       data.dashboard_user_id,
@@ -94,6 +94,7 @@ export async function createUser(data) {
       data.password_hash,
       data.role_id,
       data.status,
+      data.approval_status || 'pending',
       data.email,
     ],
   );
@@ -119,12 +120,30 @@ export async function findByIdWithSessionSettings(id, sessionSettings = {}) {
   return findOneBy('dashboard_user_id', id, { sessionSettings });
 }
 
-export async function updateStatus(id, status) {
+const approvalStatusValues = new Set(['pending', 'approved', 'rejected']);
+
+function statusForApprovalStatus(approvalStatus) {
+  return approvalStatus === 'approved';
+}
+
+export async function updateApprovalStatus(id, approvalStatus, { onlyPending = false } = {}) {
+  if (!approvalStatusValues.has(approvalStatus)) {
+    throw new Error('approval_status must be pending, approved, or rejected');
+  }
+
+  const pendingClause = onlyPending ? " AND approval_status = 'pending'" : '';
   const res = await query(
-    'UPDATE dashboard_user SET status=$2, updated_at=NOW() WHERE dashboard_user_id=$1 RETURNING *',
-    [id, status],
+    `UPDATE dashboard_user
+     SET status=$2, approval_status=$3, updated_at=NOW()
+     WHERE dashboard_user_id=$1${pendingClause}
+     RETURNING *`,
+    [id, statusForApprovalStatus(approvalStatus), approvalStatus],
   );
-  return res.rows[0];
+  return res.rows[0] || null;
+}
+
+export async function updateStatus(id, status) {
+  return updateApprovalStatus(id, status ? 'approved' : 'rejected');
 }
 
 export async function updatePasswordHash(dashboardUserId, passwordHash) {
