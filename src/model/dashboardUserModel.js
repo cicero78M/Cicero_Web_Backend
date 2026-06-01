@@ -1,12 +1,19 @@
 import { query, withTransaction } from '../repository/db.js';
 
-const BASE_SELECT =
-  `SELECT du.*, r.role_name AS role, COALESCE(array_agg(duc.client_id) FILTER (WHERE duc.client_id IS NOT NULL), '{}') AS client_ids
+const BASE_SELECT = `SELECT du.*, r.role_name AS role, COALESCE(array_agg(duc.client_id) FILTER (WHERE duc.client_id IS NOT NULL), '{}') AS client_ids
    FROM dashboard_user du
    LEFT JOIN roles r ON du.role_id = r.role_id
    LEFT JOIN dashboard_user_clients duc ON du.dashboard_user_id = duc.dashboard_user_id`;
 
 const BASE_GROUP_BY = 'GROUP BY du.dashboard_user_id, r.role_name';
+
+function isUndefinedApprovalStatusColumnError(err) {
+  return err?.code === '42703' && /approval_status/i.test(err.message || '');
+}
+
+function withApprovalStatusFallback(user, approvalStatus) {
+  return user ? { ...user, approval_status: approvalStatus } : null;
+}
 
 export function getEffectiveApprovalStatus(user) {
   if (!user) {
@@ -30,11 +37,19 @@ function normalizeDashboardUserId(value) {
   return trimmed || null;
 }
 
-async function runDashboardUserQuery({ whereClause, params, sessionSettings, expectMany = false }) {
+async function runDashboardUserQuery({
+  whereClause,
+  params,
+  sessionSettings,
+  expectMany = false,
+}) {
   const queryText = `${BASE_SELECT} WHERE ${whereClause} ${BASE_GROUP_BY}`;
 
   const executor = sessionSettings
-    ? () => withTransaction(client => client.query(queryText, params), { sessionSettings })
+    ? () =>
+        withTransaction((client) => client.query(queryText, params), {
+          sessionSettings,
+        })
     : () => query(queryText, params);
 
   const res = await executor();
@@ -55,9 +70,15 @@ async function findOneBy(field, value, { sessionSettings } = {}) {
   }
 
   const whereClause =
-    field === 'username' ? 'LOWER(du.username) = LOWER($1)' : `du.${field} = $1`;
+    field === 'username'
+      ? 'LOWER(du.username) = LOWER($1)'
+      : `du.${field} = $1`;
 
-  return runDashboardUserQuery({ whereClause, params: [value], sessionSettings });
+  return runDashboardUserQuery({
+    whereClause,
+    params: [value],
+    sessionSettings,
+  });
 }
 
 export async function findByUsername(username) {
@@ -78,9 +99,15 @@ export async function findAllByNormalizedWhatsApp(whatsapp) {
     return [];
   }
   const normalized = String(whatsapp).replace(/\D/g, '');
-  const candidates = Array.from(new Set([whatsapp, normalized].filter(Boolean)));
+  const candidates = Array.from(
+    new Set([whatsapp, normalized].filter(Boolean))
+  );
   const whereClause = 'du.whatsapp = ANY($1)';
-  return runDashboardUserQuery({ whereClause, params: [candidates], expectMany: true });
+  return runDashboardUserQuery({
+    whereClause,
+    params: [candidates],
+    expectMany: true,
+  });
 }
 
 export async function findByEmail(email) {
@@ -89,33 +116,82 @@ export async function findByEmail(email) {
 
 export async function findPendingDashboardUsers(limit = 20) {
   const normalizedLimit = Number.parseInt(limit, 10);
-  const safeLimit = Number.isInteger(normalizedLimit) && normalizedLimit > 0 ? normalizedLimit : 20;
+  const safeLimit =
+    Number.isInteger(normalizedLimit) && normalizedLimit > 0
+      ? normalizedLimit
+      : 20;
   const queryText = `${BASE_SELECT}
    WHERE du.approval_status = 'pending'
      AND du.status IS NOT TRUE
    ${BASE_GROUP_BY}
    ORDER BY du.created_at ASC
    LIMIT $1`;
-  const res = await query(queryText, [safeLimit]);
-  return res.rows;
+
+  try {
+    const res = await query(queryText, [safeLimit]);
+    return res.rows;
+  } catch (err) {
+    if (!isUndefinedApprovalStatusColumnError(err)) {
+      throw err;
+    }
+
+    console.warn(
+      '[DashboardUserModel] dashboard_user.approval_status is missing; falling back to legacy status filter for pending dashboard users.'
+    );
+    const fallbackQueryText = `${BASE_SELECT}
+     WHERE du.status IS NOT TRUE
+     ${BASE_GROUP_BY}
+     ORDER BY du.created_at ASC
+     LIMIT $1`;
+    const fallbackRes = await query(fallbackQueryText, [safeLimit]);
+    return fallbackRes.rows.map((row) =>
+      withApprovalStatusFallback(row, 'pending')
+    );
+  }
 }
 
 export async function createUser(data) {
-  const res = await query(
-    `INSERT INTO dashboard_user (dashboard_user_id, username, password_hash, role_id, status, approval_status, email)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
-     RETURNING *`,
-    [
-      data.dashboard_user_id,
-      data.username,
-      data.password_hash,
-      data.role_id,
-      data.status,
-      data.approval_status || 'pending',
-      data.email,
-    ],
-  );
-  return res.rows[0];
+  const approvalStatus = data.approval_status || 'pending';
+
+  try {
+    const res = await query(
+      `INSERT INTO dashboard_user (dashboard_user_id, username, password_hash, role_id, status, approval_status, email)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [
+        data.dashboard_user_id,
+        data.username,
+        data.password_hash,
+        data.role_id,
+        data.status,
+        approvalStatus,
+        data.email,
+      ]
+    );
+    return res.rows[0];
+  } catch (err) {
+    if (!isUndefinedApprovalStatusColumnError(err)) {
+      throw err;
+    }
+
+    console.warn(
+      '[DashboardUserModel] dashboard_user.approval_status is missing; creating dashboard user with legacy status column only.'
+    );
+    const fallbackRes = await query(
+      `INSERT INTO dashboard_user (dashboard_user_id, username, password_hash, role_id, status, email)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [
+        data.dashboard_user_id,
+        data.username,
+        data.password_hash,
+        data.role_id,
+        data.status,
+        data.email,
+      ]
+    );
+    return withApprovalStatusFallback(fallbackRes.rows[0], approvalStatus);
+  }
 }
 
 export async function addClients(dashboardUserId, clientIds = []) {
@@ -125,7 +201,7 @@ export async function addClients(dashboardUserId, clientIds = []) {
   const placeholders = clientIds.map((_, i) => `($1, $${i + 2})`).join(', ');
   await query(
     `INSERT INTO dashboard_user_clients (dashboard_user_id, client_id) VALUES ${placeholders} ON CONFLICT DO NOTHING`,
-    [dashboardUserId, ...clientIds],
+    [dashboardUserId, ...clientIds]
   );
 }
 
@@ -143,20 +219,46 @@ function statusForApprovalStatus(approvalStatus) {
   return approvalStatus === 'approved';
 }
 
-export async function updateApprovalStatus(id, approvalStatus, { onlyPending = false } = {}) {
+export async function updateApprovalStatus(
+  id,
+  approvalStatus,
+  { onlyPending = false } = {}
+) {
   if (!approvalStatusValues.has(approvalStatus)) {
     throw new Error('approval_status must be pending, approved, or rejected');
   }
 
-  const pendingClause = onlyPending ? " AND approval_status = 'pending' AND status IS NOT TRUE" : '';
-  const res = await query(
-    `UPDATE dashboard_user
-     SET status=$2, approval_status=$3, updated_at=NOW()
-     WHERE dashboard_user_id=$1${pendingClause}
-     RETURNING *`,
-    [id, statusForApprovalStatus(approvalStatus), approvalStatus],
-  );
-  return res.rows[0] || null;
+  const pendingClause = onlyPending
+    ? " AND approval_status = 'pending' AND status IS NOT TRUE"
+    : '';
+
+  try {
+    const res = await query(
+      `UPDATE dashboard_user
+       SET status=$2, approval_status=$3, updated_at=NOW()
+       WHERE dashboard_user_id=$1${pendingClause}
+       RETURNING *`,
+      [id, statusForApprovalStatus(approvalStatus), approvalStatus]
+    );
+    return res.rows[0] || null;
+  } catch (err) {
+    if (!isUndefinedApprovalStatusColumnError(err)) {
+      throw err;
+    }
+
+    console.warn(
+      '[DashboardUserModel] dashboard_user.approval_status is missing; updating legacy status column only.'
+    );
+    const legacyPendingClause = onlyPending ? ' AND status IS NOT TRUE' : '';
+    const fallbackRes = await query(
+      `UPDATE dashboard_user
+       SET status=$2, updated_at=NOW()
+       WHERE dashboard_user_id=$1${legacyPendingClause}
+       RETURNING *`,
+      [id, statusForApprovalStatus(approvalStatus)]
+    );
+    return withApprovalStatusFallback(fallbackRes.rows[0], approvalStatus);
+  }
 }
 
 export async function updateStatus(id, status) {
@@ -166,7 +268,7 @@ export async function updateStatus(id, status) {
 export async function updatePasswordHash(dashboardUserId, passwordHash) {
   const res = await query(
     'UPDATE dashboard_user SET password_hash=$2, updated_at=NOW() WHERE dashboard_user_id=$1 RETURNING *',
-    [dashboardUserId, passwordHash],
+    [dashboardUserId, passwordHash]
   );
   return res.rows[0] || null;
 }
