@@ -133,6 +133,8 @@ router.post('/penmas-login', async (req, res) => {
 });
 
 router.post('/dashboard-register', async (req, res) => {
+  // telegram_chat_id is intentionally not accepted from public registration.
+  // Admin/operator must populate it only after verifying ownership of the Telegram chat.
   let { username, password, role_id, role, client_ids, client_id, email } = req.body;
   const status = false;
   const clientIds = client_ids || (client_id ? [client_id] : []);

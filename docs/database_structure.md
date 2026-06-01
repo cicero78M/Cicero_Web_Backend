@@ -114,6 +114,8 @@ Credentials for the web dashboard login.
 - `role_id` – foreign key referencing `roles(role_id)`
 - `status` – boolean legacy active flag retained for compatibility (`true` only when approved)
 - `approval_status` – textual approval state: `pending`, `approved`, or `rejected`
+- `email` – dashboard account email used for account approval and password reset flows
+- `telegram_chat_id` – optional verified Telegram chat ID populated by an admin/operator, not by public dashboard registration; indexed by `dashboard_user_telegram_chat_id_idx` for direct chat lookup when needed
 - `whatsapp` – digits-only contact number normalized to the `62` prefix (min 8 digits, no `@c.us` suffix stored)
 - `created_at`, `updated_at` – timestamps
 - legacy `user_id` references have been removed; `dashboard_user_id` is the sole

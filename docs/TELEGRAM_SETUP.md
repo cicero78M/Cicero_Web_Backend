@@ -166,13 +166,14 @@ Or:
 /denydash newuser
 ```
 
-You should receive a confirmation message, and the user should receive a WhatsApp notification.
+You should receive a confirmation message. If `dashboard_user.telegram_chat_id` has been verified and populated by an admin/operator, the user also receives a direct Telegram notification; public dashboard registration does not accept this field.
 
 ### 4. Test Inline Buttons
 
 1. Click on the "✅ Setujui" or "❌ Tolak" buttons in the registration notification
 2. The bot will process the action and send a confirmation
 3. The buttons will be removed from the message after processing
+4. If `dashboard_user.telegram_chat_id` is still empty, approval/rejection succeeds and the admin confirmation states that no Telegram chat ID is registered for the user
 
 ## Bot Commands
 

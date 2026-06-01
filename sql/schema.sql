@@ -100,7 +100,9 @@ CREATE TABLE dashboard_user (
   role_id INT NOT NULL REFERENCES roles(role_id),
   status BOOLEAN DEFAULT TRUE,
   approval_status TEXT NOT NULL DEFAULT 'pending' CHECK (approval_status IN ('pending', 'approved', 'rejected')),
+  email VARCHAR,
   whatsapp VARCHAR,
+  telegram_chat_id VARCHAR(64),
   premium_status BOOLEAN DEFAULT FALSE,
   premium_tier TEXT,
   premium_expires_at TIMESTAMP WITH TIME ZONE,
@@ -109,6 +111,7 @@ CREATE TABLE dashboard_user (
 );
 
 CREATE INDEX IF NOT EXISTS idx_dashboard_user_approval_status_created_at ON dashboard_user (approval_status, created_at);
+CREATE INDEX IF NOT EXISTS dashboard_user_telegram_chat_id_idx ON dashboard_user (telegram_chat_id);
 
 CREATE TABLE dashboard_user_clients (
   dashboard_user_id UUID REFERENCES dashboard_user(dashboard_user_id),
