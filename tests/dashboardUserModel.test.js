@@ -15,17 +15,37 @@ beforeEach(() => {
   mockWithTransaction.mockReset();
 });
 
-test('findPendingDashboardUsers queries textual pending approval status only', async () => {
-  mockQuery.mockResolvedValue({ rows: [{ username: 'pending_user', approval_status: 'pending' }] });
+test('findPendingDashboardUsers queries only rows that are pending and not already active', async () => {
+  mockQuery.mockResolvedValue({ rows: [{ username: 'pending_user', status: false, approval_status: 'pending' }] });
 
   const rows = await dashboardUserModel.findPendingDashboardUsers(10);
 
-  expect(rows).toEqual([{ username: 'pending_user', approval_status: 'pending' }]);
+  expect(rows).toEqual([{ username: 'pending_user', status: false, approval_status: 'pending' }]);
   expect(mockQuery).toHaveBeenCalledWith(
     expect.stringContaining("du.approval_status = 'pending'"),
     [10],
   );
-  expect(mockQuery.mock.calls[0][0]).not.toContain('du.status = false');
+  expect(mockQuery.mock.calls[0][0]).toContain('du.status IS NOT TRUE');
+});
+
+test('getEffectiveApprovalStatus treats legacy active dashboard users as approved', () => {
+  expect(
+    dashboardUserModel.getEffectiveApprovalStatus({
+      username: 'legacy_user',
+      status: true,
+      approval_status: 'pending',
+    }),
+  ).toBe('approved');
+});
+
+test('getEffectiveApprovalStatus keeps inactive pending users pending', () => {
+  expect(
+    dashboardUserModel.getEffectiveApprovalStatus({
+      username: 'pending_user',
+      status: false,
+      approval_status: 'pending',
+    }),
+  ).toBe('pending');
 });
 
 test('createUser writes pending approval_status for new dashboard registrations', async () => {
@@ -59,7 +79,7 @@ test('updateApprovalStatus approves only pending rows when requested', async () 
 
   expect(updated).toEqual({ dashboard_user_id: 'dash-1', status: true, approval_status: 'approved' });
   expect(mockQuery).toHaveBeenCalledWith(
-    expect.stringContaining("approval_status = 'pending'"),
+    expect.stringContaining("approval_status = 'pending' AND status IS NOT TRUE"),
     ['dash-1', true, 'approved'],
   );
 });

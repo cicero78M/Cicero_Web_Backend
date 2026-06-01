@@ -397,7 +397,7 @@ function buildConfirmationMessage(baseMessage, user, userNotified, userNotificat
  */
 export async function processApproval(chatId, username) {
   try {
-    const { findByUsername, updateApprovalStatus } = await import('../model/dashboardUserModel.js');
+    const { findByUsername, getEffectiveApprovalStatus, updateApprovalStatus } = await import('../model/dashboardUserModel.js');
     const { sendApprovalEmail } = await import('./emailService.js');
 
     // Find user by username
@@ -410,8 +410,9 @@ export async function processApproval(chatId, username) {
       return;
     }
 
-    if (user.approval_status !== 'pending') {
-      const message = user.approval_status === 'approved'
+    const effectiveApprovalStatus = getEffectiveApprovalStatus(user);
+    if (effectiveApprovalStatus !== 'pending') {
+      const message = effectiveApprovalStatus === 'approved'
         ? `✅ User "${escapeMarkdown(username)}" sudah disetujui sebelumnya.`
         : `❌ User "${escapeMarkdown(username)}" sudah ditolak sebelumnya.`;
       await bot.sendMessage(chatId, message);
@@ -467,7 +468,7 @@ export async function processApproval(chatId, username) {
  */
 export async function processRejection(chatId, username) {
   try {
-    const { findByUsername } = await import('../model/dashboardUserModel.js');
+    const { findByUsername, getEffectiveApprovalStatus } = await import('../model/dashboardUserModel.js');
 
     // Find user by username
     const user = await findByUsername(username);
@@ -479,8 +480,9 @@ export async function processRejection(chatId, username) {
       return;
     }
 
-    if (user.approval_status !== 'pending') {
-      const message = user.approval_status === 'approved'
+    const effectiveApprovalStatus = getEffectiveApprovalStatus(user);
+    if (effectiveApprovalStatus !== 'pending') {
+      const message = effectiveApprovalStatus === 'approved'
         ? `✅ User "${escapeMarkdown(username)}" sudah disetujui sebelumnya.`
         : `❌ User "${escapeMarkdown(username)}" sudah ditolak sebelumnya.`;
       await bot.sendMessage(chatId, message);
@@ -517,7 +519,7 @@ export async function processRejection(chatId, username) {
  */
 export async function finalizeRejection(chatId, username, reason) {
   try {
-    const { findByUsername, updateApprovalStatus } = await import('../model/dashboardUserModel.js');
+    const { findByUsername, getEffectiveApprovalStatus, updateApprovalStatus } = await import('../model/dashboardUserModel.js');
     const { sendRejectionEmail } = await import('./emailService.js');
 
     const user = await findByUsername(username);
@@ -529,8 +531,9 @@ export async function finalizeRejection(chatId, username, reason) {
       return;
     }
 
-    if (user.approval_status !== 'pending') {
-      const message = user.approval_status === 'approved'
+    const effectiveApprovalStatus = getEffectiveApprovalStatus(user);
+    if (effectiveApprovalStatus !== 'pending') {
+      const message = effectiveApprovalStatus === 'approved'
         ? `✅ User "${escapeMarkdown(username)}" sudah disetujui sebelumnya.`
         : `❌ User "${escapeMarkdown(username)}" sudah ditolak sebelumnya.`;
       await bot.sendMessage(chatId, message);

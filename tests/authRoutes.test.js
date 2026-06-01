@@ -124,6 +124,38 @@ describe('POST /login', () => {
     expect(setCookie).toContain('SameSite=Lax');
   });
 
+  test('logs in legacy active dashboard user even when approval_status is still pending', async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            dashboard_user_id: 'legacy-d1',
+            username: 'legacydash',
+            password_hash: await bcrypt.hash('pass', 10),
+            role: 'admin',
+            role_id: 2,
+            status: true,
+            approval_status: 'pending',
+            client_ids: ['c1']
+          }
+        ]
+      })
+      .mockResolvedValueOnce({ rows: [{ client_type: 'instansi' }] });
+
+    const res = await request(app)
+      .post('/api/auth/dashboard-login')
+      .send({ username: 'legacydash', password: 'pass' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockRedis.sAdd).toHaveBeenCalledWith('dashboard_login:legacy-d1', res.body.token);
+    expect(mockRedis.set).toHaveBeenCalledWith(
+      `login_token:${res.body.token}`,
+      'dashboard:legacy-d1',
+      { EX: 2 * 60 * 60 }
+    );
+  });
+
   test('sets role to client_id for direktorat client', async () => {
     mockQuery.mockResolvedValueOnce({
       rows: [
@@ -571,6 +603,38 @@ describe('POST /dashboard-login', () => {
     );
   });
 
+  test('logs in legacy active dashboard user even when approval_status is still pending', async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            dashboard_user_id: 'legacy-d1',
+            username: 'legacydash',
+            password_hash: await bcrypt.hash('pass', 10),
+            role: 'admin',
+            role_id: 2,
+            status: true,
+            approval_status: 'pending',
+            client_ids: ['c1']
+          }
+        ]
+      })
+      .mockResolvedValueOnce({ rows: [{ client_type: 'instansi' }] });
+
+    const res = await request(app)
+      .post('/api/auth/dashboard-login')
+      .send({ username: 'legacydash', password: 'pass' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockRedis.sAdd).toHaveBeenCalledWith('dashboard_login:legacy-d1', res.body.token);
+    expect(mockRedis.set).toHaveBeenCalledWith(
+      `login_token:${res.body.token}`,
+      'dashboard:legacy-d1',
+      { EX: 2 * 60 * 60 }
+    );
+  });
+
   test('sets role to client_id for direktorat client', async () => {
     mockQuery
       .mockResolvedValueOnce({
@@ -763,7 +827,6 @@ describe('POST /dashboard-login', () => {
     expect(mockRedis.set).not.toHaveBeenCalled();
   });
 });
-
 
 describe('POST /user-login', () => {
   test('logs in user with correct password', async () => {

@@ -4,7 +4,14 @@ import request from 'supertest';
 import jwt from 'jsonwebtoken';
 
 const mockRedis = { get: jest.fn() };
-const mockDashboardUserModel = { findById: jest.fn() };
+const mockDashboardUserModel = {
+  findById: jest.fn(),
+  getEffectiveApprovalStatus: jest.fn(user => {
+    if (user?.status === true || user?.approval_status === 'approved') return 'approved';
+    if (user?.approval_status === 'rejected') return 'rejected';
+    return 'pending';
+  }),
+};
 const mockQuery = jest.fn();
 
 jest.unstable_mockModule('../src/config/redis.js', () => ({ default: mockRedis }));
@@ -26,6 +33,7 @@ beforeAll(async () => {
 beforeEach(() => {
   mockRedis.get.mockReset();
   mockDashboardUserModel.findById.mockReset();
+  mockDashboardUserModel.getEffectiveApprovalStatus.mockClear();
   mockQuery.mockReset();
 });
 

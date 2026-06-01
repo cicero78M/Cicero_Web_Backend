@@ -66,7 +66,7 @@ async function buildDashboardRequestContext(token, payload, loginState) {
 
   try {
     const dashboardUser = await dashboardUserModel.findById(dashboardUserId);
-    if (!dashboardUser || !dashboardUser.status) {
+    if (!dashboardUser || dashboardUserModel.getEffectiveApprovalStatus(dashboardUser) !== 'approved') {
       return { error: { status: 401, body: { success: false, message: 'Invalid token' } } };
     }
 
