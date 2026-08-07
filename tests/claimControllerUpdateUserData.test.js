@@ -1,5 +1,7 @@
 import { jest } from '@jest/globals';
 
+process.env.JWT_SECRET = 'claim-update-test-secret';
+
 let updateUserData;
 let userModel;
 
@@ -143,5 +145,79 @@ describe('updateUserData', () => {
       field: 'email',
     }));
     expect(userModel.updateUser).not.toHaveBeenCalled();
+  });
+
+  test('normalizes, deduplicates, and saves two accounts per platform', async () => {
+    const req = {
+      body: {
+        nrp: '1',
+        password: 'Password1!',
+        instagram_accounts: [
+          'https://instagram.com/Primary.Ig',
+          '@primary.ig',
+          'secondary_ig',
+          '',
+        ],
+        tiktok_accounts: [
+          '@Primary.TT',
+          'https://www.tiktok.com/@primary.tt',
+          '@secondary.tt',
+          null,
+        ],
+      },
+    };
+    const res = createRes();
+
+    await updateUserData(req, res, () => {});
+
+    expect(userModel.replaceUserSocialAccounts).toHaveBeenCalledWith(
+      '1',
+      'instagram',
+      ['primary.ig', 'secondary_ig']
+    );
+    expect(userModel.replaceUserSocialAccounts).toHaveBeenCalledWith(
+      '1',
+      'tiktok',
+      ['@primary.tt', '@secondary.tt']
+    );
+    expect(userModel.updateUser).toHaveBeenCalledWith(
+      '1',
+      expect.objectContaining({
+        insta: 'primary.ig',
+        tiktok: '@primary.tt',
+      })
+    );
+  });
+
+  test('rejects a username owned by another user before changing profile data', async () => {
+    userModel.findSocialUsernameConflict.mockResolvedValueOnce({
+      platform: 'instagram',
+      username: 'owned.username',
+      user_id: 'another-user',
+    });
+    const req = {
+      body: {
+        nrp: '1',
+        password: 'Password1!',
+        nama: 'Must Not Be Saved',
+        instagram_accounts: ['owned.username'],
+      },
+    };
+    const res = createRes();
+
+    await updateUserData(req, res, () => {});
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      error_code: 'CLAIM_SOCIAL_USERNAME_CONFLICT',
+      message: 'Username social media sudah digunakan akun lain.',
+      conflict: {
+        platform: 'instagram',
+        username: 'owned.username',
+      },
+    });
+    expect(userModel.updateUser).not.toHaveBeenCalled();
+    expect(userModel.replaceUserSocialAccounts).not.toHaveBeenCalled();
   });
 });

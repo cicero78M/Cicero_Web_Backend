@@ -408,7 +408,12 @@ export async function getClaimMe(req, res, next) {
         .json({ success: false, message: 'User tidak ditemukan' });
     }
 
-    return sendSuccess(res, toClaimProfileDto(user));
+    const socialAccounts = await userModel.findUserSocialAccounts(userId);
+    return sendSuccess(res, {
+      ...toClaimProfileDto(user),
+      instagram_accounts: socialAccounts.instagram,
+      tiktok_accounts: socialAccounts.tiktok,
+    });
   } catch (err) {
     return next(err);
   }
@@ -642,6 +647,36 @@ async function updateClaimUser(req, res, next, authenticatedUserId = null) {
       data.tiktok = tiktokAccountsPayload[0];
     }
 
+    const socialAccountUpdates = [
+      {
+        platform: 'instagram',
+        usernames: instagramAccountsPayload,
+      },
+      {
+        platform: 'tiktok',
+        usernames: tiktokAccountsPayload,
+      },
+    ];
+    for (const { platform, usernames } of socialAccountUpdates) {
+      if (usernames === undefined) continue;
+      const conflict = await userModel.findSocialUsernameConflict(
+        nrp,
+        platform,
+        usernames
+      );
+      if (conflict) {
+        return res.status(409).json({
+          success: false,
+          error_code: validationErrorCodes.socialUsernameConflict,
+          message: 'Username social media sudah digunakan akun lain.',
+          conflict: {
+            platform: conflict.platform,
+            username: conflict.username,
+          },
+        });
+      }
+    }
+
     Object.keys(data).forEach((k) => data[k] === undefined && delete data[k]);
     const updated = await userModel.updateUser(nrp, data);
     if (!updated) {
@@ -651,44 +686,12 @@ async function updateClaimUser(req, res, next, authenticatedUserId = null) {
     }
 
     if (instagramAccountsPayload !== undefined) {
-      const instagramConflict = await userModel.findSocialUsernameConflict(
-        nrp,
-        'instagram',
-        instagramAccountsPayload
-      );
-      if (instagramConflict) {
-        return res.status(409).json({
-          success: false,
-          error_code: validationErrorCodes.socialUsernameConflict,
-          message: 'Username social media sudah digunakan akun lain.',
-          conflict: {
-            platform: instagramConflict.platform,
-            username: instagramConflict.username,
-          },
-        });
-      }
       await userModel.replaceUserSocialAccounts(
         nrp,
         'instagram',
         instagramAccountsPayload
       );
     } else if (insta !== undefined) {
-      const instagramConflict = await userModel.findSocialUsernameConflict(
-        nrp,
-        'instagram',
-        igUsername ? [igUsername] : []
-      );
-      if (instagramConflict) {
-        return res.status(409).json({
-          success: false,
-          error_code: validationErrorCodes.socialUsernameConflict,
-          message: 'Username social media sudah digunakan akun lain.',
-          conflict: {
-            platform: instagramConflict.platform,
-            username: instagramConflict.username,
-          },
-        });
-      }
       await userModel.replaceUserSocialAccounts(
         nrp,
         'instagram',
@@ -697,44 +700,12 @@ async function updateClaimUser(req, res, next, authenticatedUserId = null) {
     }
 
     if (tiktokAccountsPayload !== undefined) {
-      const tiktokConflict = await userModel.findSocialUsernameConflict(
-        nrp,
-        'tiktok',
-        tiktokAccountsPayload
-      );
-      if (tiktokConflict) {
-        return res.status(409).json({
-          success: false,
-          error_code: validationErrorCodes.socialUsernameConflict,
-          message: 'Username social media sudah digunakan akun lain.',
-          conflict: {
-            platform: tiktokConflict.platform,
-            username: tiktokConflict.username,
-          },
-        });
-      }
       await userModel.replaceUserSocialAccounts(
         nrp,
         'tiktok',
         tiktokAccountsPayload
       );
     } else if (tiktok !== undefined) {
-      const tiktokConflict = await userModel.findSocialUsernameConflict(
-        nrp,
-        'tiktok',
-        ttUsername ? [ttUsername] : []
-      );
-      if (tiktokConflict) {
-        return res.status(409).json({
-          success: false,
-          error_code: validationErrorCodes.socialUsernameConflict,
-          message: 'Username social media sudah digunakan akun lain.',
-          conflict: {
-            platform: tiktokConflict.platform,
-            username: tiktokConflict.username,
-          },
-        });
-      }
       await userModel.replaceUserSocialAccounts(
         nrp,
         'tiktok',

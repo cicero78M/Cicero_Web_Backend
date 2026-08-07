@@ -64,6 +64,36 @@ describe('claimPendingContentService', () => {
     expect(result.tiktok).toMatchObject({ pending_content: 0, items: [] });
   });
 
+  test.each([
+    ['primary', 'primary-account'],
+    ['secondary', 'secondary-account'],
+  ])(
+    'marks Instagram content complete when the %s account matches the activity snapshot',
+    async (_accountPosition, matchingUsername) => {
+      mockContextAndAccounts([
+        { platform: 'instagram', username: 'primary-account' },
+        { platform: 'instagram', username: 'secondary-account' },
+      ]);
+      query.mockResolvedValueOnce({
+        rows: [{ shortcode: `completed-by-${matchingUsername}`, completed: true }],
+      });
+
+      const result = await getPendingContentForUser('user-1', filters);
+
+      const [instagramSql, instagramParams] = query.mock.calls[2];
+      expect(instagramSql).toContain('= ANY($3::text[])');
+      expect(instagramParams[2]).toEqual([
+        'primary-account',
+        'secondary-account',
+      ]);
+      expect(result.instagram).toMatchObject({
+        completed_content: 1,
+        pending_content: 0,
+        completed_ids: [`completed-by-${matchingUsername}`],
+      });
+    }
+  );
+
   test('returns no content when scoped queries find no posts', async () => {
     mockContextAndAccounts([
       { platform: 'instagram', username: 'ig-user' },

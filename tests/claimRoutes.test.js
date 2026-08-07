@@ -207,6 +207,10 @@ describe('claim routes credential flow', () => {
   });
 
   test('reads claim profile only from authenticated user identity', async () => {
+    userModelMocks.findUserSocialAccounts.mockResolvedValueOnce({
+      instagram: ['ig-primary', 'ig-secondary'],
+      tiktok: ['@tt-primary', '@tt-secondary'],
+    });
     const res = await request(app)
       .get('/api/claim/me?nrp=attacker')
       .set('x-test-user-id', '12345')
@@ -216,6 +220,15 @@ describe('claim routes credential flow', () => {
     expect(userModelMocks.findClaimProfileById).toHaveBeenCalledWith('12345');
     expect(res.body.data.password_hash).toBeUndefined();
     expect(res.body.data.reset_token).toBeUndefined();
+    expect(res.body.data.instagram_accounts).toEqual([
+      'ig-primary',
+      'ig-secondary',
+    ]);
+    expect(res.body.data.tiktok_accounts).toEqual([
+      '@tt-primary',
+      '@tt-secondary',
+    ]);
+    expect(userModelMocks.findUserSocialAccounts).toHaveBeenCalledWith('12345');
     expect(userModelMocks.findClaimProfileById).not.toHaveBeenCalledWith(
       '67890'
     );
