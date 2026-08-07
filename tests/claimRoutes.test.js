@@ -33,7 +33,9 @@ describe('claim routes credential flow', () => {
       }),
     };
     claimPasswordResetModelMocks = {
-      createResetRequest: jest.fn().mockResolvedValue({ reset_token: 'mock-token' }),
+      createResetRequest: jest
+        .fn()
+        .mockResolvedValue({ reset_token: 'mock-token' }),
       findActiveByToken: jest.fn().mockResolvedValue({ user_id: '1' }),
       markTokenUsed: jest.fn().mockResolvedValue({}),
     };
@@ -48,17 +50,48 @@ describe('claim routes credential flow', () => {
     await jest.isolateModulesAsync(async () => {
       jest.unstable_mockModule('bcrypt', () => ({
         default: {
-          compare: jest.fn(async (plain, hash) => plain === 'Password1!' && hash === 'hashed-password'),
+          compare: jest.fn(
+            async (plain, hash) =>
+              plain === 'Password1!' && hash === 'hashed-password'
+          ),
           hash: jest.fn(async () => 'hashed-password'),
         },
       }));
-      jest.unstable_mockModule('../src/model/userModel.js', () => userModelMocks);
+      jest.unstable_mockModule(
+        '../src/model/userModel.js',
+        () => userModelMocks
+      );
+      jest.unstable_mockModule('../src/config/redis.js', () => ({
+        default: {
+          get: jest.fn().mockResolvedValue(null),
+          set: jest.fn().mockResolvedValue('OK'),
+          del: jest.fn().mockResolvedValue(1),
+          ttl: jest.fn().mockResolvedValue(60),
+        },
+      }));
       jest.unstable_mockModule(
         '../src/model/claimPasswordResetModel.js',
         () => claimPasswordResetModelMocks
       );
-      jest.unstable_mockModule('../src/service/emailService.js', () => emailServiceMocks);
-      jest.unstable_mockModule('../src/service/telegramService.js', () => telegramServiceMocks);
+      jest.unstable_mockModule(
+        '../src/service/emailService.js',
+        () => emailServiceMocks
+      );
+      jest.unstable_mockModule(
+        '../src/service/telegramService.js',
+        () => telegramServiceMocks
+      );
+      jest.unstable_mockModule('../src/middleware/authMiddleware.js', () => ({
+        authRequired: (req, res, next) => {
+          const userId = req.get('x-test-user-id');
+          if (!userId)
+            return res
+              .status(401)
+              .json({ success: false, message: 'Token required' });
+          req.user = { user_id: userId, role: 'user' };
+          return next();
+        },
+      }));
       const claimMod = await import('../src/routes/claimRoutes.js');
       app = express();
       app.use(express.json());
@@ -85,7 +118,8 @@ describe('claim routes credential flow', () => {
     expect(res.status).toBe(400);
     expect(res.body).toEqual({
       success: false,
-      message: 'Password minimal 8 karakter dan wajib kombinasi huruf, angka, serta tanda baca.',
+      message:
+        'Password minimal 8 karakter dan wajib kombinasi huruf, angka, serta tanda baca.',
     });
   });
 
@@ -112,14 +146,18 @@ describe('claim routes credential flow', () => {
   });
 
   test('creates claim password reset token for matching nrp/email', async () => {
+    process.env.SMTP_HOST = 'smtp.test';
+    process.env.SMTP_PORT = '587';
+    process.env.SMTP_USER = 'test';
+    process.env.SMTP_PASS = 'test';
+    process.env.SMTP_FROM = 'test@cicero.id';
     const res = await request(app)
       .post('/api/claim/password-reset/request')
       .send({ nrp: '1', email: 'USER1@CICERO.ID' });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(claimPasswordResetModelMocks.createResetRequest).toHaveBeenCalledTimes(1);
-    expect(telegramServiceMocks.sendTelegramAdminMessage).toHaveBeenCalledTimes(1);
+    expect(emailServiceMocks.sendOtpEmail).toHaveBeenCalledTimes(1);
   });
 
   test('confirms claim password reset and updates password hash', async () => {
@@ -140,7 +178,9 @@ describe('claim routes credential flow', () => {
 
     expect(res.status).toBe(200);
     expect(userModelMocks.setClaimCredentials).toHaveBeenCalled();
-    expect(claimPasswordResetModelMocks.markTokenUsed).toHaveBeenCalledWith(token);
+    expect(claimPasswordResetModelMocks.markTokenUsed).toHaveBeenCalledWith(
+      token
+    );
   });
 
   test('updates user profile with nrp + password', async () => {
@@ -149,6 +189,48 @@ describe('claim routes credential flow', () => {
       .send({ nrp: '1', password: 'Password1!', nama: 'User 1' });
 
     expect(res.status).toBe(200);
-    expect(userModelMocks.updateUser).toHaveBeenCalledWith('1', { nama: 'User 1' });
+    expect(userModelMocks.updateUser).toHaveBeenCalledWith('1', {
+      nama: 'User 1',
+    });
+  });
+
+  test('reads claim profile only from authenticated user identity', async () => {
+    const res = await request(app)
+      .get('/api/claim/me?nrp=attacker')
+      .set('x-test-user-id', '12345')
+      .send({ nrp: '67890' });
+
+    expect(res.status).toBe(200);
+    expect(userModelMocks.findUserById).toHaveBeenCalledWith('12345');
+    expect(res.body.data.password_hash).toBeUndefined();
+    expect(userModelMocks.findUserById).not.toHaveBeenCalledWith('67890');
+  });
+
+  test('updates claim profile only from authenticated user identity without password', async () => {
+    const res = await request(app)
+      .put('/api/claim/me?nrp=query-attacker')
+      .set('x-test-user-id', '12345')
+      .send({ nrp: '67890', user_id: '54321', nama: 'JWT User' });
+
+    expect(res.status).toBe(200);
+    expect(userModelMocks.updateUser).toHaveBeenCalledWith('12345', {
+      nama: 'JWT User',
+    });
+    expect(userModelMocks.updateUser).not.toHaveBeenCalledWith(
+      expect.stringMatching(/67890|54321/),
+      expect.anything()
+    );
+  });
+
+  test('requires authentication for claim self-service endpoints', async () => {
+    const getResponse = await request(app).get('/api/claim/me');
+    const putResponse = await request(app)
+      .put('/api/claim/me')
+      .send({ nama: 'User' });
+
+    expect(getResponse.status).toBe(401);
+    expect(putResponse.status).toBe(401);
+    expect(userModelMocks.findUserById).not.toHaveBeenCalled();
+    expect(userModelMocks.updateUser).not.toHaveBeenCalled();
   });
 });

@@ -5,12 +5,21 @@ import { v4 as uuidv4 } from 'uuid';
 import * as userModel from '../model/userModel.js';
 import * as claimPasswordResetModel from '../model/claimPasswordResetModel.js';
 import redis from '../config/redis.js';
-import { sendClaimPasswordResetEmail, sendOtpEmail } from '../service/emailService.js';
+import {
+  sendClaimPasswordResetEmail,
+  sendOtpEmail,
+} from '../service/emailService.js';
 import { sendTelegramAdminMessage } from '../service/telegramService.js';
 import { sendSuccess } from '../utils/response.js';
 import { normalizeEmail, normalizeUserId } from '../utils/utilsHelper.js';
-import { normalizeWhatsappNumber, minPhoneDigitLength } from '../utils/waHelper.js';
-import { validateDateRange, validateTanggalFilter } from '../utils/dateFilterValidation.js';
+import {
+  normalizeWhatsappNumber,
+  minPhoneDigitLength,
+} from '../utils/waHelper.js';
+import {
+  validateDateRange,
+  validateTanggalFilter,
+} from '../utils/dateFilterValidation.js';
 import { getPendingContentForUser } from '../service/claimPendingContentService.js';
 
 const validationErrorCodes = {
@@ -23,7 +32,12 @@ const validationErrorCodes = {
   socialUsernameConflict: 'CLAIM_SOCIAL_USERNAME_CONFLICT',
 };
 
-const pendingContentPeriods = new Set(['harian', 'mingguan', 'bulanan', 'semua']);
+const pendingContentPeriods = new Set([
+  'harian',
+  'mingguan',
+  'bulanan',
+  'semua',
+]);
 
 export async function getPendingContent(req, res, next) {
   try {
@@ -52,7 +66,8 @@ export async function getPendingContent(req, res, next) {
       return res.status(400).json({
         success: false,
         error_code: 'CLAIM_INVALID_DATE_FILTER',
-        message: 'Parameter periode harus harian, mingguan, bulanan, atau semua',
+        message:
+          'Parameter periode harus harian, mingguan, bulanan, atau semua',
       });
     }
 
@@ -100,6 +115,13 @@ function sendValidationError(res, { errorCode, field, message }) {
     field,
     message,
   });
+}
+
+function withoutClaimPasswordHash(user) {
+  if (!user) return user;
+  const sanitizedUser = { ...user };
+  delete sanitizedUser.password_hash;
+  return sanitizedUser;
 }
 
 function isValidEmailFormat(value) {
@@ -167,9 +189,10 @@ function isSmtpEnabled() {
     process.env.SMTP_FROM,
   ];
 
-  return requiredSmtpEnv.every((value) => typeof value === 'string' && value.trim() !== '');
+  return requiredSmtpEnv.every(
+    (value) => typeof value === 'string' && value.trim() !== ''
+  );
 }
-
 
 function toSocialAccountList(rawValue) {
   if (rawValue === undefined) return undefined;
@@ -184,7 +207,8 @@ function normalizeSocialAccounts(rawValue, platform) {
   if (list === undefined) return undefined;
   if (list === null) return null;
 
-  const extractor = platform === 'instagram' ? extractInstagramUsername : extractTiktokUsername;
+  const extractor =
+    platform === 'instagram' ? extractInstagramUsername : extractTiktokUsername;
   const normalized = [];
   const seen = new Set();
 
@@ -192,7 +216,8 @@ function normalizeSocialAccounts(rawValue, platform) {
     if (item === null || item === undefined || item === '') continue;
     const username = extractor(String(item));
     if (!username) return null;
-    const dedupeKey = platform === 'tiktok' ? username.replace(/^@/, '') : username;
+    const dedupeKey =
+      platform === 'tiktok' ? username.replace(/^@/, '') : username;
     if (!seen.has(dedupeKey)) {
       seen.add(dedupeKey);
       normalized.push(username);
@@ -205,7 +230,8 @@ function normalizeSocialAccounts(rawValue, platform) {
 function findDuplicateSocialUsername(usernames = [], platform) {
   const seen = new Set();
   for (const username of usernames) {
-    const dedupeKey = platform === 'tiktok' ? username.replace(/^@/, '') : username;
+    const dedupeKey =
+      platform === 'tiktok' ? username.replace(/^@/, '') : username;
     if (seen.has(dedupeKey)) return username;
     seen.add(dedupeKey);
   }
@@ -214,7 +240,8 @@ function findDuplicateSocialUsername(usernames = [], platform) {
 
 function findBlockedSocialUsername(usernames = [], platform) {
   for (const username of usernames) {
-    const dedupeKey = platform === 'tiktok' ? username.replace(/^@/, '') : username;
+    const dedupeKey =
+      platform === 'tiktok' ? username.replace(/^@/, '') : username;
     if (dedupeKey === 'cicero_devs') return username;
   }
   return null;
@@ -252,13 +279,17 @@ export async function registerClaimCredentials(req, res, next) {
       user = await userModel.findUserById(nrp);
     } catch (err) {
       if (isConnectionError(err)) {
-        return res.status(503).json({ success: false, message: 'Database tidak tersedia' });
+        return res
+          .status(503)
+          .json({ success: false, message: 'Database tidak tersedia' });
       }
       throw err;
     }
 
     if (!user) {
-      return res.status(404).json({ success: false, message: 'NRP anda tidak terdaftar' });
+      return res
+        .status(404)
+        .json({ success: false, message: 'NRP anda tidak terdaftar' });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -267,11 +298,14 @@ export async function registerClaimCredentials(req, res, next) {
     });
 
     if (!updatedUser) {
-      return res.status(404).json({ success: false, message: 'NRP anda tidak terdaftar' });
+      return res
+        .status(404)
+        .json({ success: false, message: 'NRP anda tidak terdaftar' });
     }
 
     sendSuccess(res, {
-      message: 'Registrasi kredensial berhasil. Silakan login menggunakan NRP dan password.',
+      message:
+        'Registrasi kredensial berhasil. Silakan login menggunakan NRP dan password.',
       user_id: updatedUser.user_id,
     });
   } catch (err) {
@@ -295,7 +329,9 @@ export async function getUserData(req, res, next) {
       user = await verifyClaimCredentials(nrp, password);
     } catch (err) {
       if (isConnectionError(err)) {
-        return res.status(503).json({ success: false, message: 'Database tidak tersedia' });
+        return res
+          .status(503)
+          .json({ success: false, message: 'Database tidak tersedia' });
       }
       throw err;
     }
@@ -313,7 +349,31 @@ export async function getUserData(req, res, next) {
   }
 }
 
-export async function updateUserData(req, res, next) {
+export async function getClaimMe(req, res, next) {
+  try {
+    const userId = normalizeUserId(req.user?.user_id);
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error_code: 'CLAIM_AUTH_USER_REQUIRED',
+        message: 'Token user tidak valid',
+      });
+    }
+
+    const user = await userModel.findUserById(userId);
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: 'User tidak ditemukan' });
+    }
+
+    return sendSuccess(res, withoutClaimPasswordHash(user));
+  } catch (err) {
+    return next(err);
+  }
+}
+
+async function updateClaimUser(req, res, next, authenticatedUserId = null) {
   try {
     const {
       nrp: rawNrp,
@@ -330,29 +390,35 @@ export async function updateUserData(req, res, next) {
       whatsapp,
       email,
     } = req.body;
-    const nrp = normalizeUserId(rawNrp);
-    if (!nrp || !password) {
+    const nrp = normalizeUserId(authenticatedUserId || rawNrp);
+    if (!nrp || (!authenticatedUserId && !password)) {
       return res.status(400).json({
         success: false,
-        message: 'nrp dan password wajib diisi',
+        message: authenticatedUserId
+          ? 'Identitas token tidak valid'
+          : 'nrp dan password wajib diisi',
       });
     }
 
-    let user;
-    try {
-      user = await verifyClaimCredentials(nrp, password);
-    } catch (err) {
-      if (isConnectionError(err)) {
-        return res.status(503).json({ success: false, message: 'Database tidak tersedia' });
+    if (!authenticatedUserId) {
+      let user;
+      try {
+        user = await verifyClaimCredentials(nrp, password);
+      } catch (err) {
+        if (isConnectionError(err)) {
+          return res
+            .status(503)
+            .json({ success: false, message: 'Database tidak tersedia' });
+        }
+        throw err;
       }
-      throw err;
-    }
 
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'NRP atau password tidak valid',
-      });
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: 'NRP atau password tidak valid',
+        });
+      }
     }
 
     let igUsername;
@@ -381,21 +447,29 @@ export async function updateUserData(req, res, next) {
       }
     }
 
-    const normalizedInstagramAccounts = normalizeSocialAccounts(instagram_accounts, 'instagram');
+    const normalizedInstagramAccounts = normalizeSocialAccounts(
+      instagram_accounts,
+      'instagram'
+    );
     if (normalizedInstagramAccounts === null) {
       return sendValidationError(res, {
         errorCode: validationErrorCodes.invalidInstagramFormat,
         field: 'instagram_accounts',
-        message: 'Format instagram_accounts tidak valid. Isi array username/link Instagram yang valid.',
+        message:
+          'Format instagram_accounts tidak valid. Isi array username/link Instagram yang valid.',
       });
     }
 
-    const normalizedTiktokAccounts = normalizeSocialAccounts(tiktok_accounts, 'tiktok');
+    const normalizedTiktokAccounts = normalizeSocialAccounts(
+      tiktok_accounts,
+      'tiktok'
+    );
     if (normalizedTiktokAccounts === null) {
       return sendValidationError(res, {
         errorCode: validationErrorCodes.invalidTiktokFormat,
         field: 'tiktok_accounts',
-        message: 'Format tiktok_accounts tidak valid. Isi array username/link TikTok yang valid.',
+        message:
+          'Format tiktok_accounts tidak valid. Isi array username/link TikTok yang valid.',
       });
     }
 
@@ -409,7 +483,8 @@ export async function updateUserData(req, res, next) {
           return sendValidationError(res, {
             errorCode: validationErrorCodes.invalidWhatsappFormat,
             field: 'whatsapp',
-            message: 'Nomor telepon tidak valid. Masukkan minimal 8 digit angka.',
+            message:
+              'Nomor telepon tidak valid. Masukkan minimal 8 digit angka.',
           });
         }
         normalizedWhatsapp = normalizeWhatsappNumber(whatsapp);
@@ -462,10 +537,18 @@ export async function updateUserData(req, res, next) {
 
     let instagramAccountsPayload = normalizedInstagramAccounts;
     if (insta !== undefined) {
-      instagramAccountsPayload = igUsername ? [igUsername, ...(normalizedInstagramAccounts || [])] : (normalizedInstagramAccounts || []);
+      instagramAccountsPayload = igUsername
+        ? [igUsername, ...(normalizedInstagramAccounts || [])]
+        : normalizedInstagramAccounts || [];
     }
-    const duplicateInstagramInput = findDuplicateSocialUsername(instagramAccountsPayload, 'instagram');
-    const blockedInstagramInput = findBlockedSocialUsername(instagramAccountsPayload, 'instagram');
+    const duplicateInstagramInput = findDuplicateSocialUsername(
+      instagramAccountsPayload,
+      'instagram'
+    );
+    const blockedInstagramInput = findBlockedSocialUsername(
+      instagramAccountsPayload,
+      'instagram'
+    );
     if (blockedInstagramInput) {
       return sendValidationError(res, {
         errorCode: validationErrorCodes.usernameBlocked,
@@ -487,10 +570,18 @@ export async function updateUserData(req, res, next) {
 
     let tiktokAccountsPayload = normalizedTiktokAccounts;
     if (tiktok !== undefined) {
-      tiktokAccountsPayload = ttUsername ? [ttUsername, ...(normalizedTiktokAccounts || [])] : (normalizedTiktokAccounts || []);
+      tiktokAccountsPayload = ttUsername
+        ? [ttUsername, ...(normalizedTiktokAccounts || [])]
+        : normalizedTiktokAccounts || [];
     }
-    const duplicateTiktokInput = findDuplicateSocialUsername(tiktokAccountsPayload, 'tiktok');
-    const blockedTiktokInput = findBlockedSocialUsername(tiktokAccountsPayload, 'tiktok');
+    const duplicateTiktokInput = findDuplicateSocialUsername(
+      tiktokAccountsPayload,
+      'tiktok'
+    );
+    const blockedTiktokInput = findBlockedSocialUsername(
+      tiktokAccountsPayload,
+      'tiktok'
+    );
     if (blockedTiktokInput) {
       return sendValidationError(res, {
         errorCode: validationErrorCodes.usernameBlocked,
@@ -513,7 +604,9 @@ export async function updateUserData(req, res, next) {
     Object.keys(data).forEach((k) => data[k] === undefined && delete data[k]);
     const updated = await userModel.updateUser(nrp, data);
     if (!updated) {
-      return res.status(404).json({ success: false, message: 'User tidak ditemukan' });
+      return res
+        .status(404)
+        .json({ success: false, message: 'User tidak ditemukan' });
     }
 
     if (instagramAccountsPayload !== undefined) {
@@ -533,7 +626,11 @@ export async function updateUserData(req, res, next) {
           },
         });
       }
-      await userModel.replaceUserSocialAccounts(nrp, 'instagram', instagramAccountsPayload);
+      await userModel.replaceUserSocialAccounts(
+        nrp,
+        'instagram',
+        instagramAccountsPayload
+      );
     } else if (insta !== undefined) {
       const instagramConflict = await userModel.findSocialUsernameConflict(
         nrp,
@@ -551,7 +648,11 @@ export async function updateUserData(req, res, next) {
           },
         });
       }
-      await userModel.replaceUserSocialAccounts(nrp, 'instagram', igUsername ? [igUsername] : []);
+      await userModel.replaceUserSocialAccounts(
+        nrp,
+        'instagram',
+        igUsername ? [igUsername] : []
+      );
     }
 
     if (tiktokAccountsPayload !== undefined) {
@@ -571,7 +672,11 @@ export async function updateUserData(req, res, next) {
           },
         });
       }
-      await userModel.replaceUserSocialAccounts(nrp, 'tiktok', tiktokAccountsPayload);
+      await userModel.replaceUserSocialAccounts(
+        nrp,
+        'tiktok',
+        tiktokAccountsPayload
+      );
     } else if (tiktok !== undefined) {
       const tiktokConflict = await userModel.findSocialUsernameConflict(
         nrp,
@@ -589,12 +694,16 @@ export async function updateUserData(req, res, next) {
           },
         });
       }
-      await userModel.replaceUserSocialAccounts(nrp, 'tiktok', ttUsername ? [ttUsername] : []);
+      await userModel.replaceUserSocialAccounts(
+        nrp,
+        'tiktok',
+        ttUsername ? [ttUsername] : []
+      );
     }
 
     const userSocialAccounts = await userModel.findUserSocialAccounts(nrp);
     const responseData = {
-      ...updated,
+      ...withoutClaimPasswordHash(updated),
       instagram_accounts: userSocialAccounts.instagram,
       tiktok_accounts: userSocialAccounts.tiktok,
     };
@@ -610,6 +719,22 @@ export async function updateUserData(req, res, next) {
   }
 }
 
+export async function updateUserData(req, res, next) {
+  return updateClaimUser(req, res, next);
+}
+
+export async function updateClaimMe(req, res, next) {
+  const userId = normalizeUserId(req.user?.user_id);
+  if (!userId) {
+    return res.status(401).json({
+      success: false,
+      error_code: 'CLAIM_AUTH_USER_REQUIRED',
+      message: 'Token user tidak valid',
+    });
+  }
+  return updateClaimUser(req, res, next, userId);
+}
+
 export async function requestClaimPasswordReset(req, res, next) {
   try {
     const { nrp: rawNrp, email: rawEmail } = req.body || {};
@@ -618,7 +743,9 @@ export async function requestClaimPasswordReset(req, res, next) {
     const smtpEnabled = isSmtpEnabled();
 
     if (!nrp) {
-      return res.status(400).json({ success: false, message: claimPasswordResetMessage });
+      return res
+        .status(400)
+        .json({ success: false, message: claimPasswordResetMessage });
     }
 
     let user;
@@ -626,7 +753,9 @@ export async function requestClaimPasswordReset(req, res, next) {
       user = await userModel.findUserById(nrp);
     } catch (err) {
       if (isConnectionError(err)) {
-        return res.status(503).json({ success: false, message: 'Database tidak tersedia' });
+        return res
+          .status(503)
+          .json({ success: false, message: 'Database tidak tersedia' });
       }
       throw err;
     }
@@ -638,14 +767,20 @@ export async function requestClaimPasswordReset(req, res, next) {
     if (!smtpEnabled) {
       return res.status(503).json({
         success: false,
-        message: 'Layanan email OTP sedang tidak tersedia. Silakan hubungi admin.',
+        message:
+          'Layanan email OTP sedang tidak tersedia. Silakan hubungi admin.',
       });
     }
 
     const existingEmail = normalizeEmail(user?.email || '');
-    const hasRegisteredEmail = Boolean(existingEmail && isValidEmailFormat(existingEmail));
+    const hasRegisteredEmail = Boolean(
+      existingEmail && isValidEmailFormat(existingEmail)
+    );
 
-    if (!hasRegisteredEmail && (!inputEmail || !isValidEmailFormat(inputEmail))) {
+    if (
+      !hasRegisteredEmail &&
+      (!inputEmail || !isValidEmailFormat(inputEmail))
+    ) {
       return res.status(400).json({
         success: false,
         message: 'Email aktif wajib diisi dengan format yang valid.',
@@ -662,7 +797,8 @@ export async function requestClaimPasswordReset(req, res, next) {
       return res.status(429).json({
         success: false,
         message: 'Permintaan OTP terlalu sering. Coba beberapa saat lagi.',
-        retry_after_seconds: ttl > 0 ? ttl : CLAIM_RESET_REQUEST_COOLDOWN_SECONDS,
+        retry_after_seconds:
+          ttl > 0 ? ttl : CLAIM_RESET_REQUEST_COOLDOWN_SECONDS,
       });
     }
 
@@ -682,14 +818,16 @@ export async function requestClaimPasswordReset(req, res, next) {
       }),
       { EX: CLAIM_RESET_OTP_TTL_SECONDS }
     );
-    await redis.set(cooldownKey, '1', { EX: CLAIM_RESET_REQUEST_COOLDOWN_SECONDS });
+    await redis.set(cooldownKey, '1', {
+      EX: CLAIM_RESET_REQUEST_COOLDOWN_SECONDS,
+    });
 
     await sendOtpEmail(deliveryTarget, otp);
 
     const message = hasRegisteredEmail
-      ? (inputEmail && inputEmail !== existingEmail
-          ? `NRP Anda terhubung dengan email ${existingEmail}. OTP dikirim ke email tersebut.`
-          : `OTP berhasil dikirim ke email ${existingEmail}.`)
+      ? inputEmail && inputEmail !== existingEmail
+        ? `NRP Anda terhubung dengan email ${existingEmail}. OTP dikirim ke email tersebut.`
+        : `OTP berhasil dikirim ke email ${existingEmail}.`
       : `Email pada NRP belum terdaftar. OTP dikirim ke ${inputEmail}. Setelah verifikasi, email ini akan ditautkan.`;
 
     return sendSuccess(res, {
@@ -701,7 +839,9 @@ export async function requestClaimPasswordReset(req, res, next) {
       otp_ttl_seconds: CLAIM_RESET_OTP_TTL_SECONDS,
     });
   } catch (err) {
-    await sendTelegramAdminMessage(`⚠️ CLAIM reset OTP gagal dikirim: ${err?.message || 'unknown_error'}`);
+    await sendTelegramAdminMessage(
+      `⚠️ CLAIM reset OTP gagal dikirim: ${err?.message || 'unknown_error'}`
+    );
     next(err);
   }
 }
@@ -710,16 +850,26 @@ export async function verifyClaimPasswordResetOtp(req, res, next) {
   try {
     const { request_id, otp } = req.body || {};
     if (!request_id || !otp) {
-      return res.status(400).json({ success: false, message: 'request_id dan otp wajib diisi' });
+      return res
+        .status(400)
+        .json({ success: false, message: 'request_id dan otp wajib diisi' });
     }
 
     const raw = await redis.get(`claim_reset_otp:${request_id}`);
     if (!raw) {
-      return res.status(400).json({ success: false, message: 'OTP tidak valid atau sudah kedaluwarsa.' });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: 'OTP tidak valid atau sudah kedaluwarsa.',
+        });
     }
 
     const payload = JSON.parse(raw);
-    const otpHash = crypto.createHash('sha256').update(String(otp)).digest('hex');
+    const otpHash = crypto
+      .createHash('sha256')
+      .update(String(otp))
+      .digest('hex');
     if (payload.otp_hash !== otpHash) {
       const nextFailed = Number(payload.failed_attempts || 0) + 1;
       if (nextFailed >= CLAIM_RESET_OTP_MAX_ATTEMPTS) {
@@ -732,7 +882,12 @@ export async function verifyClaimPasswordResetOtp(req, res, next) {
           { EX: ttl > 0 ? ttl : CLAIM_RESET_OTP_TTL_SECONDS }
         );
       }
-      return res.status(400).json({ success: false, message: 'OTP tidak valid atau sudah kedaluwarsa.' });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: 'OTP tidak valid atau sudah kedaluwarsa.',
+        });
     }
 
     await redis.del(`claim_reset_otp:${request_id}`);
@@ -752,10 +907,18 @@ export async function verifyClaimPasswordResetOtp(req, res, next) {
     });
 
     if (payload?.pending_email && isValidEmailFormat(payload.pending_email)) {
-      await userModel.updateUserField(payload.user_id, 'email', payload.pending_email);
+      await userModel.updateUserField(
+        payload.user_id,
+        'email',
+        payload.pending_email
+      );
     }
 
-    const resetBaseUrl = (process.env.CLAIM_PASSWORD_RESET_URL || process.env.DASHBOARD_PASSWORD_RESET_URL || '').trim();
+    const resetBaseUrl = (
+      process.env.CLAIM_PASSWORD_RESET_URL ||
+      process.env.DASHBOARD_PASSWORD_RESET_URL ||
+      ''
+    ).trim();
     await sendClaimPasswordResetEmail(payload.delivery_target, token, {
       nrp: payload.user_id,
       expiryMinutes: 15,
@@ -765,7 +928,9 @@ export async function verifyClaimPasswordResetOtp(req, res, next) {
     return sendSuccess(res, {
       message: 'OTP valid. Link ganti password sudah dikirim ke email Anda.',
       reset_token: token,
-      reset_link: resetBaseUrl ? `${resetBaseUrl.replace(/\/$/, '')}?token=${encodeURIComponent(token)}` : null,
+      reset_link: resetBaseUrl
+        ? `${resetBaseUrl.replace(/\/$/, '')}?token=${encodeURIComponent(token)}`
+        : null,
     });
   } catch (err) {
     next(err);
@@ -816,7 +981,10 @@ export async function confirmClaimPasswordReset(req, res, next) {
     }
 
     const resetRecord = await claimPasswordResetModel.findActiveByToken(token);
-    if (!resetRecord || String(resetRecord.user_id) !== String(payload.user_id)) {
+    if (
+      !resetRecord ||
+      String(resetRecord.user_id) !== String(payload.user_id)
+    ) {
       return res.status(400).json({
         success: false,
         message: 'Token reset password tidak valid atau sudah kedaluwarsa.',
@@ -824,7 +992,9 @@ export async function confirmClaimPasswordReset(req, res, next) {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const updatedUser = await userModel.setClaimCredentials(payload.user_id, { passwordHash });
+    const updatedUser = await userModel.setClaimCredentials(payload.user_id, {
+      passwordHash,
+    });
     if (!updatedUser) {
       return res.status(400).json({
         success: false,

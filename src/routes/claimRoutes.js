@@ -5,7 +5,9 @@ import {
   verifyClaimPasswordResetOtp,
   registerClaimCredentials,
   getUserData,
+  getClaimMe,
   updateUserData,
+  updateClaimMe,
   getPendingContent,
 } from '../controller/claimController.js';
 import { authRequired } from '../middleware/authMiddleware.js';
@@ -20,6 +22,8 @@ router.post('/password-reset/confirm', confirmClaimPasswordReset); // body: { to
 router.post('/user-data', getUserData); // body: { nrp, password }
 router.put('/update', updateUserData); // body: { nrp, password, ... }
 router.put('/edit', updateUserData); // backward-compatible alias for /claim/edit
+router.get('/me', authRequired, getClaimMe);
+router.put('/me', authRequired, updateClaimMe);
 router.get('/pending-content', authRequired, getPendingContent);
 
 export default router;
