@@ -10,6 +10,8 @@ import { sendTelegramAdminMessage } from '../service/telegramService.js';
 import { sendSuccess } from '../utils/response.js';
 import { normalizeEmail, normalizeUserId } from '../utils/utilsHelper.js';
 import { normalizeWhatsappNumber, minPhoneDigitLength } from '../utils/waHelper.js';
+import { validateDateRange, validateTanggalFilter } from '../utils/dateFilterValidation.js';
+import { getPendingContentForUser } from '../service/claimPendingContentService.js';
 
 const validationErrorCodes = {
   invalidWhatsappFormat: 'CLAIM_INVALID_WHATSAPP_FORMAT',
@@ -20,6 +22,72 @@ const validationErrorCodes = {
   duplicateUsernameInput: 'CLAIM_DUPLICATE_USERNAME_INPUT',
   socialUsernameConflict: 'CLAIM_SOCIAL_USERNAME_CONFLICT',
 };
+
+const pendingContentPeriods = new Set(['harian', 'mingguan', 'bulanan', 'semua']);
+
+export async function getPendingContent(req, res, next) {
+  try {
+    const userId = req.user?.user_id;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error_code: 'CLAIM_AUTH_USER_REQUIRED',
+        message: 'Token user tidak valid',
+      });
+    }
+
+    if (String(req.user?.role || '').toLowerCase() !== 'user') {
+      return res.status(403).json({
+        success: false,
+        error_code: 'CLAIM_USER_ROLE_REQUIRED',
+        message: 'Endpoint hanya dapat diakses oleh user',
+      });
+    }
+
+    const periode = String(req.query.periode || 'harian').toLowerCase();
+    const tanggal = req.query.tanggal;
+    const startDate = req.query.start_date;
+    const endDate = req.query.end_date;
+    if (!pendingContentPeriods.has(periode)) {
+      return res.status(400).json({
+        success: false,
+        error_code: 'CLAIM_INVALID_DATE_FILTER',
+        message: 'Parameter periode harus harian, mingguan, bulanan, atau semua',
+      });
+    }
+
+    const { error: tanggalError } = validateTanggalFilter(tanggal, periode);
+    const { error: rangeError } = validateDateRange(startDate, endDate);
+    if (tanggalError || rangeError || Boolean(startDate) !== Boolean(endDate)) {
+      return res.status(400).json({
+        success: false,
+        error_code: 'CLAIM_INVALID_DATE_FILTER',
+        message:
+          tanggalError ||
+          rangeError ||
+          'Parameter start_date dan end_date harus digunakan bersamaan',
+      });
+    }
+
+    const result = await getPendingContentForUser(userId, {
+      periode,
+      tanggal,
+      startDate,
+      endDate,
+    });
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        error_code: 'CLAIM_USER_NOT_FOUND',
+        message: 'User tidak ditemukan',
+      });
+    }
+
+    return sendSuccess(res, result);
+  } catch (err) {
+    return next(err);
+  }
+}
 
 function isConnectionError(err) {
   return err && err.code === 'ECONNREFUSED';
