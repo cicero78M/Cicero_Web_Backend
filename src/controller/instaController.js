@@ -21,6 +21,10 @@ import {
   validateTanggalFilter,
 } from "../utils/dateFilterValidation.js";
 import * as clientModel from "../model/clientModel.js";
+import {
+  authorizeReportRequest,
+  sendReportAuthorizationError,
+} from "../service/reportAuthorizationService.js";
 
 function parseOfficialOnlyFlag(value) {
   if (value === undefined || value === null) return false;
@@ -126,16 +130,16 @@ function parsePositiveDays(value) {
 }
 
 export async function getInstaRekapLikes(req, res) {
+  const authorization = await authorizeReportRequest(req);
+  if (authorization.error) return sendReportAuthorizationError(res, authorization.error);
   let client_id =
-    req.query.client_id ||
-    req.user?.client_id ||
-    req.headers["x-client-id"];
+    authorization.clientId;
   const periode = req.query.periode || "harian";
   const tanggal = req.query.tanggal;
   const startDate =
     req.query.start_date || req.query.tanggal_mulai;
   const endDate = req.query.end_date || req.query.tanggal_selesai;
-  const requestedRole = req.query.role || req.user?.role;
+  const requestedRole = req.user?.role;
   const requestedScope = req.query.scope;
   const requestedRegionalId = req.query.regional_id || req.user?.regional_id;
   const officialOnlyFlag = parseOfficialOnlyFlag(req.query.official_only);
@@ -358,25 +362,9 @@ export async function getInstaRekapLikes(req, res) {
 
   export async function getInstaPosts(req, res) {
     try {
-      const client_id =
-        req.query.client_id ||
-        req.user?.client_id ||
-        req.headers["x-client-id"];
-      if (!client_id) {
-        return res
-          .status(400)
-          .json({ success: false, message: "client_id wajib diisi" });
-      }
-      if (req.user?.client_ids && !req.user.client_ids.includes(client_id)) {
-        return res
-          .status(403)
-          .json({ success: false, message: "client_id tidak diizinkan" });
-      }
-      if (req.user?.client_id && req.user.client_id !== client_id) {
-        return res
-          .status(403)
-          .json({ success: false, message: "client_id tidak diizinkan" });
-      }
+      const authorization = await authorizeReportRequest(req);
+      if (authorization.error) return sendReportAuthorizationError(res, authorization.error);
+      const client_id = authorization.clientId;
       sendConsoleDebug({ tag: "INSTA", msg: `getInstaPosts ${client_id}` });
       const posts = await instaPostService.findTodayByClientId(client_id);
       sendSuccess(res, posts);
@@ -389,15 +377,15 @@ export async function getInstaRekapLikes(req, res) {
 
 export async function getInstagramPostsFiltered(req, res) {
   try {
+    const authorization = await authorizeReportRequest(req);
+    if (authorization.error) return sendReportAuthorizationError(res, authorization.error);
     let client_id =
-      req.query.client_id ||
-      req.user?.client_id ||
-      req.headers["x-client-id"];
+      authorization.clientId;
     const periode = req.query.periode || "harian";
     const tanggal = req.query.tanggal;
     const startDate = req.query.start_date || req.query.tanggal_mulai;
     const endDate = req.query.end_date || req.query.tanggal_selesai;
-    const requestedRole = req.query.role || req.user?.role;
+    const requestedRole = req.user?.role;
     const requestedScope = req.query.scope;
     const requestedRegionalId = req.query.regional_id || req.user?.regional_id;
     const regionalId = requestedRegionalId
