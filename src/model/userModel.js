@@ -446,6 +446,27 @@ export async function findUserById(user_id) {
   return rows[0];
 }
 
+export async function findClaimProfileById(userId) {
+  const uid = normalizeUserId(userId);
+  const { rows } = await query(
+    `SELECT u.user_id, u.nama, u.title, u.divisi, u.jabatan, u.desa,
+            u.client_id, u.whatsapp, u.email, u.insta, u.tiktok,
+            bool_or(r.role_name = 'ditbinmas') AS ditbinmas,
+            bool_or(r.role_name = 'ditlantas') AS ditlantas,
+            bool_or(r.role_name = 'bidhumas') AS bidhumas,
+            bool_or(r.role_name = 'ditsamapta') AS ditsamapta,
+            bool_or(r.role_name = 'ditintelkam') AS ditintelkam,
+            bool_or(r.role_name = 'operator') AS operator
+     FROM "user" u
+     LEFT JOIN user_roles ur ON u.user_id = ur.user_id
+     LEFT JOIN roles r ON ur.role_id = r.role_id
+     WHERE u.user_id = $1
+     GROUP BY u.user_id`,
+    [uid]
+  );
+  return rows[0] || null;
+}
+
 export async function findUserByEmail(email) {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) return null;
