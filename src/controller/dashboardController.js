@@ -3,59 +3,26 @@ import { getAllClients } from "../model/clientModel.js";
 import { getAllUsers } from "../model/userModel.js";
 import { getInstaPostCount, getTiktokPostCount } from "../service/postCountService.js";
 import { sendConsoleDebug } from "../middleware/debugHandler.js";
+import {
+  authorizeReportRequest,
+  sendReportAuthorizationError,
+} from "../service/reportAuthorizationService.js";
 
 const DIRECTORATE_ROLES = ["ditbinmas", "ditlantas", "bidhumas", "ditsamapta", "ditintelkam"];
 
 export async function getDashboardStats(req, res) {
   try {
     const requestedScope = req.query.scope;
-    const requestedRole = req.query.role || req.user?.role;
     const requestedRegionalId = req.query.regional_id || req.user?.regional_id;
-    const roleLower = requestedRole ? String(requestedRole).toLowerCase() : null;
     const scopeLower = requestedScope ? String(requestedScope).toLowerCase() : null;
     const regionalId = requestedRegionalId
       ? String(requestedRegionalId).trim().toUpperCase()
       : null;
     const usesStandardPayload = Boolean(req.query.role || req.query.scope);
 
-    let client_id =
-      req.user?.role === "operator"
-        ? req.user?.client_id
-        : req.query.client_id || req.user?.client_id || req.headers["x-client-id"];
-
-    if (!usesStandardPayload && roleLower === "ditbinmas") {
-      client_id = "ditbinmas";
-    }
-
-    if (!client_id) {
-      return res
-        .status(400)
-        .json({ success: false, message: "client_id wajib diisi" });
-    }
-
-    if (req.user?.client_ids) {
-      const userClientIds = Array.isArray(req.user.client_ids)
-        ? req.user.client_ids
-        : [req.user.client_ids];
-      const idsLower = userClientIds.map((c) => String(c).toLowerCase());
-      if (
-        !idsLower.includes(client_id.toLowerCase()) &&
-        roleLower !== client_id.toLowerCase()
-      ) {
-        return res
-          .status(403)
-          .json({ success: false, message: "client_id tidak diizinkan" });
-      }
-    }
-    if (
-      req.user?.client_id &&
-      req.user.client_id.toLowerCase() !== client_id.toLowerCase() &&
-      roleLower !== client_id.toLowerCase()
-    ) {
-      return res
-        .status(403)
-        .json({ success: false, message: "client_id tidak diizinkan" });
-    }
+    const authorization = await authorizeReportRequest(req);
+    if (authorization.error) return sendReportAuthorizationError(res, authorization.error);
+    let client_id = authorization.clientId;
 
     const periode = req.query.periode || "harian";
     const tanggal = req.query.tanggal;
@@ -63,7 +30,7 @@ export async function getDashboardStats(req, res) {
     const end_date = req.query.end_date || req.query.tanggal_selesai;
     const requiresRealtimeConsistency = Boolean(tanggal);
 
-    let resolvedRole = roleLower || null;
+    let resolvedRole = authorization.role;
     let resolvedScope = scopeLower || req.user?.scope || null;
     let postClientId = client_id;
     const tokenClientId = req.user?.client_id || null;

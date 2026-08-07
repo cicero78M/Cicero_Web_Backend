@@ -5,48 +5,16 @@ import {
 } from "../service/aggregatorService.js";
 import { sendSuccess } from "../utils/response.js";
 import { sendConsoleDebug } from "../middleware/debugHandler.js";
-import { normalizeClientId } from "../utils/utilsHelper.js";
+import {
+  authorizeReportRequest,
+  sendReportAuthorizationError,
+} from "../service/reportAuthorizationService.js";
 
 export async function getAggregator(req, res) {
   try {
-    const clientIdsFromUser = Array.isArray(req.user?.client_ids)
-      ? req.user.client_ids
-      : [];
-    const normalizedUserClientIds = clientIdsFromUser
-      .map((clientId) => normalizeClientId(clientId))
-      .filter(Boolean);
-    const clientId =
-      req.query.client_id ||
-      req.headers["x-client-id"] ||
-      req.user?.client_id ||
-      (normalizedUserClientIds.length === 1 ? normalizedUserClientIds[0] : null);
-    const normalizedClientId = normalizeClientId(clientId);
-
-    if (!normalizedClientId) {
-      sendConsoleDebug({
-        tag: "AGG",
-        msg: "getAggregator missing client identifier",
-      });
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message:
-            "client_id atau header x-client-id wajib diisi (atau gunakan token dengan satu client_id)",
-        });
-    }
-
-    const role = req.user?.role?.toLowerCase();
-    if (
-      role === "operator" &&
-      !normalizedUserClientIds.includes(normalizedClientId)
-    ) {
-      return res.status(403).json({
-        success: false,
-        message:
-          "client_id tidak terdaftar untuk operator ini. Gunakan client_id yang ada di token.",
-      });
-    }
+    const authorization = await authorizeReportRequest(req);
+    if (authorization.error) return sendReportAuthorizationError(res, authorization.error);
+    const normalizedClientId = authorization.clientId;
 
     const resolution = await resolveAggregatorClient(
       normalizedClientId,
@@ -80,14 +48,9 @@ export async function getAggregator(req, res) {
 
 export async function refreshAggregator(req, res) {
   try {
-    const clientId =
-      req.body?.client_id ||
-      req.body?.clientId ||
-      req.query.client_id ||
-      req.query.clientId ||
-      req.headers["x-client-id"] ||
-      req.user?.client_id ||
-      null;
+    const authorization = await authorizeReportRequest(req, { source: "body" });
+    if (authorization.error) return sendReportAuthorizationError(res, authorization.error);
+    const clientId = authorization.clientId;
 
     const limitRequest = parseInt(req.body?.limit ?? req.query.limit, 10);
     const limit = Number.isNaN(limitRequest) ? 10 : limitRequest;

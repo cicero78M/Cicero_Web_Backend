@@ -215,6 +215,18 @@ export const findById = async (client_id) => {
   return res.rows[0] || null;
 };
 
+export const isChildClientOf = async (clientId, parentClientId) => {
+  if (!(await hasParentClientIdColumn())) return false;
+  const res = await query(
+    `SELECT 1 FROM clients
+     WHERE LOWER(client_id) = LOWER($1)
+       AND LOWER(parent_client_id) = LOWER($2)
+     LIMIT 1`,
+    [clientId, parentClientId]
+  );
+  return res.rowCount > 0;
+};
+
 // Ambil client berdasarkan group (case-insensitive)
 export const findByGroup = async (group) => {
   const res = await query(

@@ -14,6 +14,10 @@ import {
   validateDateRange,
   validateTanggalFilter,
 } from '../utils/dateFilterValidation.js';
+import {
+  authorizeReportRequest,
+  sendReportAuthorizationError,
+} from '../service/reportAuthorizationService.js';
 
 const TIKTOK_PROFILE_URL_REGEX =
   /^https?:\/\/(www\.)?tiktok\.com\/@([A-Za-z0-9._]+)\/?(\?.*)?$/i;
@@ -87,15 +91,9 @@ export function normalizeTikTokUsername(value) {
 
 export async function getTiktokComments(req, res, next) {
   try {
-    const client_id =
-      req.query.client_id ||
-      req.user?.client_id ||
-      req.headers['x-client-id'];
-    if (!client_id) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'client_id wajib diisi' });
-    }
+    const authorization = await authorizeReportRequest(req);
+    if (authorization.error) return sendReportAuthorizationError(res, authorization.error);
+    const client_id = authorization.clientId;
 
     const posts = await tiktokPostService.findByClientId(client_id);
     let commentsData = [];
@@ -115,15 +113,9 @@ export async function getTiktokComments(req, res, next) {
 
 export async function getTiktokPosts(req, res) {
   try {
-    const client_id =
-      req.query.client_id ||
-      req.user?.client_id ||
-      req.headers["x-client-id"];
-    if (!client_id) {
-      return res
-        .status(400)
-        .json({ success: false, message: "client_id wajib diisi" });
-    }
+    const authorization = await authorizeReportRequest(req);
+    if (authorization.error) return sendReportAuthorizationError(res, authorization.error);
+    const client_id = authorization.clientId;
 
     const posts = await tiktokPostService.findByClientId(client_id);
     sendSuccess(res, posts);
@@ -136,15 +128,15 @@ export async function getTiktokPosts(req, res) {
 import { getRekapKomentarByClient } from '../model/tiktokCommentModel.js';
 
 export async function getTiktokRekapKomentar(req, res) {
+  const authorization = await authorizeReportRequest(req);
+  if (authorization.error) return sendReportAuthorizationError(res, authorization.error);
   let client_id =
-    req.query.client_id ||
-    req.user?.client_id ||
-    req.headers['x-client-id'];
+    authorization.clientId;
   const periode = req.query.periode || 'harian';
   const tanggal = req.query.tanggal;
   const startDate = req.query.start_date || req.query.tanggal_mulai;
   const endDate = req.query.end_date || req.query.tanggal_selesai;
-  const requestedRole = req.query.role || req.user?.role;
+  const requestedRole = req.user?.role;
   const requestedScope = req.query.scope;
   const requestedRegionalId = req.query.regional_id || req.user?.regional_id;
   const regionalId = requestedRegionalId
@@ -386,15 +378,9 @@ export async function getRapidTiktokProfile(req, res) {
 
 export async function getRapidTiktokInfo(req, res) {
   try {
-    const client_id =
-      req.query.client_id ||
-      req.user?.client_id ||
-      req.headers['x-client-id'];
-    if (!client_id) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'client_id wajib diisi' });
-    }
+    const authorization = await authorizeReportRequest(req);
+    if (authorization.error) return sendReportAuthorizationError(res, authorization.error);
+    const client_id = authorization.clientId;
     const client = await clientService.findClientById(client_id);
     const username = client?.client_tiktok;
     if (!username) {
