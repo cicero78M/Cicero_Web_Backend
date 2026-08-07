@@ -7,7 +7,12 @@ describe('updateUserData', () => {
   beforeEach(async () => {
     jest.resetModules();
     jest.unstable_mockModule('../src/model/userModel.js', () => ({
-      updateUser: jest.fn().mockResolvedValue({ ok: true }),
+      updateUser: jest.fn().mockResolvedValue({
+        user_id: '1',
+        nama: 'Test',
+        password_hash: 'must-not-leak',
+        reset_token: 'must-not-leak',
+      }),
       findUserById: jest.fn().mockResolvedValue({
         user_id: '1',
         password_hash: 'hashed-password',
@@ -22,8 +27,12 @@ describe('updateUserData', () => {
       },
     }));
     jest.unstable_mockModule('../src/model/claimPasswordResetModel.js', () => ({}));
+    jest.unstable_mockModule('../src/config/redis.js', () => ({
+      default: {},
+    }));
     jest.unstable_mockModule('../src/service/emailService.js', () => ({
       sendClaimPasswordResetEmail: jest.fn(),
+      sendOtpEmail: jest.fn(),
     }));
     jest.unstable_mockModule('../src/service/telegramService.js', () => ({
       sendTelegramAdminMessage: jest.fn(),
@@ -60,6 +69,9 @@ describe('updateUserData', () => {
     );
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    const response = res.json.mock.calls[0][0];
+    expect(response.data).not.toHaveProperty('password_hash');
+    expect(response.data).not.toHaveProperty('reset_token');
   });
 
   test('normalizes and validates whatsapp number', async () => {

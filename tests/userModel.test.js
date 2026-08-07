@@ -7,6 +7,7 @@ jest.unstable_mockModule('../src/repository/db.js', () => ({
 }));
 
 let findUserByIdAndWhatsApp;
+let findClaimProfileById;
 let findUserByIdAndClient;
 let createUser;
 let updateUserField;
@@ -24,6 +25,7 @@ let getUsersByClientAndRole;
 beforeAll(async () => {
   const mod = await import('../src/model/userModel.js');
   findUserByIdAndWhatsApp = mod.findUserByIdAndWhatsApp;
+  findClaimProfileById = mod.findClaimProfileById;
   findUserByIdAndClient = mod.findUserByIdAndClient;
   createUser = mod.createUser;
   updateUserField = mod.updateUserField;
@@ -41,6 +43,21 @@ beforeAll(async () => {
 
 beforeEach(() => {
   mockQuery.mockReset();
+});
+
+test('findClaimProfileById selects only claim-safe profile columns', async () => {
+  mockQuery.mockResolvedValueOnce({ rows: [{ user_id: '1', nama: 'Test' }] });
+
+  await expect(findClaimProfileById('1')).resolves.toEqual({
+    user_id: '1',
+    nama: 'Test',
+  });
+
+  const [sql, params] = mockQuery.mock.calls[0];
+  expect(sql).not.toContain('u.*');
+  expect(sql).not.toContain('password_hash');
+  expect(sql).toContain('u.whatsapp, u.email, u.insta, u.tiktok');
+  expect(params).toEqual(['1']);
 });
 
 test('findUserByIdAndWhatsApp returns user', async () => {

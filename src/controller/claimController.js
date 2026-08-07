@@ -39,6 +39,16 @@ const pendingContentPeriods = new Set([
   'semua',
 ]);
 
+function toPendingContentDto(result) {
+  return {
+    user_id: result.user_id,
+    timezone: result.timezone,
+    filters: result.filters,
+    instagram: result.instagram,
+    tiktok: result.tiktok,
+  };
+}
+
 export async function getPendingContent(req, res, next) {
   try {
     const userId = req.user?.user_id;
@@ -98,7 +108,7 @@ export async function getPendingContent(req, res, next) {
       });
     }
 
-    return sendSuccess(res, result);
+    return sendSuccess(res, toPendingContentDto(result));
   } catch (err) {
     return next(err);
   }
@@ -117,11 +127,35 @@ function sendValidationError(res, { errorCode, field, message }) {
   });
 }
 
-function withoutClaimPasswordHash(user) {
+const claimProfileFields = [
+  'user_id',
+  'nama',
+  'title',
+  'divisi',
+  'jabatan',
+  'desa',
+  'client_id',
+  'whatsapp',
+  'email',
+  'insta',
+  'tiktok',
+  'instagram_accounts',
+  'tiktok_accounts',
+  'ditbinmas',
+  'ditlantas',
+  'bidhumas',
+  'ditsamapta',
+  'ditintelkam',
+  'operator',
+];
+
+function toClaimProfileDto(user) {
   if (!user) return user;
-  const sanitizedUser = { ...user };
-  delete sanitizedUser.password_hash;
-  return sanitizedUser;
+  return Object.fromEntries(
+    claimProfileFields
+      .filter((field) => Object.hasOwn(user, field))
+      .map((field) => [field, user[field]])
+  );
 }
 
 function isValidEmailFormat(value) {
@@ -343,7 +377,14 @@ export async function getUserData(req, res, next) {
       });
     }
 
-    sendSuccess(res, user);
+    const profile = await userModel.findClaimProfileById(nrp);
+    if (!profile) {
+      return res
+        .status(404)
+        .json({ success: false, message: 'User tidak ditemukan' });
+    }
+
+    sendSuccess(res, toClaimProfileDto(profile));
   } catch (err) {
     next(err);
   }
@@ -360,14 +401,14 @@ export async function getClaimMe(req, res, next) {
       });
     }
 
-    const user = await userModel.findUserById(userId);
+    const user = await userModel.findClaimProfileById(userId);
     if (!user) {
       return res
         .status(404)
         .json({ success: false, message: 'User tidak ditemukan' });
     }
 
-    return sendSuccess(res, withoutClaimPasswordHash(user));
+    return sendSuccess(res, toClaimProfileDto(user));
   } catch (err) {
     return next(err);
   }
@@ -703,7 +744,7 @@ async function updateClaimUser(req, res, next, authenticatedUserId = null) {
 
     const userSocialAccounts = await userModel.findUserSocialAccounts(nrp);
     const responseData = {
-      ...withoutClaimPasswordHash(updated),
+      ...toClaimProfileDto(updated),
       instagram_accounts: userSocialAccounts.instagram,
       tiktok_accounts: userSocialAccounts.tiktok,
     };

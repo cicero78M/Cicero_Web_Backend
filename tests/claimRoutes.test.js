@@ -23,6 +23,12 @@ describe('claim routes credential flow', () => {
         password_hash: 'hashed-password',
         email: 'user1@cicero.id',
       }),
+      findClaimProfileById: jest.fn().mockResolvedValue({
+        user_id: '1',
+        nama: 'User 1',
+        password_hash: 'must-not-leak',
+        reset_token: 'must-not-leak',
+      }),
       setClaimCredentials: jest.fn().mockResolvedValue({
         user_id: '1',
       }),
@@ -108,6 +114,8 @@ describe('claim routes credential flow', () => {
     expect(userModelMocks.setClaimCredentials).toHaveBeenCalledWith('1', {
       passwordHash: 'hashed-password',
     });
+    expect(res.body.data.password_hash).toBeUndefined();
+    expect(res.body.data.reset_token).toBeUndefined();
   });
 
   test('rejects weak password for claim register', async () => {
@@ -143,6 +151,8 @@ describe('claim routes credential flow', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
+    expect(res.body.data.password_hash).toBeUndefined();
+    expect(res.body.data.reset_token).toBeUndefined();
   });
 
   test('creates claim password reset token for matching nrp/email', async () => {
@@ -192,6 +202,8 @@ describe('claim routes credential flow', () => {
     expect(userModelMocks.updateUser).toHaveBeenCalledWith('1', {
       nama: 'User 1',
     });
+    expect(res.body.data.password_hash).toBeUndefined();
+    expect(res.body.data.reset_token).toBeUndefined();
   });
 
   test('reads claim profile only from authenticated user identity', async () => {
@@ -201,9 +213,12 @@ describe('claim routes credential flow', () => {
       .send({ nrp: '67890' });
 
     expect(res.status).toBe(200);
-    expect(userModelMocks.findUserById).toHaveBeenCalledWith('12345');
+    expect(userModelMocks.findClaimProfileById).toHaveBeenCalledWith('12345');
     expect(res.body.data.password_hash).toBeUndefined();
-    expect(userModelMocks.findUserById).not.toHaveBeenCalledWith('67890');
+    expect(res.body.data.reset_token).toBeUndefined();
+    expect(userModelMocks.findClaimProfileById).not.toHaveBeenCalledWith(
+      '67890'
+    );
   });
 
   test('updates claim profile only from authenticated user identity without password', async () => {
@@ -220,6 +235,8 @@ describe('claim routes credential flow', () => {
       expect.stringMatching(/67890|54321/),
       expect.anything()
     );
+    expect(res.body.data.password_hash).toBeUndefined();
+    expect(res.body.data.reset_token).toBeUndefined();
   });
 
   test('requires authentication for claim self-service endpoints', async () => {

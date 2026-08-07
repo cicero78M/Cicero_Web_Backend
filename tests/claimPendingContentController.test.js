@@ -64,7 +64,10 @@ describe('getPendingContent controller', () => {
   });
 
   test('uses only user_id from the token and defaults to the Jakarta daily filter', async () => {
-    getPendingContentForUser.mockResolvedValue({ user_id: 'token-user' });
+    getPendingContentForUser.mockResolvedValue({
+      user_id: 'token-user',
+      password_hash: 'must-not-leak',
+    });
     const res = createResponse();
     await getPendingContent(
       {
@@ -82,7 +85,14 @@ describe('getPendingContent controller', () => {
     });
     expect(res.json).toHaveBeenCalledWith({
       success: true,
-      data: { user_id: 'token-user' },
+      data: {
+        user_id: 'token-user',
+        timezone: undefined,
+        filters: undefined,
+        instagram: undefined,
+        tiktok: undefined,
+      },
     });
+    expect(res.json.mock.calls[0][0].data).not.toHaveProperty('password_hash');
   });
 });
