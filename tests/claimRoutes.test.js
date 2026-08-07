@@ -39,6 +39,7 @@ describe('claim routes credential flow', () => {
     };
     emailServiceMocks = {
       sendClaimPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
+      sendOtpEmail: jest.fn().mockResolvedValue(undefined),
     };
     telegramServiceMocks = {
       sendTelegramAdminMessage: jest.fn().mockResolvedValue(undefined),
