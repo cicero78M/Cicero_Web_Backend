@@ -11,12 +11,39 @@ export function createTelegramLifecycle({
 }) {
   let initializationPromise = null;
 
+  function getTelegramErrorMessage(error) {
+    return [error?.message, error?.response?.description]
+      .filter(Boolean)
+      .join(' ');
+  }
+
   function getTelegramErrorCode(error) {
+    const messageCode =
+      getTelegramErrorMessage(error).match(/\b(\d{3})\b/)?.[1];
+
     return (
+      error?.response?.error_code ??
+      error?.code ??
+      messageCode ??
       error?.response?.body?.error_code ??
       error?.response?.statusCode ??
-      error?.code ??
       'UNKNOWN'
+    );
+  }
+
+  function is409Conflict(error) {
+    const errorCodes = [
+      error?.response?.error_code,
+      error?.code,
+      // Backward compatibility for older adapters and test doubles.
+      error?.response?.body?.error_code,
+      error?.response?.statusCode,
+      error?.statusCode,
+    ];
+
+    return (
+      errorCodes.some((code) => Number(code) === 409) ||
+      /\b409\b|409\s+Conflict/i.test(getTelegramErrorMessage(error))
     );
   }
 
@@ -80,17 +107,12 @@ export function createTelegramLifecycle({
             error
           );
 
-          const is409Conflict =
-            (error.response && error.response.statusCode === 409) ||
-            (error.code === 'ETELEGRAM' &&
-              error.message.includes('409 Conflict'));
-
-          if (is409Conflict) {
+          if (is409Conflict(error)) {
             console.warn(
-              '[Telegram] Detected 409 Conflict - another bot instance may be running'
+              '[Telegram] 409 Conflict: this bot token is being used for polling by another process'
             );
             console.warn(
-              '[Telegram] Stopping this instance to prevent conflicts'
+              '[Telegram] Ensure only one bot instance is active for this token, then restart the intended instance'
             );
 
             setBotReady(false);

@@ -20,17 +20,25 @@ describe('Telegram lifecycle', () => {
 
   function createHarness({ launchError } = {}) {
     const registrations = [];
+    const eventHandlers = new Map();
     let bot = null;
     let botReady = false;
     let isInitializing = false;
 
     const botInstance = {
-      on: jest.fn((event) => registrations.push(event)),
+      started: false,
+      on: jest.fn((event, handler) => {
+        registrations.push(event);
+        eventHandlers.set(event, handler);
+      }),
       startPolling: jest.fn(async () => {
         registrations.push('startPolling');
         if (launchError) throw launchError;
+        botInstance.started = true;
       }),
-      stopPolling: jest.fn(),
+      stopPolling: jest.fn(() => {
+        botInstance.started = false;
+      }),
     };
     const TelegramBot = jest.fn(() => botInstance);
     const lifecycle = createTelegramLifecycle({
@@ -51,7 +59,13 @@ describe('Telegram lifecycle', () => {
       setupCallbackHandlers: () => registrations.push('callbacks'),
     });
 
-    return { lifecycle, TelegramBot, botInstance, registrations };
+    return {
+      lifecycle,
+      TelegramBot,
+      botInstance,
+      registrations,
+      eventHandlers,
+    };
   }
 
   it('registers every handler before polling starts', async () => {
@@ -93,5 +107,29 @@ describe('Telegram lifecycle', () => {
     botInstance.startPolling.mockResolvedValueOnce();
     await expect(lifecycle.initializeTelegramBot()).resolves.toBe(botInstance);
     expect(lifecycle.isTelegramReady()).toBe(true);
+  });
+
+  it('stops polling and clears readiness for a Telegraf 409 conflict', async () => {
+    const { lifecycle, botInstance, eventHandlers } = createHarness();
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await lifecycle.initializeTelegramBot();
+    expect(lifecycle.isTelegramReady()).toBe(true);
+    expect(botInstance.started).toBe(true);
+
+    eventHandlers.get('polling_error')({
+      response: {
+        error_code: 409,
+        description: 'Conflict: terminated by other getUpdates request',
+      },
+    });
+
+    expect(botInstance.stopPolling).toHaveBeenCalledTimes(1);
+    expect(botInstance.started).toBe(false);
+    expect(lifecycle.isTelegramReady()).toBe(false);
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining('only one bot instance is active')
+    );
   });
 });
