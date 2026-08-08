@@ -8,13 +8,15 @@ const mockOnText = jest.fn();
 const mockOn = jest.fn();
 const mockAnswerCallbackQuery = jest.fn();
 const mockEditMessageReplyMarkup = jest.fn();
+const mockStartPolling = jest.fn().mockResolvedValue(undefined);
 
 const mockBot = {
   sendMessage: mockSendMessage,
   onText: mockOnText,
   on: mockOn,
   answerCallbackQuery: mockAnswerCallbackQuery,
-  editMessageReplyMarkup: mockEditMessageReplyMarkup
+  editMessageReplyMarkup: mockEditMessageReplyMarkup,
+  startPolling: mockStartPolling
 };
 
 jest.unstable_mockModule('../src/service/telegramBotAdapter.js', () => ({
@@ -47,16 +49,16 @@ describe('telegramService', () => {
   });
 
   describe('initializeTelegramBot', () => {
-    it('should skip initialization when no token provided', () => {
+    it('should skip initialization when no token provided', async () => {
       delete process.env.TELEGRAM_BOT_TOKEN;
-      const bot = initializeTelegramBot();
+      const bot = await initializeTelegramBot();
       expect(bot).toBeNull();
     });
 
-    it('should skip initialization when TELEGRAM_SERVICE_SKIP_INIT is true', () => {
+    it('should skip initialization when TELEGRAM_SERVICE_SKIP_INIT is true', async () => {
       process.env.TELEGRAM_BOT_TOKEN = 'test-token';
       process.env.TELEGRAM_SERVICE_SKIP_INIT = 'true';
-      const bot = initializeTelegramBot();
+      const bot = await initializeTelegramBot();
       expect(bot).toBeNull();
     });
   });

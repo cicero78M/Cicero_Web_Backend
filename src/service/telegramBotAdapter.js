@@ -95,6 +95,7 @@ export default class TelegramBotAdapter {
       this.started = true;
     } catch (error) {
       this.emit('polling_error', error);
+      throw error;
     }
   }
 

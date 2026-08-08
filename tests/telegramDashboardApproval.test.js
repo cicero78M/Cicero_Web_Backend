@@ -5,6 +5,7 @@ const mockOnText = jest.fn();
 const mockOn = jest.fn();
 const mockAnswerCallbackQuery = jest.fn();
 const mockEditMessageReplyMarkup = jest.fn();
+const mockStartPolling = jest.fn().mockResolvedValue(undefined);
 const mockFindByUsername = jest.fn();
 const mockUpdateApprovalStatus = jest.fn();
 const getEffectiveApprovalStatus = user => {
@@ -21,6 +22,7 @@ const mockBot = {
   on: mockOn,
   answerCallbackQuery: mockAnswerCallbackQuery,
   editMessageReplyMarkup: mockEditMessageReplyMarkup,
+  startPolling: mockStartPolling,
 };
 
 jest.unstable_mockModule('../src/service/telegramBotAdapter.js', () => ({
@@ -48,10 +50,10 @@ const {
   finalizeRejection,
 } = await import('../src/service/telegramService.js');
 
-beforeEach(() => {
+beforeEach(async () => {
   jest.clearAllMocks();
   process.env.TELEGRAM_BOT_TOKEN = 'test-token';
-  initializeTelegramBot();
+  await initializeTelegramBot();
 });
 
 test('processApproval approves only pending dashboard users', async () => {
