@@ -378,6 +378,45 @@ describe('POST /dashboard-register', () => {
         expect.stringContaining('INSERT INTO dashboard_user_clients'),
         [expect.any(String), 'c1']
       );
+      expect(mockSendUserApprovalRequest).toHaveBeenCalledWith({
+        dashboard_user_id: expect.any(String),
+        username: 'dash',
+        email: 'dash@example.com',
+        role: 'operator',
+        clientIds: 'c1',
+        clientNames: 'Client 1 (c1)'
+      });
+      expect(res.body.notification_status).toBe('sent');
+  });
+
+  test('keeps the account when the approval notification fails', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ role_id: 1, role_name: 'operator' }] })
+      .mockResolvedValueOnce({ rows: [{ dashboard_user_id: 'd1', status: false, approval_status: 'pending' }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ client_id: 'c1', nama: 'Client 1' }] });
+    mockSendUserApprovalRequest.mockRejectedValueOnce(new Error('Telegram unavailable'));
+
+    const res = await request(app)
+      .post('/api/auth/dashboard-register')
+      .send({ username: 'dash', password: 'pass', email: 'dash@example.com', client_ids: ['c1'] });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      success: true,
+      status: false,
+      approval_status: 'pending',
+      notification_status: 'failed'
+    });
+    expect(mockSendUserApprovalRequest).toHaveBeenCalledWith({
+      dashboard_user_id: expect.any(String),
+      username: 'dash',
+      email: 'dash@example.com',
+      role: 'operator',
+      clientIds: 'c1',
+      clientNames: 'Client 1 (c1)'
+    });
   });
 
   test('accepts single client_id field', async () => {

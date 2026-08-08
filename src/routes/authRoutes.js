@@ -46,6 +46,12 @@ export {
 
 const router = express.Router();
 
+function getApprovalNotificationStatus(results) {
+  if (!Array.isArray(results)) return results ? 'sent' : 'failed';
+  if (results.length === 0) return 'not_configured';
+  return results.some(Boolean) ? 'sent' : 'bot_unavailable';
+}
+
 function getRequestToken(req) {
   const authorizationHeader = req.headers.authorization;
   if (authorizationHeader?.startsWith('Bearer ')) {
@@ -234,17 +240,31 @@ router.post('/dashboard-register', async (req, res) => {
     }\n\nBalas approvedash#${username} untuk menyetujui atau denydash#${username} untuk menolak.`
   );
 
-  // Send approval request to admin via Telegram
-  sendUserApprovalRequest({
+  // The account and client relations are the source of truth. Telegram delivery
+  // is awaited and audited, but a delivery failure must not roll registration back.
+  let notificationStatus;
+  try {
+    const notificationResults = await sendUserApprovalRequest({
+      dashboard_user_id,
+      username,
+      email,
+      role: roleRow?.role_name,
+      clientIds: clientIds.length ? clientIds.join(', ') : '-',
+      clientNames: clientNamesList.length ? clientNamesList.join(', ') : '-'
+    });
+    notificationStatus = getApprovalNotificationStatus(notificationResults);
+  } catch (err) {
+    notificationStatus = 'failed';
+    console.warn(`[Telegram] Failed to send approval request: ${err.message}`);
+  }
+
+  console.log('[AUTH_AUDIT]', JSON.stringify({
+    event: 'dashboard_registration_approval_notification',
     dashboard_user_id,
     username,
-    email,
-    role: roleRow?.role_name,
-    clientIds: clientIds.length ? clientIds.join(', ') : '-',
-    clientNames: clientNamesList.length ? clientNamesList.join(', ') : '-'
-  }).catch((err) => {
-    console.warn(`[Telegram] Failed to send approval request: ${err.message}`);
-  });
+    client_ids: clientIds,
+    notification_status: notificationStatus
+  }));
 
   return res
     .status(201)
@@ -252,7 +272,8 @@ router.post('/dashboard-register', async (req, res) => {
       success: true,
       dashboard_user_id: user.dashboard_user_id,
       status: user.status,
-      approval_status: user.approval_status
+      approval_status: user.approval_status,
+      notification_status: notificationStatus
     });
 });
 
