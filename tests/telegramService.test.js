@@ -27,6 +27,8 @@ const {
   initializeTelegramBot,
   getTelegramBot,
   isTelegramReady,
+  canSendTelegramMessages,
+  isTelegramPolling,
   isTelegramAdmin,
   sendTelegramMessage,
   sendTelegramAdminMessage,
@@ -58,11 +60,14 @@ describe('telegramService', () => {
       expect(bot).toBeNull();
     });
 
-    it('should skip initialization when TELEGRAM_SERVICE_SKIP_INIT is true', async () => {
+    it('should initialize sending transport without polling when TELEGRAM_SERVICE_SKIP_INIT is true', async () => {
       process.env.TELEGRAM_BOT_TOKEN = 'test-token';
       process.env.TELEGRAM_SERVICE_SKIP_INIT = 'true';
       const bot = await initializeTelegramBot();
-      expect(bot).toBeNull();
+      expect(bot).toBe(mockBot);
+      expect(canSendTelegramMessages()).toBe(true);
+      expect(isTelegramPolling()).toBe(false);
+      expect(mockStartPolling).not.toHaveBeenCalled();
     });
   });
 
@@ -105,10 +110,15 @@ describe('telegramService', () => {
   });
 
   describe('sendTelegramMessage', () => {
-    it('should skip sending when bot is not ready', async () => {
+    it('should keep sending when polling is skipped', async () => {
       process.env.TELEGRAM_SERVICE_SKIP_INIT = 'true';
+      mockSendMessage.mockResolvedValue({ message_id: 1 });
       const result = await sendTelegramMessage('123456', 'Test message');
-      expect(result).toEqual({ chatId: '123456', status: 'bot_not_ready' });
+      expect(result).toEqual({
+        chatId: '123456',
+        status: 'sent',
+        message: { message_id: 1 }
+      });
     });
 
     it('should send message with markdown parse mode', async () => {
@@ -195,6 +205,24 @@ describe('telegramService', () => {
   });
 
   describe('sendTelegramAdminMessage', () => {
+    it('sends to admins without polling when TELEGRAM_SERVICE_SKIP_INIT is true', async () => {
+      process.env.TELEGRAM_ADMIN_CHAT_ID = '987654';
+      process.env.TELEGRAM_BOT_TOKEN = 'test-token';
+      process.env.TELEGRAM_SERVICE_SKIP_INIT = 'true';
+      mockSendMessage.mockResolvedValue({ message_id: 2 });
+
+      await initializeTelegramBot();
+      const result = await sendTelegramAdminMessage('Admin message');
+
+      expect(mockStartPolling).not.toHaveBeenCalled();
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        '987654',
+        'Admin message',
+        expect.objectContaining({ parse_mode: 'Markdown' })
+      );
+      expect(result).toMatchObject({ sentCount: 1, failedCount: 0 });
+    });
+
     it('should return an empty summary when admin chat ID is not configured', async () => {
       delete process.env.TELEGRAM_ADMIN_CHAT_ID;
       const result = await sendTelegramAdminMessage('Admin message');

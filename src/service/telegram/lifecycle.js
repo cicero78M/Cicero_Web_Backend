@@ -10,6 +10,7 @@ export function createTelegramLifecycle({
   setupCallbackHandlers,
 }) {
   let initializationPromise = null;
+  let handlersRegistered = false;
 
   function getTelegramErrorMessage(error) {
     return [error?.message, error?.response?.description]
@@ -63,13 +64,6 @@ export function createTelegramLifecycle({
       return null;
     }
 
-    if (process.env.TELEGRAM_SERVICE_SKIP_INIT === 'true') {
-      console.log(
-        '[Telegram] Polling intentionally disabled: TELEGRAM_SERVICE_SKIP_INIT=true'
-      );
-      return null;
-    }
-
     if (getIsInitializing()) {
       console.log(
         '[Telegram] Bot initialization already in progress, skipping duplicate call'
@@ -77,9 +71,16 @@ export function createTelegramLifecycle({
       return initializationPromise;
     }
 
-    if (getBot() && getBotReady()) {
+    const skipPolling = process.env.TELEGRAM_SERVICE_SKIP_INIT === 'true';
+
+    if (getBot() && (getBotReady() || skipPolling)) {
+      if (skipPolling) {
+        console.log(
+          '[Telegram] Sending transport ready; polling intentionally disabled: TELEGRAM_SERVICE_SKIP_INIT=true'
+        );
+      }
       console.log(
-        '[Telegram] Bot already initialized, returning existing instance'
+        '[Telegram] Bot transport already initialized, returning existing instance'
       );
       return getBot();
     }
@@ -88,62 +89,62 @@ export function createTelegramLifecycle({
       setIsInitializing(true);
 
       try {
-        const existingBot = getBot();
-        if (existingBot) {
-          try {
-            existingBot.stopPolling();
-            console.log('[Telegram] Stopped existing bot polling');
-          } catch (stopError) {
-            console.warn(
-              '[Telegram] Error stopping existing bot:',
-              getSafeTelegramErrorMessage(stopError, token)
+        let bot = getBot();
+        if (!bot) {
+          bot = new TelegramBot(token, {
+            polling: {
+              interval: 1000,
+              autoStart: false,
+              params: {
+                timeout: 10,
+              },
+            },
+          });
+
+          setBot(bot);
+          setBotReady(false);
+
+          bot.on('polling_error', (error) => {
+            console.error(
+              `[Telegram] Polling error (Telegram code: ${getTelegramErrorCode(error)}):`,
+              getSafeTelegramErrorMessage(error, token)
             );
-          }
+
+            if (is409Conflict(error)) {
+              console.warn(
+                '[Telegram] 409 Conflict: this bot token is being used for polling by another process'
+              );
+              console.warn(
+                '[Telegram] Ensure only one bot instance is active for this token, then restart the intended instance'
+              );
+
+              setBotReady(false);
+
+              try {
+                bot.stopPolling();
+                console.log('[Telegram] Polling stopped due to conflict');
+              } catch (stopErr) {
+                console.error(
+                  '[Telegram] Error stopping polling:',
+                  getSafeTelegramErrorMessage(stopErr, token)
+                );
+              }
+            }
+          });
         }
 
-        const bot = new TelegramBot(token, {
-          polling: {
-            interval: 1000,
-            autoStart: false,
-            params: {
-              timeout: 10,
-            },
-          },
-        });
-
-        setBot(bot);
-        setBotReady(false);
-
-        bot.on('polling_error', (error) => {
-          console.error(
-            `[Telegram] Polling error (Telegram code: ${getTelegramErrorCode(error)}):`,
-            getSafeTelegramErrorMessage(error, token)
+        if (skipPolling) {
+          console.log(
+            '[Telegram] Sending transport ready; polling intentionally disabled: TELEGRAM_SERVICE_SKIP_INIT=true'
           );
+          return bot;
+        }
 
-          if (is409Conflict(error)) {
-            console.warn(
-              '[Telegram] 409 Conflict: this bot token is being used for polling by another process'
-            );
-            console.warn(
-              '[Telegram] Ensure only one bot instance is active for this token, then restart the intended instance'
-            );
-
-            setBotReady(false);
-
-            try {
-              bot.stopPolling();
-              console.log('[Telegram] Polling stopped due to conflict');
-            } catch (stopErr) {
-              console.error(
-                '[Telegram] Error stopping polling:',
-                getSafeTelegramErrorMessage(stopErr, token)
-              );
-            }
-          }
-        });
-
-        setupCommandHandlers();
-        setupCallbackHandlers();
+        if (!handlersRegistered) {
+          setupCommandHandlers();
+          setupCallbackHandlers();
+          handlersRegistered = true;
+        }
 
         await bot.startPolling();
         setBotReady(true);
@@ -173,6 +174,14 @@ export function createTelegramLifecycle({
   }
 
   function isTelegramReady() {
+    return canSendTelegramMessages();
+  }
+
+  function canSendTelegramMessages() {
+    return getBot() !== null;
+  }
+
+  function isTelegramPolling() {
     return getBotReady() && getBot() !== null;
   }
 
@@ -180,5 +189,7 @@ export function createTelegramLifecycle({
     initializeTelegramBot,
     getTelegramBot,
     isTelegramReady,
+    canSendTelegramMessages,
+    isTelegramPolling,
   };
 }

@@ -63,7 +63,7 @@ TELEGRAM_SERVICE_SKIP_INIT=false
 
 Telegram permits only one active long-polling consumer for a bot token. Run polling for a given `TELEGRAM_BOT_TOKEN` in exactly one process. Do not start a second PM2 instance, cluster worker, local process, or another server with the same token and polling enabled; Telegram will terminate the competing `getUpdates` request with a `409 Conflict`.
 
-If multiple application processes must send notifications with the same token, designate exactly one process as the polling owner and set `TELEGRAM_SERVICE_SKIP_INIT=true` on every non-owner. A skipped process does not receive commands or callback queries.
+If multiple application processes must send notifications with the same token, designate exactly one process as the polling owner and set `TELEGRAM_SERVICE_SKIP_INIT=true` on every non-owner. Every process with `TELEGRAM_BOT_TOKEN` still creates a sending transport and can call the Bot API. A skipped process does not start polling, register command handlers, or register callback-query handlers, so only the polling owner consumes updates.
 
 ## Step 4: Restart the Application
 
@@ -279,7 +279,7 @@ Non-admin users will receive:
 Startup logs distinguish these states without printing `TELEGRAM_BOT_TOKEN`:
 
 - `[Telegram] Bot unavailable: TELEGRAM_BOT_TOKEN is not configured` — the process has no token. Configure it and, under PM2, run `pm2 restart cicero_v2 --update-env`.
-- `[Telegram] Polling intentionally disabled: TELEGRAM_SERVICE_SKIP_INIT=true` — polling was explicitly disabled. This is expected only for a non-owner process or a deliberately disabled deployment.
+- `[Telegram] Sending transport ready; polling intentionally disabled: TELEGRAM_SERVICE_SKIP_INIT=true` — the process can send notifications but does not consume commands or callback queries. This is expected for a non-owner process.
 - `[Telegram] Polling failed to start (Telegram code: ...): ...` — a token was available but polling could not start. Investigate the sanitized error and verify that no other process polls with this token.
 - `[Telegram] 409 Conflict: this bot token is being used for polling by another process` — stop the duplicate poller and leave exactly one polling owner.
 
@@ -364,13 +364,15 @@ Each chat ID in this list will:
 const adminChatIds = process.env.TELEGRAM_ADMIN_CHAT_ID?.split(',') || [];
 ```
 
-### Disable Telegram (Testing)
+### Disable Telegram Polling (Testing)
 
 For testing without Telegram:
 
 ```bash
 TELEGRAM_SERVICE_SKIP_INIT=true npm test
 ```
+
+This flag does not disable outbound Telegram messages when `TELEGRAM_BOT_TOKEN` is configured. Remove the token as well when a test process must have no Telegram sending transport.
 
 ## Resources
 
