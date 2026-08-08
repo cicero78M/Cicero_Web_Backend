@@ -8,20 +8,48 @@ export async function sendTelegramAdminMessage(sendTelegramMessage, message, opt
 
   if (adminChatIds.length === 0) {
     console.warn('[Telegram] TELEGRAM_ADMIN_CHAT_ID not configured');
-    return [];
+    return {
+      totalTargets: 0,
+      sentCount: 0,
+      failedCount: 0,
+      results: [],
+    };
   }
 
   const results = await Promise.allSettled(
     adminChatIds.map((chatId) => sendTelegramMessage(chatId, message, options)),
   );
 
-  results.forEach((result, index) => {
-    if (result.status === 'rejected') {
-      console.error(`[Telegram] Failed to send message to admin ${adminChatIds[index]}:`, result.reason);
+  const deliveryResults = results.map((result, index) => {
+    const chatId = adminChatIds[index];
+
+    if (result.status === 'fulfilled' && result.value?.status === 'sent') {
+      return result.value;
     }
+
+    if (result.status === 'fulfilled' && result.value?.status === 'bot_not_ready') {
+      return result.value;
+    }
+
+    console.error(`[Telegram] Failed to send message to admin ${chatId}`);
+    return {
+      chatId,
+      status: 'failed',
+      error: {
+        code: result.status === 'rejected' ? 'SEND_REJECTED' : 'INVALID_SEND_RESULT',
+        message: 'Telegram message delivery failed',
+      },
+    };
   });
 
-  return results.filter((r) => r.status === 'fulfilled').map((r) => r.value);
+  const sentCount = deliveryResults.filter((result) => result.status === 'sent').length;
+
+  return {
+    totalTargets: adminChatIds.length,
+    sentCount,
+    failedCount: adminChatIds.length - sentCount,
+    results: deliveryResults,
+  };
 }
 
 export function buildLoginLogNotificationMessage(logData) {
