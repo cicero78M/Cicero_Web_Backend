@@ -17,6 +17,12 @@ export function createTelegramLifecycle({
       .join(' ');
   }
 
+  function getSafeTelegramErrorMessage(error, token) {
+    const message = getTelegramErrorMessage(error) || 'Unknown Telegram error';
+
+    return token ? message.split(token).join('[REDACTED]') : message;
+  }
+
   function getTelegramErrorCode(error) {
     const messageCode =
       getTelegramErrorMessage(error).match(/\b(\d{3})\b/)?.[1];
@@ -50,9 +56,16 @@ export function createTelegramLifecycle({
   async function initializeTelegramBot() {
     const token = process.env.TELEGRAM_BOT_TOKEN;
 
-    if (!token || process.env.TELEGRAM_SERVICE_SKIP_INIT === 'true') {
+    if (!token) {
+      console.warn(
+        '[Telegram] Bot unavailable: TELEGRAM_BOT_TOKEN is not configured'
+      );
+      return null;
+    }
+
+    if (process.env.TELEGRAM_SERVICE_SKIP_INIT === 'true') {
       console.log(
-        '[Telegram] Bot initialization skipped (no token or skip flag set)'
+        '[Telegram] Polling intentionally disabled: TELEGRAM_SERVICE_SKIP_INIT=true'
       );
       return null;
     }
@@ -83,7 +96,7 @@ export function createTelegramLifecycle({
           } catch (stopError) {
             console.warn(
               '[Telegram] Error stopping existing bot:',
-              stopError.message
+              getSafeTelegramErrorMessage(stopError, token)
             );
           }
         }
@@ -104,7 +117,7 @@ export function createTelegramLifecycle({
         bot.on('polling_error', (error) => {
           console.error(
             `[Telegram] Polling error (Telegram code: ${getTelegramErrorCode(error)}):`,
-            error
+            getSafeTelegramErrorMessage(error, token)
           );
 
           if (is409Conflict(error)) {
@@ -123,7 +136,7 @@ export function createTelegramLifecycle({
             } catch (stopErr) {
               console.error(
                 '[Telegram] Error stopping polling:',
-                stopErr.message
+                getSafeTelegramErrorMessage(stopErr, token)
               );
             }
           }
@@ -142,8 +155,8 @@ export function createTelegramLifecycle({
       } catch (error) {
         setBotReady(false);
         console.error(
-          `[Telegram] Failed to initialize bot (Telegram code: ${getTelegramErrorCode(error)}):`,
-          error
+          `[Telegram] Polling failed to start (Telegram code: ${getTelegramErrorCode(error)}):`,
+          getSafeTelegramErrorMessage(error, token)
         );
         return null;
       } finally {

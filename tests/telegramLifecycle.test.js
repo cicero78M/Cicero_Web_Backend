@@ -100,13 +100,51 @@ describe('Telegram lifecycle', () => {
 
     expect(lifecycle.isTelegramReady()).toBe(false);
     expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining('Telegram code: 401'),
-      launchError
+      expect.stringContaining('Polling failed to start (Telegram code: 401)'),
+      'Unauthorized'
     );
 
     botInstance.startPolling.mockResolvedValueOnce();
     await expect(lifecycle.initializeTelegramBot()).resolves.toBe(botInstance);
     expect(lifecycle.isTelegramReady()).toBe(true);
+  });
+
+  it('logs distinct startup states without exposing the bot token', async () => {
+    const { lifecycle } = createHarness();
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+    delete process.env.TELEGRAM_BOT_TOKEN;
+    await expect(lifecycle.initializeTelegramBot()).resolves.toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[Telegram] Bot unavailable: TELEGRAM_BOT_TOKEN is not configured'
+    );
+
+    process.env.TELEGRAM_BOT_TOKEN = 'secret-token-value';
+    process.env.TELEGRAM_SERVICE_SKIP_INIT = 'true';
+    await expect(lifecycle.initializeTelegramBot()).resolves.toBeNull();
+    expect(logSpy).toHaveBeenCalledWith(
+      '[Telegram] Polling intentionally disabled: TELEGRAM_SERVICE_SKIP_INIT=true'
+    );
+
+    expect(
+      JSON.stringify([...warnSpy.mock.calls, ...logSpy.mock.calls])
+    ).not.toContain('secret-token-value');
+  });
+
+  it('redacts the token when polling startup fails', async () => {
+    process.env.TELEGRAM_BOT_TOKEN = 'secret-token-value';
+    const launchError = new Error(
+      'request to https://api.telegram.org/botsecret-token-value/getMe failed'
+    );
+    const { lifecycle } = createHarness({ launchError });
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(lifecycle.initializeTelegramBot()).resolves.toBeNull();
+
+    const loggedOutput = JSON.stringify(errorSpy.mock.calls);
+    expect(loggedOutput).toContain('[REDACTED]');
+    expect(loggedOutput).not.toContain('secret-token-value');
   });
 
   it('stops polling and clears readiness for a Telegraf 409 conflict', async () => {
