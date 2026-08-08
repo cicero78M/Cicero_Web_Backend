@@ -83,6 +83,8 @@ const lifecycle = createTelegramLifecycle({
 export const initializeTelegramBot = lifecycle.initializeTelegramBot;
 export const getTelegramBot = lifecycle.getTelegramBot;
 export const isTelegramReady = lifecycle.isTelegramReady;
+export const canSendTelegramMessages = lifecycle.canSendTelegramMessages;
+export const isTelegramPolling = lifecycle.isTelegramPolling;
 
 /**
  * Send a message to a Telegram chat
@@ -92,8 +94,8 @@ export const isTelegramReady = lifecycle.isTelegramReady;
  * @returns {Promise<{chatId: string|number, status: 'sent'|'bot_not_ready'|'failed', message?: object, error?: object}>}
  */
 export async function sendTelegramMessage(chatId, message, options = {}) {
-  if (!isTelegramReady()) {
-    console.warn('[Telegram] Bot not ready, skipping message');
+  if (!canSendTelegramMessages()) {
+    console.warn('[Telegram] Sending transport not ready, skipping message');
     return { chatId, status: 'bot_not_ready' };
   }
 
@@ -583,6 +585,8 @@ export default {
   initializeTelegramBot,
   getTelegramBot,
   isTelegramReady,
+  canSendTelegramMessages,
+  isTelegramPolling,
   isTelegramAdmin,
   sendTelegramMessage,
   sendTelegramAdminMessage,

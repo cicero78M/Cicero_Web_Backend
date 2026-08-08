@@ -27,6 +27,7 @@ describe('Telegram lifecycle', () => {
 
     const botInstance = {
       started: false,
+      sendMessage: jest.fn().mockResolvedValue({ message_id: 1 }),
       on: jest.fn((event, handler) => {
         registrations.push(event);
         eventHandlers.set(event, handler);
@@ -86,7 +87,8 @@ describe('Telegram lifecycle', () => {
       'callbacks',
       'startPolling',
     ]);
-    expect(lifecycle.isTelegramReady()).toBe(true);
+    expect(lifecycle.canSendTelegramMessages()).toBe(true);
+    expect(lifecycle.isTelegramPolling()).toBe(true);
   });
 
   it('remains not ready and can retry when launch is rejected', async () => {
@@ -98,7 +100,8 @@ describe('Telegram lifecycle', () => {
 
     await expect(lifecycle.initializeTelegramBot()).resolves.toBeNull();
 
-    expect(lifecycle.isTelegramReady()).toBe(false);
+    expect(lifecycle.canSendTelegramMessages()).toBe(true);
+    expect(lifecycle.isTelegramPolling()).toBe(false);
     expect(console.error).toHaveBeenCalledWith(
       expect.stringContaining('Polling failed to start (Telegram code: 401)'),
       'Unauthorized'
@@ -106,7 +109,7 @@ describe('Telegram lifecycle', () => {
 
     botInstance.startPolling.mockResolvedValueOnce();
     await expect(lifecycle.initializeTelegramBot()).resolves.toBe(botInstance);
-    expect(lifecycle.isTelegramReady()).toBe(true);
+    expect(lifecycle.isTelegramPolling()).toBe(true);
   });
 
   it('logs distinct startup states without exposing the bot token', async () => {
@@ -122,14 +125,33 @@ describe('Telegram lifecycle', () => {
 
     process.env.TELEGRAM_BOT_TOKEN = 'secret-token-value';
     process.env.TELEGRAM_SERVICE_SKIP_INIT = 'true';
-    await expect(lifecycle.initializeTelegramBot()).resolves.toBeNull();
+    await expect(lifecycle.initializeTelegramBot()).resolves.toEqual(
+      expect.objectContaining({ sendMessage: expect.any(Function) })
+    );
     expect(logSpy).toHaveBeenCalledWith(
-      '[Telegram] Polling intentionally disabled: TELEGRAM_SERVICE_SKIP_INIT=true'
+      '[Telegram] Sending transport ready; polling intentionally disabled: TELEGRAM_SERVICE_SKIP_INIT=true'
     );
 
     expect(
       JSON.stringify([...warnSpy.mock.calls, ...logSpy.mock.calls])
     ).not.toContain('secret-token-value');
+  });
+
+  it('keeps sending transport available without polling for a non-owner', async () => {
+    process.env.TELEGRAM_SERVICE_SKIP_INIT = 'true';
+    const { lifecycle, TelegramBot, botInstance, registrations } =
+      createHarness();
+
+    await expect(lifecycle.initializeTelegramBot()).resolves.toBe(botInstance);
+
+    expect(TelegramBot).toHaveBeenCalledTimes(1);
+    expect(botInstance.startPolling).not.toHaveBeenCalled();
+    expect(registrations).toEqual(['polling_error']);
+    expect(lifecycle.canSendTelegramMessages()).toBe(true);
+    expect(lifecycle.isTelegramPolling()).toBe(false);
+    await expect(botInstance.sendMessage('admin-id', 'alert')).resolves.toEqual({
+      message_id: 1,
+    });
   });
 
   it('redacts the token when polling startup fails', async () => {
@@ -153,7 +175,7 @@ describe('Telegram lifecycle', () => {
     jest.spyOn(console, 'warn').mockImplementation(() => {});
 
     await lifecycle.initializeTelegramBot();
-    expect(lifecycle.isTelegramReady()).toBe(true);
+    expect(lifecycle.isTelegramPolling()).toBe(true);
     expect(botInstance.started).toBe(true);
 
     eventHandlers.get('polling_error')({
@@ -165,7 +187,8 @@ describe('Telegram lifecycle', () => {
 
     expect(botInstance.stopPolling).toHaveBeenCalledTimes(1);
     expect(botInstance.started).toBe(false);
-    expect(lifecycle.isTelegramReady()).toBe(false);
+    expect(lifecycle.canSendTelegramMessages()).toBe(true);
+    expect(lifecycle.isTelegramPolling()).toBe(false);
     expect(console.warn).toHaveBeenCalledWith(
       expect.stringContaining('only one bot instance is active')
     );
