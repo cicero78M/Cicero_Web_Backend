@@ -89,12 +89,12 @@ export const isTelegramReady = lifecycle.isTelegramReady;
  * @param {string|number} chatId - Chat ID or username
  * @param {string} message - Message text
  * @param {object} options - Additional options
- * @returns {Promise<object|null>}
+ * @returns {Promise<{chatId: string|number, status: 'sent'|'bot_not_ready'|'failed', message?: object, error?: object}>}
  */
 export async function sendTelegramMessage(chatId, message, options = {}) {
   if (!isTelegramReady()) {
     console.warn('[Telegram] Bot not ready, skipping message');
-    return null;
+    return { chatId, status: 'bot_not_ready' };
   }
 
   try {
@@ -103,7 +103,7 @@ export async function sendTelegramMessage(chatId, message, options = {}) {
       ...options
     });
     console.log(`[Telegram] Message sent to ${chatId}`);
-    return result;
+    return { chatId, status: 'sent', message: result };
   } catch (error) {
     console.error(`[Telegram] Failed to send message to ${chatId}:`, error.message);
 
@@ -115,14 +115,22 @@ export async function sendTelegramMessage(chatId, message, options = {}) {
         const { parse_mode, ...optionsWithoutParseMode } = options;
         const result = await bot.sendMessage(chatId, message, optionsWithoutParseMode);
         console.log(`[Telegram] Message sent to ${chatId} (plain text)`);
-        return result;
+        return { chatId, status: 'sent', message: result };
       } catch (retryError) {
         console.error(`[Telegram] Failed to send plain text message to ${chatId}:`, retryError.message);
-        return null;
+        return {
+          chatId,
+          status: 'failed',
+          error: { code: 'SEND_FAILED', message: 'Telegram message delivery failed' },
+        };
       }
     }
 
-    return null;
+    return {
+      chatId,
+      status: 'failed',
+      error: { code: 'SEND_FAILED', message: 'Telegram message delivery failed' },
+    };
   }
 }
 
@@ -130,35 +138,10 @@ export async function sendTelegramMessage(chatId, message, options = {}) {
  * Send a message to admin chat(s)
  * @param {string} message - Message text
  * @param {object} options - Additional options
- * @returns {Promise<Array<object|null>>} Array of results for each admin chat
+ * @returns {Promise<{totalTargets: number, sentCount: number, failedCount: number, results: Array<object>}>}
  */
 export async function sendTelegramAdminMessage(message, options = {}) {
-  const adminChatIds = (process.env.TELEGRAM_ADMIN_CHAT_ID || '')
-    .split(',')
-    .map(id => id.trim())
-    .filter(Boolean);
-
-  if (adminChatIds.length === 0) {
-    console.warn('[Telegram] TELEGRAM_ADMIN_CHAT_ID not configured');
-    return [];
-  }
-
-  // Send message to all admin chat IDs
-  const results = await Promise.allSettled(
-    adminChatIds.map(chatId => sendTelegramMessage(chatId, message, options))
-  );
-
-  // Log any failures
-  results.forEach((result, index) => {
-    if (result.status === 'rejected') {
-      console.error(`[Telegram] Failed to send message to admin ${adminChatIds[index]}:`, result.reason);
-    }
-  });
-
-  // Return array of successful results
-  return results
-    .filter(r => r.status === 'fulfilled')
-    .map(r => r.value);
+  return sendTelegramAdminMessageHelper(sendTelegramMessage, message, options);
 }
 
 /**
