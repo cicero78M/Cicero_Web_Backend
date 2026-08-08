@@ -219,14 +219,16 @@ router.post('/dashboard-register', async (req, res) => {
 
   // Fetch client names for the approval message
   let clientNamesList = [];
+  let resolvedClientIds = [];
   if (clientIds.length > 0) {
     const clientPromises = clientIds.map(clientId =>
       clientModel.findById(clientId).then(client => ({ clientId, client }))
     );
     const clientResults = await Promise.all(clientPromises);
+    resolvedClientIds = clientResults.map(({ clientId, client }) => client?.client_id || clientId);
     clientNamesList = clientResults.map(({ clientId, client }) => {
       if (client && client.nama) {
-        return `${client.nama} (${clientId})`;
+        return `${client.nama} (${client.client_id || clientId})`;
       }
       // Return with indicator when client data is missing or incomplete
       return `${clientId} (Unknown)`;
@@ -245,11 +247,11 @@ router.post('/dashboard-register', async (req, res) => {
   let notificationStatus;
   try {
     const notificationResults = await sendUserApprovalRequest({
-      dashboard_user_id,
-      username,
-      email,
+      dashboard_user_id: user.dashboard_user_id,
+      username: user.username,
+      email: user.email,
       role: roleRow?.role_name,
-      clientIds: clientIds.length ? clientIds.join(', ') : '-',
+      clientIds: resolvedClientIds.length ? resolvedClientIds.join(', ') : '-',
       clientNames: clientNamesList.length ? clientNamesList.join(', ') : '-'
     });
     notificationStatus = getApprovalNotificationStatus(notificationResults);

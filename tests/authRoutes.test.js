@@ -349,9 +349,9 @@ describe('POST /dashboard-register', () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ role_id: 1, role_name: 'operator' }] })
-      .mockResolvedValueOnce({ rows: [{ dashboard_user_id: 'd1', status: false, approval_status: 'pending' }] })
+      .mockResolvedValueOnce({ rows: [{ dashboard_user_id: 'd1', username: 'dash', email: 'dash@example.com', status: false, approval_status: 'pending' }] })
       .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [{ client_id: 'c1', nama: 'Client 1' }] });
+      .mockResolvedValueOnce({ rows: [{ client_id: 'C1', nama: 'Client 1' }] });
 
     const res = await request(app)
       .post('/api/auth/dashboard-register')
@@ -378,14 +378,19 @@ describe('POST /dashboard-register', () => {
         expect.stringContaining('INSERT INTO dashboard_user_clients'),
         [expect.any(String), 'c1']
       );
+      expect(mockSendUserApprovalRequest).toHaveBeenCalledTimes(1);
       expect(mockSendUserApprovalRequest).toHaveBeenCalledWith({
-        dashboard_user_id: expect.any(String),
+        dashboard_user_id: 'd1',
         username: 'dash',
         email: 'dash@example.com',
         role: 'operator',
-        clientIds: 'c1',
-        clientNames: 'Client 1 (c1)'
+        clientIds: 'C1',
+        clientNames: 'Client 1 (C1)'
       });
+      const notificationInvocationOrder = mockSendUserApprovalRequest.mock.invocationCallOrder[0];
+      expect(notificationInvocationOrder).toBeGreaterThan(mockQuery.mock.invocationCallOrder[2]);
+      expect(notificationInvocationOrder).toBeGreaterThan(mockQuery.mock.invocationCallOrder[3]);
+      expect(notificationInvocationOrder).toBeGreaterThan(mockQuery.mock.invocationCallOrder[4]);
       expect(res.body.notification_status).toBe('sent');
   });
 
@@ -393,7 +398,7 @@ describe('POST /dashboard-register', () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ role_id: 1, role_name: 'operator' }] })
-      .mockResolvedValueOnce({ rows: [{ dashboard_user_id: 'd1', status: false, approval_status: 'pending' }] })
+      .mockResolvedValueOnce({ rows: [{ dashboard_user_id: 'd1', username: 'dash', email: 'dash@example.com', status: false, approval_status: 'pending' }] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ client_id: 'c1', nama: 'Client 1' }] });
     mockSendUserApprovalRequest.mockRejectedValueOnce(new Error('Telegram unavailable'));
@@ -409,8 +414,10 @@ describe('POST /dashboard-register', () => {
       approval_status: 'pending',
       notification_status: 'failed'
     });
+    expect(res.body.dashboard_user_id).toBe('d1');
+    expect(mockSendUserApprovalRequest).toHaveBeenCalledTimes(1);
     expect(mockSendUserApprovalRequest).toHaveBeenCalledWith({
-      dashboard_user_id: expect.any(String),
+      dashboard_user_id: 'd1',
       username: 'dash',
       email: 'dash@example.com',
       role: 'operator',
