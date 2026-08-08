@@ -23,20 +23,18 @@ jest.unstable_mockModule('../src/service/telegramBotAdapter.js', () => ({
   default: jest.fn(() => mockBot)
 }));
 
-const {
-  initializeTelegramBot,
-  getTelegramBot,
-  isTelegramReady,
-  canSendTelegramMessages,
-  isTelegramPolling,
-  isTelegramAdmin,
-  sendTelegramMessage,
-  sendTelegramAdminMessage,
-  sendLoginLogNotification,
-  sendUserApprovalRequest,
-  sendUserApprovalConfirmation,
-  sendUserRejectionConfirmation
-} = await import('../src/service/telegramService.js');
+let initializeTelegramBot;
+let getTelegramBot;
+let isTelegramReady;
+let canSendTelegramMessages;
+let isTelegramPolling;
+let isTelegramAdmin;
+let sendTelegramMessage;
+let sendTelegramAdminMessage;
+let sendLoginLogNotification;
+let sendUserApprovalRequest;
+let sendUserApprovalConfirmation;
+let sendUserRejectionConfirmation;
 const { sendTelegramAdminMessage: sendTelegramAdminMessageHelper } = await import(
   '../src/service/telegram/adminNotifications.js'
 );
@@ -44,9 +42,27 @@ const { sendTelegramAdminMessage: sendTelegramAdminMessageHelper } = await impor
 describe('telegramService', () => {
   const originalEnv = process.env;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
     process.env = { ...originalEnv };
+    process.env.TELEGRAM_BOT_TOKEN = 'test-token';
+    process.env.TELEGRAM_SERVICE_SKIP_INIT = 'true';
+    jest.resetModules();
+    ({
+      initializeTelegramBot,
+      getTelegramBot,
+      isTelegramReady,
+      canSendTelegramMessages,
+      isTelegramPolling,
+      isTelegramAdmin,
+      sendTelegramMessage,
+      sendTelegramAdminMessage,
+      sendLoginLogNotification,
+      sendUserApprovalRequest,
+      sendUserApprovalConfirmation,
+      sendUserRejectionConfirmation
+    } = await import('../src/service/telegramService.js'));
+    await initializeTelegramBot();
   });
 
   afterEach(() => {
@@ -79,9 +95,8 @@ describe('telegramService', () => {
   });
 
   describe('isTelegramReady', () => {
-    it('should return boolean indicating bot readiness', () => {
-      const ready = isTelegramReady();
-      expect(typeof ready).toBe('boolean');
+    it('should report that the initialized sending transport is ready', () => {
+      expect(isTelegramReady()).toBe(true);
     });
   });
 
@@ -110,6 +125,17 @@ describe('telegramService', () => {
   });
 
   describe('sendTelegramMessage', () => {
+    it('should return bot_not_ready without attempting delivery before initialization', async () => {
+      delete process.env.TELEGRAM_BOT_TOKEN;
+      jest.resetModules();
+      const uninitializedService = await import('../src/service/telegramService.js');
+
+      const result = await uninitializedService.sendTelegramMessage('123456', 'Test message');
+
+      expect(result).toEqual({ chatId: '123456', status: 'bot_not_ready' });
+      expect(mockSendMessage).not.toHaveBeenCalled();
+    });
+
     it('should keep sending when polling is skipped', async () => {
       process.env.TELEGRAM_SERVICE_SKIP_INIT = 'true';
       mockSendMessage.mockResolvedValue({ message_id: 1 });
@@ -324,6 +350,52 @@ describe('telegramService', () => {
         }]
       });
       expect(JSON.stringify(result)).not.toContain(process.env.TELEGRAM_BOT_TOKEN);
+    });
+
+    it('should count a rejected delivery to one admin as failed', async () => {
+      process.env.TELEGRAM_ADMIN_CHAT_ID = '987654';
+
+      const result = await sendTelegramAdminMessageHelper(
+        jest.fn().mockRejectedValue(new Error('Network error')),
+        'Admin message'
+      );
+
+      expect(result).toEqual({
+        totalTargets: 1,
+        sentCount: 0,
+        failedCount: 1,
+        results: [{
+          chatId: '987654',
+          status: 'failed',
+          error: { code: 'SEND_REJECTED', message: 'Telegram message delivery failed' }
+        }]
+      });
+    });
+
+    it('should summarize mixed results across multiple admins', async () => {
+      process.env.TELEGRAM_ADMIN_CHAT_ID = '111,222,333';
+      const sendMessage = jest.fn()
+        .mockResolvedValueOnce({ chatId: '111', status: 'sent', message: { message_id: 1 } })
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({ chatId: '333', status: 'bot_not_ready' });
+
+      const result = await sendTelegramAdminMessageHelper(sendMessage, 'Admin message');
+
+      expect(sendMessage).toHaveBeenCalledTimes(3);
+      expect(result).toEqual({
+        totalTargets: 3,
+        sentCount: 1,
+        failedCount: 2,
+        results: [
+          { chatId: '111', status: 'sent', message: { message_id: 1 } },
+          {
+            chatId: '222',
+            status: 'failed',
+            error: { code: 'SEND_REJECTED', message: 'Telegram message delivery failed' }
+          },
+          { chatId: '333', status: 'bot_not_ready' }
+        ]
+      });
     });
   });
 
