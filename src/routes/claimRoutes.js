@@ -13,6 +13,7 @@ import {
   validateClaimSocialProfile,
 } from '../controller/claimController.js';
 import { authRequired } from '../middleware/authMiddleware.js';
+import { triageClaimComplaint } from '../controller/claimComplaintController.js';
 
 const router = express.Router();
 const claimSocialValidationLimiter = rateLimit({
@@ -38,6 +39,7 @@ router.put('/edit', updateUserData); // backward-compatible alias for /claim/edi
 router.get('/me', authRequired, getClaimMe);
 router.put('/me', authRequired, updateClaimMe);
 router.get('/pending-content', authRequired, getPendingContent);
+router.post('/complaints/triage', authRequired, triageClaimComplaint);
 router.post(
   '/social-profile/validate',
   authRequired,
