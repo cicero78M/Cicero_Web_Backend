@@ -1,47 +1,38 @@
 import { getRekapLinkByClient } from '../model/linkReportKhususModel.js';
 import { sendConsoleDebug } from '../middleware/debugHandler.js';
 import { normalizeClientId } from '../utils/utilsHelper.js';
+import { authorizeReportRequest } from '../service/reportAuthorizationService.js';
 
 const OPERATOR_ROLE = 'operator';
 
-function normalizeClientIdList(value) {
-  const list = Array.isArray(value) ? value : value ? [value] : [];
-  return list
-    .map((entry) => normalizeClientId(entry))
-    .filter(Boolean)
-    .map((entry) => String(entry).toLowerCase());
-}
-
 export async function getAmplifyKhususRekap(req, res) {
-  const requestedClientId =
-    req.query.client_id || req.user?.client_id || req.user?.client_ids?.[0];
-  const normalizedClientId = normalizeClientId(requestedClientId);
-  const client_id = normalizedClientId;
-  const periode = req.query.periode || 'harian';
-  const tanggal = req.query.tanggal;
-  const requestedRole = req.query.role || req.user?.role;
-  const requestedScope = req.query.scope;
-  const roleLower = requestedRole ? String(requestedRole).toLowerCase() : null;
-  const scopeLower = requestedScope
-    ? String(requestedScope).toLowerCase()
-    : null;
-  const usesStandardPayload = Boolean(requestedScope || req.query.role);
-
-  if (!client_id) {
-    return res.status(400).json({ success: false, message: 'client_id wajib diisi' });
-  }
-
-  const allowedClientIds = new Set(normalizeClientIdList(req.user?.client_ids));
-  const tokenClientId = normalizeClientId(req.user?.client_id);
-  if (tokenClientId) {
-    allowedClientIds.add(String(tokenClientId).toLowerCase());
-  }
-
-  if (allowedClientIds.size > 0 && !allowedClientIds.has(String(client_id).toLowerCase())) {
-    return res.status(403).json({ success: false, message: 'client_id tidak diizinkan' });
-  }
-
   try {
+    const authorization = await authorizeReportRequest(req);
+    if (authorization.error) {
+      return res.status(authorization.error.status).json({
+        success: false,
+        message: authorization.error.message,
+      });
+    }
+    const client_id = normalizeClientId(authorization.clientId);
+    const periode = req.query.periode || 'harian';
+    const tanggal = req.query.tanggal;
+    const requestedRole = req.query.role || req.user?.role;
+    const requestedScope = req.query.scope;
+    const roleLower = requestedRole
+      ? String(requestedRole).toLowerCase()
+      : null;
+    const scopeLower = requestedScope
+      ? String(requestedScope).toLowerCase()
+      : null;
+    const usesStandardPayload = Boolean(requestedScope || req.query.role);
+
+    if (!client_id) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'client_id wajib diisi' });
+    }
+
     let rekapOptions = {};
     let roleForQuery = null;
 
@@ -67,7 +58,7 @@ export async function getAmplifyKhususRekap(req, res) {
         if (!tokenClientId) {
           return res.status(400).json({
             success: false,
-            message: 'client_id pengguna tidak ditemukan'
+            message: 'client_id pengguna tidak ditemukan',
           });
         }
         userClientId = tokenClientId;
@@ -77,18 +68,27 @@ export async function getAmplifyKhususRekap(req, res) {
 
       rekapOptions = {
         userClientId,
-        userRoleFilter
+        userRoleFilter,
       };
     }
 
-    sendConsoleDebug({ 
-      tag: 'AMPLIFY_KHUSUS', 
-      msg: `getAmplifyKhususRekap ${client_id} ${periode} ${tanggal || ''} ${roleLower || ''} ${scopeLower || ''}` 
+    sendConsoleDebug({
+      tag: 'AMPLIFY_KHUSUS',
+      msg: `getAmplifyKhususRekap ${client_id} ${periode} ${tanggal || ''} ${roleLower || ''} ${scopeLower || ''}`,
     });
-    const data = await getRekapLinkByClient(client_id, periode, tanggal, roleForQuery, rekapOptions);
+    const data = await getRekapLinkByClient(
+      client_id,
+      periode,
+      tanggal,
+      roleForQuery,
+      rekapOptions
+    );
     res.json({ success: true, data });
   } catch (err) {
-    sendConsoleDebug({ tag: 'AMPLIFY_KHUSUS', msg: `Error getAmplifyKhususRekap: ${err.message}` });
+    sendConsoleDebug({
+      tag: 'AMPLIFY_KHUSUS',
+      msg: `Error getAmplifyKhususRekap: ${err.message}`,
+    });
     const code = err.statusCode || err.response?.status || 500;
     res.status(code).json({ success: false, message: err.message });
   }

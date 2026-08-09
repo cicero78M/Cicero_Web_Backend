@@ -3,10 +3,9 @@ import { sendConsoleDebug } from '../middleware/debugHandler.js';
 import { normalizeClientId } from '../utils/utilsHelper.js';
 import { generateExcelBuffer } from '../service/amplifyExportService.js';
 import { query } from '../repository/db.js';
+import { authorizeReportRequest } from '../service/reportAuthorizationService.js';
 
-function normalizeAmplifyContext(req) {
-  let client_id =
-    req.query.client_id || req.user?.client_id || req.user?.client_ids?.[0];
+async function normalizeAmplifyContext(req) {
   const periode = req.query.periode || 'harian';
   const tanggal = req.query.tanggal;
   const startDate = req.query.start_date || req.query.tanggal_mulai;
@@ -18,12 +17,26 @@ function normalizeAmplifyContext(req) {
     ? String(requestedRegionalId).trim().toUpperCase()
     : null;
   const roleLower = requestedRole ? String(requestedRole).toLowerCase() : null;
-  const scopeLower = requestedScope ? String(requestedScope).toLowerCase() : null;
+  const scopeLower = requestedScope
+    ? String(requestedScope).toLowerCase()
+    : null;
   const usesStandardPayload = Boolean(requestedScope || req.query.role);
 
+  let effectiveClientId = req.query.client_id;
   if (!usesStandardPayload && roleLower === 'ditbinmas') {
-    client_id = 'ditbinmas';
+    effectiveClientId = 'ditbinmas';
   }
+
+  const authorization = await authorizeReportRequest(req, {
+    effectiveClientId,
+    scope: requestedScope,
+  });
+  if (authorization.error) {
+    const error = new Error(authorization.error.message);
+    error.statusCode = authorization.error.status;
+    throw error;
+  }
+  let client_id = authorization.clientId;
 
   const normalizedClientId = normalizeClientId(client_id);
   if (!normalizedClientId) {
@@ -32,27 +45,6 @@ function normalizeAmplifyContext(req) {
     throw error;
   }
   client_id = normalizedClientId;
-
-  if (req.user?.client_ids) {
-    const userClientIds = Array.isArray(req.user.client_ids)
-      ? req.user.client_ids
-      : [req.user.client_ids];
-    const idsLower = userClientIds.map((c) => c.toLowerCase());
-    if (!idsLower.includes(client_id.toLowerCase()) && roleLower !== client_id.toLowerCase()) {
-      const error = new Error('client_id tidak diizinkan');
-      error.statusCode = 403;
-      throw error;
-    }
-  }
-  if (
-    req.user?.client_id &&
-    req.user.client_id.toLowerCase() !== client_id.toLowerCase() &&
-    roleLower !== client_id.toLowerCase()
-  ) {
-    const error = new Error('client_id tidak diizinkan');
-    error.statusCode = 403;
-    throw error;
-  }
 
   const directorateRoles = ['ditbinmas', 'ditlantas', 'bidhumas', 'ditsamapta'];
   let rekapOptions = { regionalId };
@@ -126,7 +118,7 @@ function normalizeAmplifyContext(req) {
 }
 
 async function fetchAmplifyRekapData(req) {
-  const context = normalizeAmplifyContext(req);
+  const context = await normalizeAmplifyContext(req);
   const data = await getRekapLinkByClient(
     context.client_id,
     context.periode,
@@ -134,7 +126,7 @@ async function fetchAmplifyRekapData(req) {
     context.startDate,
     context.endDate,
     context.roleForQuery,
-    context.rekapOptions,
+    context.rekapOptions
   );
   return { context, data };
 }
@@ -165,7 +157,10 @@ function buildDateWhereClause(context, params) {
 
   if (context.periode === 'bulanan') {
     if (context.tanggal) {
-      const monthDate = context.tanggal.length === 7 ? `${context.tanggal}-01` : context.tanggal;
+      const monthDate =
+        context.tanggal.length === 7
+          ? `${context.tanggal}-01`
+          : context.tanggal;
       const idx = addParam(monthDate);
       return `date_trunc('month', r.created_at AT TIME ZONE 'Asia/Jakarta') = date_trunc('month', $${idx}::date)`;
     }
@@ -282,7 +277,7 @@ export async function getAmplifyRekap(req, res) {
 
 export async function exportAmplifyRekapExcel(req, res) {
   try {
-    const context = normalizeAmplifyContext(req);
+    const context = await normalizeAmplifyContext(req);
     const exportRows = await fetchAmplifyLinkRowsForExport(context);
 
     const rows = exportRows.map((item, index) => ({
@@ -294,7 +289,9 @@ export async function exportAmplifyRekapExcel(req, res) {
       username_instagram: item.username ? `@${item.username}` : '',
       divisi_satfung: item.divisi || '',
       shortcode: item.shortcode || '',
-      task_link: item.shortcode ? `https://www.instagram.com/p/${item.shortcode}/` : '',
+      task_link: item.shortcode
+        ? `https://www.instagram.com/p/${item.shortcode}/`
+        : '',
       instagram_link: item.instagram_link || '',
       facebook_link: item.facebook_link || '',
       twitter_link: item.twitter_link || '',
@@ -304,17 +301,31 @@ export async function exportAmplifyRekapExcel(req, res) {
     }));
 
     if (!rows.length) {
-      return res.status(404).json({ success: false, message: 'Tidak ada link pelaksanaan pada rentang waktu ini.' });
+      return res.status(404).json({
+        success: false,
+        message: 'Tidak ada link pelaksanaan pada rentang waktu ini.',
+      });
     }
 
     const buffer = await generateExcelBuffer(rows);
-    const suffix = context.startDate && context.endDate
-      ? `${context.startDate}_${context.endDate}`
-      : context.tanggal || context.periode;
-    const fileName = `rekap_link_pelaksanaan_${context.client_id}_${suffix}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const suffix =
+      context.startDate && context.endDate
+        ? `${context.startDate}_${context.endDate}`
+        : context.tanggal || context.periode;
+    const fileName =
+      `rekap_link_pelaksanaan_${context.client_id}_${suffix}`.replace(
+        /[^a-zA-Z0-9_-]/g,
+        '_'
+      );
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}.xlsx"`);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${fileName}.xlsx"`
+    );
     return res.send(buffer);
   } catch (err) {
     const message = err?.message || 'Terjadi kesalahan internal server';
