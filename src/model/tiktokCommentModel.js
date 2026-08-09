@@ -106,6 +106,24 @@ export async function getCommentsByVideoId(video_id) {
   return res.rows[0] ? { comments: res.rows[0].comments } : { comments: [] };
 }
 
+export async function hasUserCommentedVideo(username, videoId) {
+  const normalizedUsername = normalizeUsernameForSearch(username);
+  const normalizedVideoId = String(videoId || '').trim();
+  if (!normalizedUsername || !normalizedVideoId) return false;
+
+  const { rows } = await query(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM tiktok_comment tc
+       CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(tc.comments, '[]'::jsonb)) raw_username
+       WHERE tc.video_id = $1
+         AND LOWER(REPLACE(TRIM(raw_username), '@', '')) = $2
+     ) AS has_activity`,
+    [normalizedVideoId, normalizedUsername]
+  );
+  return Boolean(rows[0]?.has_activity);
+}
+
 /**
  * Hapus komentar TikTok untuk video tertentu.
  * @param {string} video_id

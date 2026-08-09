@@ -9,9 +9,12 @@ jest.unstable_mockModule('../src/repository/db.js', () => ({
 }));
 
 let getRekapKomentarByClient;
+let hasUserCommentedVideo;
 
 beforeAll(async () => {
-  ({ getRekapKomentarByClient } = await import('../src/model/tiktokCommentModel.js'));
+  ({ getRekapKomentarByClient, hasUserCommentedVideo } = await import(
+    '../src/model/tiktokCommentModel.js'
+  ));
 });
 
 beforeEach(() => {
@@ -23,6 +26,17 @@ function mockClientType(type = 'instansi') {
 }
 
 const PRIORITY_UPPER = PRIORITY_USER_NAMES.map(name => name.toUpperCase());
+
+test('hasUserCommentedVideo checks only one video with normalized username', async () => {
+  mockQuery.mockResolvedValueOnce({ rows: [{ has_activity: true }] });
+  await expect(
+    hasUserCommentedVideo('  @@Owner.Name ', ' video-1 ')
+  ).resolves.toBe(true);
+  expect(mockQuery).toHaveBeenCalledWith(
+    expect.stringContaining('tc.video_id = $1'),
+    ['video-1', 'owner.name']
+  );
+});
 
 test('getRekapKomentarByClient uses post created_at BETWEEN for date range in both CTEs', async () => {
   mockClientType();

@@ -116,6 +116,24 @@ export async function getLikesByShortcode(shortcode) {
   return getLikeUsernamesByShortcode(shortcode);
 }
 
+export async function hasUserLikedShortcode(username, shortcode) {
+  const normalizedUsername = normalizeLikeUsername(username);
+  const normalizedShortcode = String(shortcode || '').trim();
+  if (!normalizedUsername || !normalizedShortcode) return false;
+
+  const { rows } = await query(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM insta_like il
+       CROSS JOIN LATERAL jsonb_array_elements(COALESCE(il.likes, '[]'::jsonb)) elem
+       WHERE il.shortcode = $1
+         AND LOWER(REPLACE(TRIM(COALESCE(elem->>'username', TRIM(BOTH '"' FROM elem::text))), '@', '')) = $2
+     ) AS has_activity`,
+    [normalizedShortcode, normalizedUsername]
+  );
+  return Boolean(rows[0]?.has_activity);
+}
+
 /**
  * Simpan snapshot hasil fetch likes ke tabel audit tanpa memengaruhi tabel utama.
  *

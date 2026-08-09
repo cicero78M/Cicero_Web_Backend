@@ -2,12 +2,24 @@ import * as userModel from '../model/userModel.js';
 import { diagnoseComplaint } from '../service/complaintDiagnosisService.js';
 import { normalizeUserId } from '../utils/utilsHelper.js';
 import { sendSuccess } from '../utils/response.js';
+import { getComplaintContentForUser } from '../service/claimPendingContentService.js';
+import { hasUserLikedShortcode } from '../model/instaLikeModel.js';
+import { hasUserCommentedVideo } from '../model/tiktokCommentModel.js';
+import {
+  validateDateRange,
+  validateTanggalFilter,
+} from '../utils/dateFilterValidation.js';
 
 const allowedFields = new Set([
   'platform',
   'issue_type',
-  'content_id',
+  'shortcode',
+  'video_id',
   'performed_at',
+  'periode',
+  'tanggal',
+  'start_date',
+  'end_date',
 ]);
 const identityFields = new Set([
   'nrp',
@@ -76,15 +88,27 @@ export async function triageClaimComplaint(req, res, next) {
         'Tipe kendala harus activity_not_recorded.'
       );
     }
+    const identifierField =
+      body.platform === 'instagram' ? 'shortcode' : 'video_id';
+    const otherIdentifierField =
+      body.platform === 'instagram' ? 'video_id' : 'shortcode';
+    if (body[otherIdentifierField] !== undefined) {
+      return sendValidationError(
+        res,
+        'CLAIM_COMPLAINT_PLATFORM_CONTENT_MISMATCH',
+        otherIdentifierField,
+        'Identifier konten tidak sesuai dengan platform komplain.'
+      );
+    }
     if (
-      body.content_id !== undefined &&
-      (typeof body.content_id !== 'string' || !body.content_id.trim())
+      typeof body[identifierField] !== 'string' ||
+      !body[identifierField].trim()
     ) {
       return sendValidationError(
         res,
-        'CLAIM_COMPLAINT_INVALID_CONTENT_ID',
-        'content_id',
-        'ID konten harus berupa teks yang tidak kosong.'
+        'CLAIM_COMPLAINT_CONTENT_ID_REQUIRED',
+        identifierField,
+        `${identifierField} wajib berupa teks yang tidak kosong.`
       );
     }
     if (
@@ -101,6 +125,48 @@ export async function triageClaimComplaint(req, res, next) {
       );
     }
 
+    const periode = String(body.periode || 'harian').toLowerCase();
+    const validPeriods = new Set(['harian', 'mingguan', 'bulanan', 'semua']);
+    const { error: tanggalError } = validateTanggalFilter(body.tanggal, periode);
+    const { error: rangeError } = validateDateRange(
+      body.start_date,
+      body.end_date
+    );
+    if (
+      !validPeriods.has(periode) ||
+      tanggalError ||
+      rangeError ||
+      Boolean(body.start_date) !== Boolean(body.end_date)
+    ) {
+      return sendValidationError(
+        res,
+        'CLAIM_COMPLAINT_INVALID_DATE_FILTER',
+        'periode',
+        tanggalError || rangeError || 'Filter periode komplain tidak valid.'
+      );
+    }
+
+    const contentId = body[identifierField].trim();
+    const scopedContent = await getComplaintContentForUser(
+      userId,
+      body.platform,
+      contentId,
+      {
+        periode,
+        tanggal: body.tanggal,
+        startDate: body.start_date,
+        endDate: body.end_date,
+      }
+    );
+    if (!scopedContent) {
+      return res.status(403).json({
+        success: false,
+        error_code: 'CLAIM_COMPLAINT_CONTENT_OUT_OF_SCOPE',
+        field: identifierField,
+        message: 'Konten tidak termasuk tugas pending user pada scope yang dipilih.',
+      });
+    }
+
     const user = await userModel.findClaimProfileById(userId);
     if (!user) {
       return res.status(404).json({
@@ -113,7 +179,7 @@ export async function triageClaimComplaint(req, res, next) {
       body.platform === 'instagram' ? 'Instagram' : 'TikTok';
     const issueDetails = [
       `Sudah melaksanakan ${platformLabel} tetapi belum terdata.`,
-      body.content_id ? `ID konten: ${String(body.content_id).trim()}.` : '',
+      `ID konten: ${contentId}.`,
       body.performed_at ? `Perkiraan pelaksanaan: ${body.performed_at}.` : '',
     ].filter(Boolean);
     const parsedComplaint = {
@@ -123,12 +189,22 @@ export async function triageClaimComplaint(req, res, next) {
       tiktok: body.platform === 'tiktok' ? user.tiktok || '' : '',
       issues: [issueDetails.join(' ')],
     };
+    const activityChecks = scopedContent.usernames.map((username) =>
+      body.platform === 'instagram'
+        ? hasUserLikedShortcode(username, contentId)
+        : hasUserCommentedVideo(username, contentId)
+    );
+    const hasSelectedActivity = (await Promise.all(activityChecks)).some(Boolean);
     const diagnosis = await diagnoseComplaint({
       user,
       userId,
       parsedComplaint,
       fallbackIssue: issueDetails.join(' '),
       claimPlatform: body.platform,
+      selectedContent: {
+        id: contentId,
+        hasActivity: hasSelectedActivity,
+      },
     });
 
     return sendSuccess(res, {
