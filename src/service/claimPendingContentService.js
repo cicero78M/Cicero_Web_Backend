@@ -94,6 +94,7 @@ async function getInstagramContent(context, usernames, filters) {
             'https://www.instagram.com/p/' || p.shortcode AS url,
             p.caption,
             COALESCE(p.created_at, p.original_created_at) AS content_time,
+            (SELECT MAX(il.updated_at) FROM insta_like il WHERE il.shortcode = p.shortcode) AS snapshot_updated_at,
             EXISTS (
               SELECT 1
               FROM insta_like il
@@ -122,6 +123,7 @@ async function getTiktokContent(context, usernames, filters) {
   const { rows } = await query(
     `SELECT p.video_id, NULL::text AS url, p.caption,
             CASE WHEN p.source_type = 'manual_input' THEN p.created_at ELSE COALESCE(p.original_created_at, p.created_at) END AS content_time,
+            (SELECT MAX(tc.updated_at) FROM tiktok_comment tc WHERE tc.video_id = p.video_id) AS snapshot_updated_at,
             EXISTS (
               SELECT 1
               FROM tiktok_comment tc
