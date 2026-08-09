@@ -539,7 +539,7 @@ router.post('/user-login', async (req, res) => {
     }
 
     const { rows } = await query(
-      'SELECT user_id, nama, whatsapp FROM "user" WHERE user_id = $1 AND whatsapp = $2',
+      'SELECT user_id, nama, whatsapp, "user".client_id FROM "user" WHERE user_id = $1 AND whatsapp = $2',
       [normalizedUserId, normalizedWhatsapp]
     );
     const user = rows[0];
@@ -550,7 +550,12 @@ router.post('/user-login', async (req, res) => {
         .json({ success: false, message: 'Login gagal: user_id atau whatsapp tidak sesuai' });
     }
 
-    const payload = { user_id: user.user_id, nama: user.nama, role: 'user' };
+    const payload = {
+      user_id: user.user_id,
+      nama: user.nama,
+      role: 'user',
+      client_id: user.client_id
+    };
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
       expiresIn: AUTH_TOKEN_LIFETIME_SECONDS
     });
@@ -587,7 +592,7 @@ router.post('/user-login', async (req, res) => {
         .json({ success: false, message: 'nrp dan password wajib diisi' });
     }
     const { rows } = await query(
-      'SELECT user_id, nama, password_hash FROM "user" WHERE user_id = $1',
+      'SELECT user_id, nama, password_hash, client_id FROM "user" WHERE user_id = $1',
       [normalizedNrp]
     );
     const user = rows[0];
@@ -603,7 +608,12 @@ router.post('/user-login', async (req, res) => {
         .status(401)
         .json({ success: false, message: 'Login gagal: password salah' });
     }
-    const payload = { user_id: user.user_id, nama: user.nama, role: 'user' };
+    const payload = {
+      user_id: user.user_id,
+      nama: user.nama,
+      role: 'user',
+      client_id: user.client_id
+    };
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
       expiresIn: AUTH_TOKEN_LIFETIME_SECONDS
     });
