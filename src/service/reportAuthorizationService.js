@@ -1,4 +1,4 @@
-import * as clientModel from "../model/clientModel.js";
+import * as clientModel from '../model/clientModel.js';
 
 export function normalizeReportClientId(value) {
   if (value === null || value === undefined) return null;
@@ -16,27 +16,48 @@ function getAuthenticatedClientIds(user = {}) {
     : user.client_ids
       ? [user.client_ids]
       : [];
-  const values = user.client_id ? [user.client_id, ...assignedValues] : assignedValues;
-  return values.map(normalizeReportClientId).filter(Boolean);
+  const values = user.client_id
+    ? [user.client_id, ...assignedValues]
+    : assignedValues;
+  return [
+    ...new Map(
+      values
+        .map(normalizeReportClientId)
+        .filter(Boolean)
+        .map((value) => [normalizeKey(value), value])
+    ).values(),
+  ];
+}
+
+function getDefaultClientId(user = {}) {
+  const primaryClientId = normalizeReportClientId(user.client_id);
+  if (primaryClientId) return primaryClientId;
+
+  const assignedClientIds = getAuthenticatedClientIds(user);
+  return assignedClientIds.length === 1 ? assignedClientIds[0] : null;
 }
 
 export function resolveReportRequestContext(req) {
   const user = req.user || {};
   const role = normalizeKey(user.role);
-  const scope = normalizeKey(req.query?.scope || user.scope) || "org";
+  const scope = normalizeKey(req.query?.scope || user.scope) || 'org';
   const requestedClientId = normalizeReportClientId(
-    req.headers?.["x-client-id"] || req.query?.client_id,
+    req.headers?.['x-client-id'] || req.query?.client_id
   );
   const effectiveClientId =
-    scope === "org"
+    scope === 'org'
       ? normalizeReportClientId(user.client_id) || requestedClientId
       : requestedClientId || normalizeReportClientId(user.client_id);
 
   return { effectiveClientId, role, scope };
 }
 
-async function hasTrustedDirectorateAccess(user, requestedClientId, requestedScope) {
-  if (normalizeKey(requestedScope) !== "direktorat") return false;
+async function hasTrustedDirectorateAccess(
+  user,
+  requestedClientId,
+  requestedScope
+) {
+  if (normalizeKey(requestedScope) !== 'direktorat') return false;
 
   const effectiveRole = normalizeKey(user?.role);
   if (!effectiveRole) return false;
@@ -45,8 +66,13 @@ async function hasTrustedDirectorateAccess(user, requestedClientId, requestedSco
   for (const assignedClientId of assignedClientIds) {
     if (normalizeKey(assignedClientId) !== effectiveRole) continue;
     const assignedClient = await clientModel.findById(assignedClientId);
-    if (normalizeKey(assignedClient?.client_type) !== "direktorat") continue;
-    if (await clientModel.isChildClientOf(requestedClientId, assignedClient.client_id)) {
+    if (normalizeKey(assignedClient?.client_type) !== 'direktorat') continue;
+    if (
+      await clientModel.isChildClientOf(
+        requestedClientId,
+        assignedClient.client_id
+      )
+    ) {
       return true;
     }
   }
@@ -55,40 +81,55 @@ async function hasTrustedDirectorateAccess(user, requestedClientId, requestedSco
 
 export async function authorizeReportRequest(
   req,
-  { source = "query", effectiveClientId, scope } = {},
+  { source = 'query', effectiveClientId, scope } = {}
 ) {
   const user = req.user || {};
   const requestedValue =
-    source === "body"
-      ? req.body?.client_id || req.body?.clientId || req.query?.client_id || req.query?.clientId
+    source === 'body'
+      ? req.body?.client_id ||
+        req.body?.clientId ||
+        req.query?.client_id ||
+        req.query?.clientId
       : req.query?.client_id;
   const requestedClientId = normalizeReportClientId(
-    effectiveClientId || requestedValue || req.headers?.["x-client-id"] || user.client_id,
+    effectiveClientId ||
+      requestedValue ||
+      req.headers?.['x-client-id'] ||
+      getDefaultClientId(user)
   );
   if (!requestedClientId) {
-    return { error: { status: 400, message: "client_id wajib diisi" } };
+    return { error: { status: 400, message: 'client_id wajib diisi' } };
   }
 
   const assignedClientIds = getAuthenticatedClientIds(user);
   const requestedKey = normalizeKey(requestedClientId);
-  const isDirectlyAssigned = assignedClientIds.some((id) => normalizeKey(id) === requestedKey);
-  const isSingleClientToken = Boolean(user.client_id) && assignedClientIds.length <= 1;
+  const isDirectlyAssigned = assignedClientIds.some(
+    (id) => normalizeKey(id) === requestedKey
+  );
+  const isSingleClientToken =
+    Boolean(user.client_id) && assignedClientIds.length <= 1;
 
   if (
     (!isDirectlyAssigned ||
       (isSingleClientToken && normalizeKey(user.client_id) !== requestedKey)) &&
-    !(await hasTrustedDirectorateAccess(user, requestedClientId, scope || req.query?.scope))
+    !(await hasTrustedDirectorateAccess(
+      user,
+      requestedClientId,
+      scope || req.query?.scope
+    ))
   ) {
-    return { error: { status: 403, message: "client_id tidak diizinkan" } };
+    return { error: { status: 403, message: 'client_id tidak diizinkan' } };
   }
 
   return {
     clientId: requestedClientId,
     role: normalizeKey(user.role),
-    scope: normalizeKey(scope || req.query?.scope || user.scope) || "org",
+    scope: normalizeKey(scope || req.query?.scope || user.scope) || 'org',
   };
 }
 
 export function sendReportAuthorizationError(res, error) {
-  return res.status(error.status).json({ success: false, message: error.message });
+  return res
+    .status(error.status)
+    .json({ success: false, message: error.message });
 }
