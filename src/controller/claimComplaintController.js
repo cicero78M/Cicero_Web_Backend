@@ -1,7 +1,6 @@
 import * as userModel from '../model/userModel.js';
 import { diagnoseComplaint } from '../service/complaintDiagnosisService.js';
 import { normalizeUserId } from '../utils/utilsHelper.js';
-import { sendSuccess } from '../utils/response.js';
 import { getComplaintContentForUser } from '../service/claimPendingContentService.js';
 import { hasUserLikedShortcode } from '../model/instaLikeModel.js';
 import { hasUserCommentedVideo } from '../model/tiktokCommentModel.js';
@@ -216,7 +215,7 @@ export async function triageClaimComplaint(req, res, next) {
       },
     });
 
-    return sendSuccess(res, {
+    return res.status(200).json({
       complaint_id: null,
       platform: body.platform,
       triage_code: diagnosis.triageCode,

@@ -106,7 +106,7 @@ describe('claim complaint triage', () => {
         fallbackIssue: expect.stringContaining('Instagram'),
       })
     );
-    expect(response.body.data).toMatchObject({
+    expect(response.body).toMatchObject({
       complaint_id: null,
       platform: 'instagram',
       triage_code: 'ACTIVITY_DIAGNOSIS_AVAILABLE',
@@ -118,6 +118,8 @@ describe('claim complaint triage', () => {
       performed_at: '2026-08-09T10:30:00+07:00',
       next_action: 'FOLLOW_TRIAGE_GUIDANCE',
     });
+    expect(response.body).not.toHaveProperty('data');
+    expect(response.body).not.toHaveProperty('success');
   });
 
   test.each([

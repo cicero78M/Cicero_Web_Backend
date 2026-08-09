@@ -220,8 +220,10 @@ Error internal diteruskan ke error middleware global dan mengikuti format error 
   yang sama dengan `GET /api/claim/me`. Field identitas request seperti `nrp`, `user_id`,
   `client_id`, `username`, `insta`, atau `tiktok` ditolak dan tidak pernah dipakai untuk
   memilih user.
-- **Pencatatan:** endpoint saat ini hanya melakukan diagnosis. Karena belum ada model/tabel
-  pencatatan komplain pada backend, `complaint_id` bernilai `null`.
+- **Pencatatan dan notifikasi:** endpoint ini hanya melakukan diagnosis dan tidak membuat
+  laporan ataupun mengirim WhatsApp. Karena belum ada model/tabel pencatatan komplain pada
+  backend, `complaint_id` bernilai `null`. DTO triase dikembalikan langsung sebagai body
+  respons agar klik diagnosis berulang tidak mempunyai efek samping.
 
 Request JSON hanya menerima empat field berikut:
 
@@ -241,27 +243,24 @@ Response sukses (`200`):
 
 ```json
 {
-  "success": true,
-  "data": {
-    "complaint_id": null,
-    "platform": "instagram",
-    "triage_code": "ACTIVITY_DIAGNOSIS_AVAILABLE",
-    "triage_quality": "complete",
-    "summary": "Pesan Komplain\nNRP/NIP: 12345678\n...",
-    "evidence": [
-      {
-        "type": "registered_handle",
-        "platform": "instagram",
-        "available": true
-      },
-      {
-        "type": "matched_issue_keys",
-        "values": ["instagram_not_recorded"]
-      }
-    ],
-    "solutions": ["Langkah verifikasi dan tindak lanjut hasil diagnosis."],
-    "can_escalate": true
-  }
+  "complaint_id": null,
+  "platform": "instagram",
+  "triage_code": "ACTIVITY_DIAGNOSIS_AVAILABLE",
+  "triage_quality": "complete",
+  "summary": "Pesan Komplain\nNRP/NIP: 12345678\n...",
+  "evidence": [
+    {
+      "type": "registered_handle",
+      "platform": "instagram",
+      "available": true
+    },
+    {
+      "type": "matched_issue_keys",
+      "values": ["instagram_not_recorded"]
+    }
+  ],
+  "solutions": ["Langkah verifikasi dan tindak lanjut hasil diagnosis."],
+  "can_escalate": true
 }
 ```
 
