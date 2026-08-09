@@ -263,4 +263,13 @@ describe('claim routes credential flow', () => {
     expect(userModelMocks.findUserById).not.toHaveBeenCalled();
     expect(userModelMocks.updateUser).not.toHaveBeenCalled();
   });
+
+  test('requires authentication for social profile validation', async () => {
+    const response = await request(app)
+      .post('/api/claim/social-profile/validate')
+      .send({ platform: 'instagram', username: 'cicero' });
+
+    expect(response.status).toBe(401);
+    expect(userModelMocks.updateUser).not.toHaveBeenCalled();
+  });
 });

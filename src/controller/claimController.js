@@ -21,6 +21,11 @@ import {
   validateTanggalFilter,
 } from '../utils/dateFilterValidation.js';
 import { getPendingContentForUser } from '../service/claimPendingContentService.js';
+import { fetchClaimSocialProfile } from '../service/claimSocialProfileService.js';
+import {
+  extractInstagramUsername,
+  extractTiktokUsername,
+} from '../utils/socialUsername.js';
 
 const validationErrorCodes = {
   invalidWhatsappFormat: 'CLAIM_INVALID_WHATSAPP_FORMAT',
@@ -160,34 +165,6 @@ function toClaimProfileDto(user) {
 
 function isValidEmailFormat(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
-function extractInstagramUsername(value) {
-  if (!value) return undefined;
-  const trimmed = value.trim();
-  const match = trimmed.match(
-    /^https?:\/\/(www\.)?instagram\.com\/([A-Za-z0-9._]+)\/?(\?.*)?$/i
-  );
-  const username = match ? match[2] : trimmed.replace(/^@/, '');
-  const normalized = username?.toLowerCase();
-  if (!normalized || !/^[a-z0-9._]{1,30}$/.test(normalized)) {
-    return null;
-  }
-  return normalized;
-}
-
-function extractTiktokUsername(value) {
-  if (!value) return undefined;
-  const trimmed = value.trim();
-  const match = trimmed.match(
-    /^https?:\/\/(www\.)?tiktok\.com\/@([A-Za-z0-9._]+)\/?(\?.*)?$/i
-  );
-  const username = match ? match[2] : trimmed.replace(/^@/, '');
-  const normalized = username?.toLowerCase();
-  if (!normalized || !/^[a-z0-9._]{1,24}$/.test(normalized)) {
-    return null;
-  }
-  return `@${normalized}`;
 }
 
 function isClaimPasswordValid(password) {
@@ -745,6 +722,64 @@ export async function updateClaimMe(req, res, next) {
     });
   }
   return updateClaimUser(req, res, next, userId);
+}
+
+export async function validateClaimSocialProfile(req, res) {
+  const platform = String(req.body?.platform || '')
+    .trim()
+    .toLowerCase();
+  if (!['instagram', 'tiktok'].includes(platform)) {
+    return res.status(400).json({
+      success: false,
+      error_code: 'CLAIM_SOCIAL_PLATFORM_INVALID',
+      message: 'Platform harus instagram atau tiktok.',
+    });
+  }
+
+  const normalize =
+    platform === 'instagram' ? extractInstagramUsername : extractTiktokUsername;
+  const username = normalize(req.body?.username);
+  if (!username) {
+    return res.status(400).json({
+      success: false,
+      error_code: 'CLAIM_SOCIAL_USERNAME_INVALID',
+      message: 'Format username tidak valid.',
+    });
+  }
+
+  try {
+    return sendSuccess(res, await fetchClaimSocialProfile(platform, username));
+  } catch (error) {
+    const responses = {
+      not_found: [
+        404,
+        'CLAIM_SOCIAL_PROFILE_NOT_FOUND',
+        'Akun tidak ditemukan.',
+      ],
+      rate_limited: [
+        429,
+        'CLAIM_SOCIAL_UPSTREAM_RATE_LIMITED',
+        'Kuota validasi sementara penuh. Coba lagi nanti.',
+      ],
+      configuration_unavailable: [
+        503,
+        'CLAIM_SOCIAL_CONFIGURATION_UNAVAILABLE',
+        'Layanan validasi belum dikonfigurasi.',
+      ],
+      upstream_unavailable: [
+        502,
+        'CLAIM_SOCIAL_UPSTREAM_UNAVAILABLE',
+        'Layanan validasi profil sedang terganggu.',
+      ],
+    };
+    const [status, errorCode, message] =
+      responses[error?.code] || responses.upstream_unavailable;
+    return res.status(status).json({
+      success: false,
+      error_code: errorCode,
+      message,
+    });
+  }
 }
 
 export async function requestClaimPasswordReset(req, res, next) {
