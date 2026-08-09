@@ -88,33 +88,6 @@ function normalizeClientIdLower(value) {
   return normalized ? normalized.toLowerCase() : null;
 }
 
-const directorateRoleClientMap = {
-  ditbinmas: ["ditbinmas"],
-  ditintelkam: ["ditintelkam"],
-  ditlantas: ["ditlantas"],
-  bidhumas: ["bidhumas"],
-  ditsamapta: ["ditsamapta"],
-};
-
-function isMappedDirectorateClient({ scope, role, clientId }) {
-  if (String(scope || "").toLowerCase() !== "direktorat") {
-    return false;
-  }
-
-  const roleKey = String(role || "").toLowerCase();
-  const normalizedClientId = normalizeClientIdLower(clientId);
-  if (!normalizedClientId) {
-    return false;
-  }
-
-  const allowedClients = directorateRoleClientMap[roleKey];
-  if (!allowedClients) {
-    return false;
-  }
-
-  return allowedClients.includes(normalizedClientId);
-}
-
 function parsePositiveDays(value) {
   if (value === undefined || value === null || String(value).trim() === "") {
     return { value: undefined };
@@ -181,29 +154,6 @@ export async function getInstaRekapLikes(req, res) {
   }
   client_id = normalizedClientId;
 
-  const normalizedClientIdLower = normalizeClientIdLower(client_id);
-
-  const userClientIds = req.user?.client_ids
-    ? Array.isArray(req.user.client_ids)
-      ? req.user.client_ids
-      : [req.user.client_ids]
-    : [];
-  const idsLower = userClientIds
-    .map((clientId) => normalizeClientIdLower(clientId))
-    .filter(Boolean);
-  const matchesTokenClient =
-    req.user?.client_id &&
-    normalizeClientIdLower(req.user.client_id) === normalizedClientIdLower;
-  const hasClientIdsAccess = idsLower.includes(normalizedClientIdLower);
-
-  const hasAuthorizedClientAccess = hasClientIdsAccess || matchesTokenClient;
-
-  if (!hasAuthorizedClientAccess) {
-    return res
-      .status(403)
-      .json({ success: false, message: "client_id tidak diizinkan" });
-  }
-
   const { error: tanggalError } = validateTanggalFilter(tanggal, periode);
   if (tanggalError) {
     return res.status(400).json({ success: false, message: tanggalError });
@@ -253,22 +203,6 @@ export async function getInstaRekapLikes(req, res) {
       }
 
       let postRoleFilterName;
-      if (
-        directorateRoles.includes(resolvedRole) &&
-        resolvedScope === "direktorat" &&
-        !isMappedDirectorateClient({
-          scope: resolvedScope,
-          role: resolvedRole,
-          clientId: client_id,
-        })
-      ) {
-        return res.status(403).json({
-          success: false,
-          message: "client_id tidak diizinkan",
-        });
-      }
-
-
       if (resolvedScope === "direktorat") {
         postClientId = client_id;
         userClientId = null;

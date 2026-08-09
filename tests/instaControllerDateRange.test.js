@@ -2,11 +2,13 @@ import { jest } from '@jest/globals';
 
 const mockGetRekap = jest.fn();
 const mockFindClientById = jest.fn();
+const mockIsChildClientOf = jest.fn();
 jest.unstable_mockModule('../src/model/instaLikeModel.js', () => ({
   getRekapLikesByClient: mockGetRekap
 }));
 jest.unstable_mockModule('../src/model/clientModel.js', () => ({
   findById: mockFindClientById,
+  isChildClientOf: mockIsChildClientOf,
 }));
 jest.unstable_mockModule('../src/middleware/debugHandler.js', () => ({
   sendConsoleDebug: jest.fn()
@@ -33,6 +35,8 @@ beforeAll(async () => {
 beforeEach(() => {
   mockGetRekap.mockReset();
   mockFindClientById.mockReset();
+  mockIsChildClientOf.mockReset();
+  mockIsChildClientOf.mockResolvedValue(false);
 });
 
 test('accepts tanggal_mulai and tanggal_selesai', async () => {
@@ -459,23 +463,69 @@ test('org ditbinmas uses x-client-id when token has no client_id', async () => {
     })
   );
 });
-test('scope direktorat enforces explicit role-client mapping', async () => {
+test('scope direktorat rejects a client that is not an assigned or child organization', async () => {
+  mockFindClientById.mockResolvedValue({
+    client_id: 'DITBINMAS',
+    client_type: 'direktorat',
+  });
   const req = {
     query: {
-      client_id: 'DITINTELKAM',
+      client_id: 'POLRES_UNASSIGNED',
       role: 'ditbinmas',
       scope: 'direktorat',
     },
-    user: { client_ids: ['DITINTELKAM'], client_id: 'DITINTELKAM', role: 'ditbinmas' },
+    user: { client_ids: ['DITBINMAS'], role: 'ditbinmas' },
   };
   const json = jest.fn();
   const res = { json, status: jest.fn().mockReturnThis() };
 
   await getInstaRekapLikes(req, res);
 
+  expect(mockIsChildClientOf).toHaveBeenCalledWith(
+    'POLRES_UNASSIGNED',
+    'DITBINMAS'
+  );
   expect(res.status).toHaveBeenCalledWith(403);
   expect(json).toHaveBeenCalledWith({ success: false, message: 'client_id tidak diizinkan' });
   expect(mockGetRekap).not.toHaveBeenCalled();
+});
+
+test('scope direktorat allows a database-verified child organization', async () => {
+  mockGetRekap.mockResolvedValue({ rows: [], totalKonten: 0 });
+  mockFindClientById.mockResolvedValue({
+    client_id: 'DITBINMAS',
+    client_type: 'direktorat',
+  });
+  mockIsChildClientOf.mockResolvedValue(true);
+  const req = {
+    query: {
+      client_id: 'POLRES_CHILD',
+      role: 'ditbinmas',
+      scope: 'direktorat',
+    },
+    user: { client_ids: ['DITBINMAS'], role: 'ditbinmas' },
+  };
+  const json = jest.fn();
+  const res = { json, status: jest.fn().mockReturnThis() };
+
+  await getInstaRekapLikes(req, res);
+
+  expect(mockIsChildClientOf).toHaveBeenCalledWith('POLRES_CHILD', 'DITBINMAS');
+  expect(res.status).not.toHaveBeenCalledWith(403);
+  expect(mockGetRekap).toHaveBeenCalledWith(
+    'POLRES_CHILD',
+    'harian',
+    undefined,
+    undefined,
+    undefined,
+    'ditbinmas',
+    expect.objectContaining({
+      postClientId: 'POLRES_CHILD',
+      userClientId: null,
+      userRoleFilter: 'ditbinmas',
+    })
+  );
+  expect(json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
 });
 
 test('scope direktorat allows matching role-client mapping', async () => {
