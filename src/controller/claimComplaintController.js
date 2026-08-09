@@ -5,6 +5,7 @@ import { sendSuccess } from '../utils/response.js';
 import { getComplaintContentForUser } from '../service/claimPendingContentService.js';
 import { hasUserLikedShortcode } from '../model/instaLikeModel.js';
 import { hasUserCommentedVideo } from '../model/tiktokCommentModel.js';
+import { buildClaimTriageResponse } from '../service/claimTriageResponseService.js';
 import {
   validateDateRange,
   validateTanggalFilter,
@@ -127,7 +128,10 @@ export async function triageClaimComplaint(req, res, next) {
 
     const periode = String(body.periode || 'harian').toLowerCase();
     const validPeriods = new Set(['harian', 'mingguan', 'bulanan', 'semua']);
-    const { error: tanggalError } = validateTanggalFilter(body.tanggal, periode);
+    const { error: tanggalError } = validateTanggalFilter(
+      body.tanggal,
+      periode
+    );
     const { error: rangeError } = validateDateRange(
       body.start_date,
       body.end_date
@@ -163,7 +167,8 @@ export async function triageClaimComplaint(req, res, next) {
         success: false,
         error_code: 'CLAIM_COMPLAINT_CONTENT_OUT_OF_SCOPE',
         field: identifierField,
-        message: 'Konten tidak termasuk tugas pending user pada scope yang dipilih.',
+        message:
+          'Konten tidak termasuk tugas pending user pada scope yang dipilih.',
       });
     }
 
@@ -195,12 +200,15 @@ export async function triageClaimComplaint(req, res, next) {
         : hasUserCommentedVideo(username, contentId)
     );
     const activityEvidence = await Promise.all(activityChecks);
-    const hasSelectedActivity = activityEvidence.some((item) => item.hasActivity);
+    const hasSelectedActivity = activityEvidence.some(
+      (item) => item.hasActivity
+    );
     const collectedTimes = activityEvidence
       .flatMap((item) => [item.latestAudit?.capturedAt, item.updatedAt])
       .filter(Boolean)
       .sort((left, right) => Date.parse(right) - Date.parse(left));
-    const lastCollectedAt = collectedTimes[0] || scopedContent.item.snapshot_updated_at || null;
+    const lastCollectedAt =
+      collectedTimes[0] || scopedContent.item.snapshot_updated_at || null;
     const diagnosis = await diagnoseComplaint({
       user,
       userId,
@@ -216,23 +224,18 @@ export async function triageClaimComplaint(req, res, next) {
       },
     });
 
-    return sendSuccess(res, {
-      complaint_id: null,
-      platform: body.platform,
-      triage_code: diagnosis.triageCode,
-      triage_quality: diagnosis.triageQuality,
-      summary: diagnosis.issue,
-      evidence: diagnosis.evidence,
-      solutions: diagnosis.solution ? [diagnosis.solution] : [],
-      can_escalate: diagnosis.canEscalate,
-      last_collected_at: lastCollectedAt,
-      performed_at: body.performed_at || null,
-      next_action: diagnosis.triageCode === 'DATA_COLLECTION_STALE'
-        ? 'WAIT_FOR_DATA_SYNC'
-        : diagnosis.canEscalate
-          ? 'FOLLOW_TRIAGE_GUIDANCE'
-          : 'NO_ACTION_REQUIRED',
-    });
+    return sendSuccess(
+      res,
+      buildClaimTriageResponse({
+        platform: body.platform,
+        contentId,
+        triageCode: diagnosis.triageCode,
+        triageQuality: diagnosis.triageQuality,
+        registeredUsername:
+          body.platform === 'instagram' ? user.insta : user.tiktok,
+        lastCollectedAt,
+      })
+    );
   } catch (err) {
     return next(err);
   }

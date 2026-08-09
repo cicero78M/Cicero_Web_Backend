@@ -20,8 +20,8 @@ describe('claim complaint triage', () => {
     diagnoseComplaint = jest.fn().mockResolvedValue({
       issue: 'Diagnosis aktivitas',
       solution: 'Lakukan verifikasi konten.',
-      triageCode: 'ACTIVITY_DIAGNOSIS_AVAILABLE',
-      triageQuality: 'complete',
+      triageCode: 'ENGAGEMENT_NOT_IN_SNAPSHOT',
+      triageQuality: 'medium',
       evidence: [{ type: 'registered_handle', available: true }],
       canEscalate: true,
     });
@@ -107,16 +107,25 @@ describe('claim complaint triage', () => {
       })
     );
     expect(response.body.data).toMatchObject({
-      complaint_id: null,
       platform: 'instagram',
-      triage_code: 'ACTIVITY_DIAGNOSIS_AVAILABLE',
-      triage_quality: 'complete',
-      evidence: [{ type: 'registered_handle', available: true }],
-      solutions: ['Lakukan verifikasi konten.'],
+      content_id: 'ABC123',
+      triage_code: 'ENGAGEMENT_NOT_IN_SNAPSHOT',
+      triage_quality: 'medium',
+      title: 'Aktivitas belum terlihat',
+      evidence: expect.arrayContaining([
+        {
+          label: 'Username tersimpan',
+          value: 'registered.ig',
+          status: 'tersedia',
+        },
+      ]),
+      solutions: expect.arrayContaining([
+        { order: 1, label: 'Pastikan konten yang diperiksa sudah benar.' },
+      ]),
+      can_retry: true,
+      retry_after: null,
       can_escalate: true,
       last_collected_at: '2026-08-09T03:05:00.000Z',
-      performed_at: '2026-08-09T10:30:00+07:00',
-      next_action: 'FOLLOW_TRIAGE_GUIDANCE',
     });
   });
 
@@ -129,26 +138,23 @@ describe('claim complaint triage', () => {
     'tiktok',
     'instagram_username',
     'tiktok_username',
-  ])(
-    'rejects identity field %s before loading a user',
-    async (field) => {
-      const response = await request(app)
-        .post('/api/claim/complaints/triage')
-        .set('x-test-user-id', '12345')
-        .send({
-          platform: 'instagram',
-          issue_type: 'activity_not_recorded',
-          shortcode: 'ABC123',
-          [field]: 'attacker-controlled',
-        });
+  ])('rejects identity field %s before loading a user', async (field) => {
+    const response = await request(app)
+      .post('/api/claim/complaints/triage')
+      .set('x-test-user-id', '12345')
+      .send({
+        platform: 'instagram',
+        issue_type: 'activity_not_recorded',
+        shortcode: 'ABC123',
+        [field]: 'attacker-controlled',
+      });
 
-      expect(response.status).toBe(400);
-      expect(response.body.error_code).toBe(
-        'CLAIM_COMPLAINT_IDENTITY_FIELD_FORBIDDEN'
-      );
-      expect(findClaimProfileById).not.toHaveBeenCalled();
-    }
-  );
+    expect(response.status).toBe(400);
+    expect(response.body.error_code).toBe(
+      'CLAIM_COMPLAINT_IDENTITY_FIELD_FORBIDDEN'
+    );
+    expect(findClaimProfileById).not.toHaveBeenCalled();
+  });
 
   test.each([
     ['platform', 'youtube', 'CLAIM_COMPLAINT_INVALID_PLATFORM'],
