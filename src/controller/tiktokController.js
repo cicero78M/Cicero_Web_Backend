@@ -16,6 +16,7 @@ import {
 } from '../utils/dateFilterValidation.js';
 import {
   authorizeReportRequest,
+  resolveReportRequestContext,
   sendReportAuthorizationError,
 } from '../service/reportAuthorizationService.js';
 
@@ -128,7 +129,8 @@ export async function getTiktokPosts(req, res) {
 import { getRekapKomentarByClient } from '../model/tiktokCommentModel.js';
 
 export async function getTiktokRekapKomentar(req, res) {
-  const authorization = await authorizeReportRequest(req);
+  const reportContext = resolveReportRequestContext(req);
+  const authorization = await authorizeReportRequest(req, reportContext);
   if (authorization.error) return sendReportAuthorizationError(res, authorization.error);
   let client_id =
     authorization.clientId;
@@ -137,7 +139,7 @@ export async function getTiktokRekapKomentar(req, res) {
   const startDate = req.query.start_date || req.query.tanggal_mulai;
   const endDate = req.query.end_date || req.query.tanggal_selesai;
   const requestedRole = req.user?.role;
-  const requestedScope = req.query.scope;
+  const requestedScope = authorization.scope;
   const requestedRegionalId = req.query.regional_id || req.user?.regional_id;
   const regionalId = requestedRegionalId
     ? String(requestedRegionalId).trim().toUpperCase()
@@ -155,7 +157,7 @@ export async function getTiktokRekapKomentar(req, res) {
     'ditsamapta',
     'ditintelkam',
   ];
-  const usesStandardPayload = Boolean(requestedScope || req.query.role);
+  const usesStandardPayload = Boolean(req.query.scope || req.query.role);
 
   if (!usesStandardPayload && roleLower === 'ditbinmas') {
     client_id = 'ditbinmas';

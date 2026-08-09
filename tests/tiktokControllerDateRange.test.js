@@ -11,6 +11,10 @@ jest.unstable_mockModule('../src/service/tiktokPostService.js', () => ({}));
 jest.unstable_mockModule('../src/service/clientService.js', () => ({
   findClientById: mockFindClientById,
 }));
+jest.unstable_mockModule('../src/model/clientModel.js', () => ({
+  findById: mockFindClientById,
+  isChildClientOf: jest.fn().mockResolvedValue(false),
+}));
 jest.unstable_mockModule('../src/utils/response.js', () => ({ sendSuccess: jest.fn() }));
 jest.unstable_mockModule('../src/service/tiktokApi.js', () => ({
   fetchTiktokProfile: jest.fn(),
@@ -39,7 +43,8 @@ test('accepts tanggal_mulai and tanggal_selesai', async () => {
       tanggal_mulai: '2024-01-01',
       tanggal_selesai: '2024-01-31'
     },
-    headers: {}
+    headers: {},
+    user: { client_ids: ['DITBINMAS'] },
   };
   const json = jest.fn();
   const res = { json, status: jest.fn().mockReturnThis() };
@@ -63,7 +68,11 @@ test('returns user comment summaries with counts', async () => {
     { username: 'charlie', jumlah_komentar: 1 }
   ];
   mockGetRekap.mockResolvedValue(rows);
-  const req = { query: { client_id: 'DITBINMAS' }, headers: {} };
+  const req = {
+    query: { client_id: 'DITBINMAS' },
+    headers: {},
+    user: { client_ids: ['DITBINMAS'] },
+  };
   const json = jest.fn();
   const res = { json, status: jest.fn().mockReturnThis() };
   await getTiktokRekapKomentar(req, res);
@@ -168,6 +177,56 @@ test('scope org ditintelkam enables satik filter for org client without switch_s
   );
 });
 
+test('scope org uses the token organization instead of the frontend directorate client', async () => {
+  mockGetRekap.mockResolvedValue([]);
+  mockFindClientById.mockResolvedValue({ client_type: 'org', switch_satik: false });
+  const req = {
+    query: {
+      client_id: 'DITINTELKAM',
+      role: 'ditintelkam',
+      scope: 'org',
+    },
+    user: {
+      client_id: 'TOKEN_ORG',
+      client_ids: ['TOKEN_ORG', 'DITINTELKAM'],
+      role: 'ditintelkam',
+    },
+    headers: {},
+  };
+  const json = jest.fn();
+  const res = { json, status: jest.fn().mockReturnThis() };
+
+  await getTiktokRekapKomentar(req, res);
+
+  expect(res.status).not.toHaveBeenCalledWith(403);
+  expect(mockGetRekap).toHaveBeenCalledWith(
+    'TOKEN_ORG',
+    'harian',
+    undefined,
+    undefined,
+    undefined,
+    'ditintelkam',
+    expect.objectContaining({ userClientId: 'TOKEN_ORG' }),
+  );
+  expect(json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+});
+
+test('scope org rejects an organization outside authenticated client_ids', async () => {
+  const req = {
+    query: { client_id: 'OTHER_ORG', role: 'operator', scope: 'org' },
+    user: { client_ids: ['TOKEN_ORG'], role: 'operator' },
+    headers: {},
+  };
+  const json = jest.fn();
+  const res = { json, status: jest.fn().mockReturnThis() };
+
+  await getTiktokRekapKomentar(req, res);
+
+  expect(res.status).toHaveBeenCalledWith(403);
+  expect(json).toHaveBeenCalledWith({ success: false, message: 'client_id tidak diizinkan' });
+  expect(mockGetRekap).not.toHaveBeenCalled();
+});
+
 
 test('returns taskLinksToday when model provides recap meta', async () => {
   mockGetRekap.mockResolvedValue({
@@ -178,7 +237,11 @@ test('returns taskLinksToday when model provides recap meta', async () => {
       links: ['https://www.tiktok.com/video/1234567890']
     }
   });
-  const req = { query: { client_id: 'DITINTELKAM' }, headers: {} };
+  const req = {
+    query: { client_id: 'DITINTELKAM' },
+    headers: {},
+    user: { client_ids: ['DITINTELKAM'] },
+  };
   const json = jest.fn();
   const res = { json, status: jest.fn().mockReturnThis() };
 

@@ -123,7 +123,7 @@ test('allows org operator scope using token client_id', async () => {
   mockFindClientById.mockResolvedValueOnce({ client_type: 'org' });
   const req = {
     query: { client_id: 'DIR1', role: 'operator', scope: 'ORG' },
-    user: { client_id: 'ORG1', client_ids: ['DIR1'] }
+    user: { client_id: 'ORG1', client_ids: ['DIR1'], role: 'operator' }
   };
   const json = jest.fn();
   const res = { json, status: jest.fn().mockReturnThis() };
@@ -162,7 +162,7 @@ test('scope direktorat includes client-or-role post filter for task links', asyn
       periode: 'harian',
       tanggal: '2026-02-24',
     },
-    user: { client_ids: ['DITINTELKAM'], client_id: 'DITINTELKAM' }
+    user: { client_ids: ['DITINTELKAM'], client_id: 'DITINTELKAM', role: 'ditintelkam' }
   };
   const json = jest.fn();
   const res = { json, status: jest.fn().mockReturnThis() };
@@ -255,7 +255,7 @@ test('scope org ditintelkam enables satik filter when switch_satik is string tru
       tanggal: '2026-03-01',
       regional_id: 'JATIM',
     },
-    user: { client_ids: ['NGAWI'], client_id: 'NGAWI' },
+    user: { client_ids: ['NGAWI'], client_id: 'NGAWI', role: 'ditintelkam' },
   };
   const json = jest.fn();
   const res = { json, status: jest.fn().mockReturnThis() };
@@ -297,7 +297,7 @@ test('scope org ditbinmas follows tiktok comments flow (role-scoped post client)
       tanggal: '2026-03-01',
       regional_id: 'JATIM',
     },
-    user: { client_ids: ['NGAWI'], client_id: 'NGAWI' },
+    user: { client_ids: ['NGAWI'], client_id: 'NGAWI', role: 'ditbinmas' },
   };
   const json = jest.fn();
   const res = { json, status: jest.fn().mockReturnThis() };
@@ -338,7 +338,11 @@ test('org ditbinmas ignores query client_id and uses token client_id', async () 
       periode: 'harian',
       tanggal: '2026-03-01',
     },
-    user: { client_ids: ['DITBINMAS', 'PRESISI_ORG'], client_id: 'PRESISI_ORG' },
+    user: {
+      client_ids: ['DITBINMAS', 'PRESISI_ORG'],
+      client_id: 'PRESISI_ORG',
+      role: 'ditbinmas',
+    },
   };
   const json = jest.fn();
   const res = { json, status: jest.fn().mockReturnThis() };
@@ -376,7 +380,7 @@ test('org operator ignores query client_id and uses token client_id', async () =
       role: 'operator',
       scope: 'org',
     },
-    user: { client_id: 'TOKEN_ORG', client_ids: ['TOKEN_ORG'] },
+    user: { client_id: 'TOKEN_ORG', client_ids: ['TOKEN_ORG'], role: 'operator' },
   };
   const json = jest.fn();
   const res = { json, status: jest.fn().mockReturnThis() };
@@ -406,6 +410,21 @@ test('org operator ignores query client_id and uses token client_id', async () =
   expect(json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
 });
 
+test('scope org rejects an unassigned organization when token has no selected client_id', async () => {
+  const req = {
+    query: { client_id: 'OTHER_ORG', role: 'operator', scope: 'org' },
+    user: { client_ids: ['TOKEN_ORG'], role: 'operator' },
+  };
+  const json = jest.fn();
+  const res = { json, status: jest.fn().mockReturnThis() };
+
+  await getInstaRekapLikes(req, res);
+
+  expect(res.status).toHaveBeenCalledWith(403);
+  expect(json).toHaveBeenCalledWith({ success: false, message: 'client_id tidak diizinkan' });
+  expect(mockGetRekap).not.toHaveBeenCalled();
+});
+
 
 test('org ditbinmas uses x-client-id when token has no client_id', async () => {
   mockGetRekap.mockResolvedValue({ rows: [], totalKonten: 0 });
@@ -419,7 +438,7 @@ test('org ditbinmas uses x-client-id when token has no client_id', async () => {
       tanggal: '2026-03-01',
     },
     headers: { 'x-client-id': 'NGAWI' },
-    user: { client_ids: ['NGAWI'] },
+    user: { client_ids: ['NGAWI'], role: 'ditbinmas' },
   };
   const json = jest.fn();
   const res = { json, status: jest.fn().mockReturnThis() };
@@ -447,7 +466,7 @@ test('scope direktorat enforces explicit role-client mapping', async () => {
       role: 'ditbinmas',
       scope: 'direktorat',
     },
-    user: { client_ids: ['DITINTELKAM'], client_id: 'DITINTELKAM' },
+    user: { client_ids: ['DITINTELKAM'], client_id: 'DITINTELKAM', role: 'ditbinmas' },
   };
   const json = jest.fn();
   const res = { json, status: jest.fn().mockReturnThis() };
@@ -467,7 +486,7 @@ test('scope direktorat allows matching role-client mapping', async () => {
       role: 'ditbinmas',
       scope: 'direktorat',
     },
-    user: { client_ids: ['DITBINMAS'], client_id: 'DITBINMAS' },
+    user: { client_ids: ['DITBINMAS'], client_id: 'DITBINMAS', role: 'ditbinmas' },
   };
   const json = jest.fn();
   const res = { json, status: jest.fn().mockReturnThis() };
