@@ -212,6 +212,81 @@ Error internal diteruskan ke error middleware global dan mengikuti format error 
 
 # Validasi Profil Sosial Claim
 
+## Triage Kendala Aktivitas Claim
+
+- **Endpoint:** `POST /api/claim/complaints/triage`
+- **Autentikasi:** wajib token/cookie yang diproses oleh `authRequired`.
+- **Identitas:** hanya `req.user.user_id` dari token. Controller memuat profil dengan model
+  yang sama dengan `GET /api/claim/me`. Field identitas request seperti `nrp`, `user_id`,
+  `client_id`, `username`, `insta`, atau `tiktok` ditolak dan tidak pernah dipakai untuk
+  memilih user.
+- **Pencatatan:** endpoint saat ini hanya melakukan diagnosis. Karena belum ada model/tabel
+  pencatatan komplain pada backend, `complaint_id` bernilai `null`.
+
+Request JSON hanya menerima empat field berikut:
+
+```json
+{
+  "platform": "instagram",
+  "issue_type": "activity_not_recorded",
+  "content_id": "ABC123",
+  "performed_at": "2026-08-09T10:30:00+07:00"
+}
+```
+
+`platform` harus `instagram` atau `tiktok`; `issue_type` harus selalu
+`activity_not_recorded`. `content_id` dan `performed_at` opsional. Field tambahan ditolak.
+
+Response sukses (`200`):
+
+```json
+{
+  "success": true,
+  "data": {
+    "complaint_id": null,
+    "platform": "instagram",
+    "triage_code": "ACTIVITY_DIAGNOSIS_AVAILABLE",
+    "triage_quality": "complete",
+    "summary": "Pesan Komplain\nNRP/NIP: 12345678\n...",
+    "evidence": [
+      {
+        "type": "registered_handle",
+        "platform": "instagram",
+        "available": true
+      },
+      {
+        "type": "matched_issue_keys",
+        "values": ["instagram_not_recorded"]
+      }
+    ],
+    "solutions": ["Langkah verifikasi dan tindak lanjut hasil diagnosis."],
+    "can_escalate": true
+  }
+}
+```
+
+Error validasi selalu berstatus `400` dan memakai kode stabil berikut:
+
+| `error_code`                               | Kondisi                                      |
+| ------------------------------------------ | -------------------------------------------- |
+| `CLAIM_COMPLAINT_IDENTITY_FIELD_FORBIDDEN` | Payload memuat field identitas user.         |
+| `CLAIM_COMPLAINT_UNSUPPORTED_FIELD`        | Payload memuat field selain empat field API. |
+| `CLAIM_COMPLAINT_INVALID_PLATFORM`         | Platform tidak didukung.                     |
+| `CLAIM_COMPLAINT_INVALID_ISSUE_TYPE`       | Tipe kendala tidak didukung.                 |
+| `CLAIM_COMPLAINT_INVALID_CONTENT_ID`       | ID konten bukan teks non-kosong.             |
+| `CLAIM_COMPLAINT_INVALID_PERFORMED_AT`     | Waktu pelaksanaan bukan tanggal yang valid.  |
+
+Contoh error field identitas (`400`):
+
+```json
+{
+  "success": false,
+  "error_code": "CLAIM_COMPLAINT_IDENTITY_FIELD_FORBIDDEN",
+  "field": "nrp",
+  "message": "Identitas user hanya boleh berasal dari token autentikasi."
+}
+```
+
 ## `POST /api/claim/social-profile/validate`
 
 Endpoint ini memeriksa profil sebelum user menyimpan perubahan claim. Endpoint
