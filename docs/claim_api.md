@@ -215,77 +215,118 @@ Error internal diteruskan ke error middleware global dan mengikuti format error 
 ## Triage Kendala Aktivitas Claim
 
 - **Endpoint:** `POST /api/claim/complaints/triage`
-- **Autentikasi:** wajib token/cookie yang diproses oleh `authRequired`.
-- **Identitas:** hanya `req.user.user_id` dari token. Controller memuat profil dengan model
-  yang sama dengan `GET /api/claim/me`. Field identitas request seperti `nrp`, `user_id`,
-  `client_id`, `username`, `insta`, atau `tiktok` ditolak dan tidak pernah dipakai untuk
-  memilih user.
-- **Pencatatan:** endpoint saat ini hanya melakukan diagnosis. Karena belum ada model/tabel
-  pencatatan komplain pada backend, `complaint_id` bernilai `null`.
+- **Autentikasi:** wajib token/cookie yang diproses `authRequired`.
+- **Identitas:** selalu berasal dari `req.user.user_id`; field identitas di body ditolak.
+- **Pencatatan:** endpoint hanya mendiagnosis dan tidak membuat record komplain.
 
-Request JSON hanya menerima empat field berikut:
+### Request
+
+Identifier mengikuti platform: `shortcode` untuk Instagram atau `video_id` untuk
+TikTok. `performed_at` opsional, tetapi dianjurkan agar backend dapat menentukan
+apakah snapshot sudah mencakup waktu pelaksanaan.
 
 ```json
 {
   "platform": "instagram",
   "issue_type": "activity_not_recorded",
-  "content_id": "ABC123",
-  "performed_at": "2026-08-09T10:30:00+07:00"
+  "shortcode": "ABC123",
+  "performed_at": "2026-08-09T10:30:00+07:00",
+  "periode": "harian",
+  "tanggal": "2026-08-09"
 }
 ```
 
-`platform` harus `instagram` atau `tiktok`; `issue_type` harus selalu
-`activity_not_recorded`. `content_id` dan `performed_at` opsional. Field tambahan ditolak.
+Filter opsional lain adalah pasangan `start_date` dan `end_date`. Field identitas
+(`nrp`, `user_id`, `client_id`, `username`, `insta`, `tiktok`,
+`instagram_username`, `tiktok_username`) dan pesan/solusi buatan client ditolak.
 
-Response sukses (`200`):
+### DTO response
+
+Frontend harus merender field terstruktur dan **tidak menebak atau memetakan sendiri
+isi pesan**.
+
+| Field               | Tipe        | Keterangan                                                                           |
+| ------------------- | ----------- | ------------------------------------------------------------------------------------ |
+| `platform`          | string      | `instagram` atau `tiktok`.                                                           |
+| `content_id`        | string      | `shortcode`/`video_id` yang diperiksa.                                               |
+| `triage_code`       | string      | Kode keputusan stabil.                                                               |
+| `triage_quality`    | string      | Kualitas bukti: `low`, `medium`, atau `high`.                                        |
+| `title`             | string      | Label Indonesia siap tampil.                                                         |
+| `summary`           | string      | Penjelasan netral siap tampil.                                                       |
+| `evidence`          | array       | Objek `{label, value, status}`; `value` dapat `null`.                                |
+| `solutions`         | array       | Langkah `{order, label}` dengan `order` mulai dari 1.                                |
+| `last_collected_at` | string/null | Waktu ISO snapshot/audit terakhir.                                                   |
+| `can_retry`         | boolean     | Apakah pemeriksaan ulang tersedia.                                                   |
+| `retry_after`       | string/null | Waktu ISO retry terjadwal; `null` karena backend belum mempunyai jadwal retry pasti. |
+| `can_escalate`      | boolean     | Apakah frontend boleh menawarkan eskalasi.                                           |
+
+Contoh response aktivitas yang sudah tercatat:
 
 ```json
 {
   "success": true,
   "data": {
-    "complaint_id": null,
     "platform": "instagram",
-    "triage_code": "ACTIVITY_DIAGNOSIS_AVAILABLE",
-    "triage_quality": "complete",
-    "summary": "Pesan Komplain\nNRP/NIP: 12345678\n...",
+    "content_id": "ABC123",
+    "triage_code": "ACTIVITY_ALREADY_RECORDED",
+    "triage_quality": "high",
+    "title": "Aktivitas sudah tercatat",
+    "summary": "Aktivitas sudah tersedia di Cicero. Muat ulang halaman untuk melihat hasil pencatatan terbaru.",
     "evidence": [
+      { "label": "Platform", "value": "instagram", "status": "terkonfirmasi" },
+      { "label": "ID konten", "value": "ABC123", "status": "terkonfirmasi" },
       {
-        "type": "registered_handle",
-        "platform": "instagram",
-        "available": true
+        "label": "Username tersimpan",
+        "value": "@personel",
+        "status": "tersedia"
       },
       {
-        "type": "matched_issue_keys",
-        "values": ["instagram_not_recorded"]
+        "label": "Waktu pengumpulan terakhir",
+        "value": "2026-08-09T03:05:00.000Z",
+        "status": "tersedia"
       }
     ],
-    "solutions": ["Langkah verifikasi dan tindak lanjut hasil diagnosis."],
-    "can_escalate": true
+    "solutions": [
+      { "order": 1, "label": "Muat ulang halaman claim." },
+      {
+        "order": 2,
+        "label": "Periksa kembali status aktivitas pada konten yang sama."
+      }
+    ],
+    "last_collected_at": "2026-08-09T03:05:00.000Z",
+    "can_retry": false,
+    "retry_after": null,
+    "can_escalate": false
   }
 }
 ```
 
-Error validasi selalu berstatus `400` dan memakai kode stabil berikut:
+### Katalog label dan tindakan Indonesia
 
-| `error_code`                               | Kondisi                                      |
-| ------------------------------------------ | -------------------------------------------- |
-| `CLAIM_COMPLAINT_IDENTITY_FIELD_FORBIDDEN` | Payload memuat field identitas user.         |
-| `CLAIM_COMPLAINT_UNSUPPORTED_FIELD`        | Payload memuat field selain empat field API. |
-| `CLAIM_COMPLAINT_INVALID_PLATFORM`         | Platform tidak didukung.                     |
-| `CLAIM_COMPLAINT_INVALID_ISSUE_TYPE`       | Tipe kendala tidak didukung.                 |
-| `CLAIM_COMPLAINT_INVALID_CONTENT_ID`       | ID konten bukan teks non-kosong.             |
-| `CLAIM_COMPLAINT_INVALID_PERFORMED_AT`     | Waktu pelaksanaan bukan tanggal yang valid.  |
+| `triage_code`                | `title`                         | Perilaku UI dari DTO                                                         |
+| ---------------------------- | ------------------------------- | ---------------------------------------------------------------------------- |
+| `ACTIVITY_ALREADY_RECORDED`  | Aktivitas sudah tercatat        | Refresh halaman dan tampilkan `last_collected_at`; tanpa eskalasi.           |
+| `SOCIAL_USERNAME_MISSING`    | Username belum diisi            | Arahkan ke **Update Data Personil** (`/claim`), lalu periksa ulang.          |
+| `SOCIAL_USERNAME_MISMATCH`   | Username tidak sesuai           | Koreksi melalui **Update Data Personil**, lalu periksa ulang.                |
+| `SOCIAL_PROFILE_PRIVATE`     | Profil tidak dapat diperiksa    | Jelaskan akun perlu dapat diperiksa; tawarkan retry/eskalasi.                |
+| `SOCIAL_PROFILE_NOT_FOUND`   | Profil belum ditemukan          | Minta pemeriksaan username tanpa menyatakan user bersalah.                   |
+| `SOCIAL_PROFILE_SUSPICIOUS`  | Data profil perlu diperiksa     | Metrik belum cukup; tawarkan retry/eskalasi.                                 |
+| `ENGAGEMENT_NOT_IN_SNAPSHOT` | Aktivitas belum terlihat        | Bukti belum ditemukan, bukan kesalahan user; tawarkan retry/eskalasi.        |
+| `DATA_COLLECTION_STALE`      | Menunggu sinkronisasi           | Snapshot belum mencakup pelaksanaan; tampilkan status menunggu sinkronisasi. |
+| `UPSTREAM_UNAVAILABLE`       | Pemeriksaan sementara terganggu | Gangguan layanan bukan kesalahan user; tawarkan retry/eskalasi.              |
+| `MANUAL_REVIEW_REQUIRED`     | Bukti perlu diperiksa           | Bukti belum cukup, bukan kesalahan user; tawarkan retry/eskalasi.            |
 
-Contoh error field identitas (`400`):
+Formatter teks/WhatsApp hanya merender DTO sebagai adapter presentasi. Formatter
+tidak boleh memilih `triage_code`, mengubah flag tindakan, atau menjadi sumber aturan.
 
-```json
-{
-  "success": false,
-  "error_code": "CLAIM_COMPLAINT_IDENTITY_FIELD_FORBIDDEN",
-  "field": "nrp",
-  "message": "Identitas user hanya boleh berasal dari token autentikasi."
-}
-```
+### Error
+
+Error `400` meliputi `CLAIM_COMPLAINT_IDENTITY_FIELD_FORBIDDEN`,
+`CLAIM_COMPLAINT_UNSUPPORTED_FIELD`, `CLAIM_COMPLAINT_INVALID_PLATFORM`,
+`CLAIM_COMPLAINT_INVALID_ISSUE_TYPE`, `CLAIM_COMPLAINT_CONTENT_ID_REQUIRED`,
+`CLAIM_COMPLAINT_PLATFORM_CONTENT_MISMATCH`, `CLAIM_COMPLAINT_INVALID_PERFORMED_AT`,
+dan `CLAIM_COMPLAINT_INVALID_DATE_FILTER`. Konten di luar scope pending memakai `403`
+dengan `CLAIM_COMPLAINT_CONTENT_OUT_OF_SCOPE`.
 
 ## `POST /api/claim/social-profile/validate`
 
