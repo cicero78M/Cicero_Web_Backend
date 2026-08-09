@@ -204,6 +204,8 @@ export async function triageClaimComplaint(req, res, next) {
       selectedContent: {
         id: contentId,
         hasActivity: hasSelectedActivity,
+        snapshotAvailable: Boolean(scopedContent.item.snapshot_updated_at),
+        snapshotUpdatedAt: scopedContent.item.snapshot_updated_at || null,
       },
     });
 

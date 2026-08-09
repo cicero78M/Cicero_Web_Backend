@@ -6,6 +6,10 @@ import {
   buildComplaintSolutionsFromIssues,
   buildUpdateDataInstructions,
 } from './complaintService.js';
+import {
+  RAPID_API_OUTCOMES,
+  triageClaimComplaintEvidence,
+} from './claimComplaintTriageService.js';
 
 function isUserActive(user) {
   if (!user) return false;
@@ -59,8 +63,8 @@ export async function diagnoseComplaint({
   });
   let issue = formattedIssue || fallbackIssue;
   let solution = '';
-  let triageCode = 'ACTIVITY_DIAGNOSIS_AVAILABLE';
-  let triageQuality = 'complete';
+  let triageCode = 'MANUAL_REVIEW_REQUIRED';
+  let triageQuality = 'low';
   const evidence = [];
 
   if (!isUserActive(user)) {
@@ -70,7 +74,6 @@ export async function diagnoseComplaint({
       'Mohon hubungi operator satker untuk melakukan aktivasi akun sebelum melanjutkan pelaporan tugas atau komplain.',
       'Setelah akun aktif, silakan informasikan kembali melalui menu *Client Request* bila kendala masih terjadi.',
     ].join('\n');
-    triageCode = 'USER_INACTIVE';
     evidence.push({ type: 'user_status', value: 'inactive' });
   } else {
     const accountStatus = await buildAccountStatus(user);
@@ -97,8 +100,6 @@ export async function diagnoseComplaint({
         '',
         `Tautan update data personel: ${UPDATE_DATA_LINK}`,
       ].join('\n');
-      triageCode = 'SOCIAL_ACCOUNT_MISSING';
-      triageQuality = 'limited';
     } else {
       const result = claimPlatform
         ? await buildActivityNotRecordedSolution(
@@ -119,11 +120,31 @@ export async function diagnoseComplaint({
         type: 'matched_issue_keys',
         values: [...result.handledKeys],
       });
-      if (!solution) {
-        triageCode = 'ISSUE_NOT_CLASSIFIED';
-        triageQuality = 'limited';
-      }
     }
+
+    const profileStatus = accountStatus?.[platform] || {};
+    const profileOutcome = profileStatus.upstreamOutcome || (profileStatus.error
+      ? RAPID_API_OUTCOMES.UNAVAILABLE
+      : profileStatus.found
+        ? RAPID_API_OUTCOMES.AVAILABLE
+        : RAPID_API_OUTCOMES.NOT_FOUND);
+    ({ triageCode, triageQuality } = triageClaimComplaintEvidence({
+      registeredUsername: handle,
+      activityRecorded: Boolean(selectedContent?.hasActivity),
+      snapshotAvailable: Boolean(selectedContent?.snapshotAvailable),
+      snapshotUpdatedAt: selectedContent?.snapshotUpdatedAt,
+      profile: {
+        outcome: profileOutcome,
+        exists: Boolean(profileStatus.found),
+        isPrivate: /privat/i.test(profileStatus.state || ''),
+        metrics: {
+          posts: profileStatus.posts,
+          followers: profileStatus.followers,
+          following: profileStatus.following,
+          likes: profileStatus.likes,
+        },
+      },
+    }));
   }
 
   return {
@@ -132,6 +153,6 @@ export async function diagnoseComplaint({
     triageCode,
     triageQuality,
     evidence,
-    canEscalate: triageCode !== 'USER_INACTIVE',
+    canEscalate: triageCode !== 'ACTIVITY_ALREADY_RECORDED',
   };
 }

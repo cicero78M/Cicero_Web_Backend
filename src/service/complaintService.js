@@ -5,6 +5,10 @@ import { fetchTiktokProfile } from "./tiktokRapidService.js";
 import { hasUserLikedBetween } from "../model/instaLikeModel.js";
 import { hasUserCommentedBetween } from "../model/tiktokCommentModel.js";
 import { normalizeUserWhatsAppId } from "../utils/waHelper.js";
+import {
+  RAPID_API_OUTCOMES,
+  mapRapidApiError,
+} from "./claimComplaintTriageService.js";
 
 const numberFormatter = new Intl.NumberFormat("id-ID");
 export const UPDATE_DATA_LINK = "https://papiqo.com/claim";
@@ -329,7 +333,10 @@ async function verifyInstagramHandle(handle) {
       status,
     };
   } catch (err) {
-    const message = err?.message || "tidak diketahui";
+    const outcome = mapRapidApiError(err);
+    const message = outcome === RAPID_API_OUTCOMES.NOT_FOUND
+      ? "Profil tidak ditemukan."
+      : "Layanan pemeriksaan profil sedang tidak tersedia.";
     const status = {
       found: false,
       posts: null,
@@ -337,6 +344,7 @@ async function verifyInstagramHandle(handle) {
       following: null,
       state: "",
       error: message,
+      upstreamOutcome: outcome,
     };
     return {
       summary: buildPlatformSummary(`Instagram (${normalized})`, status),
@@ -375,7 +383,10 @@ async function verifyTiktokHandle(handle) {
       status,
     };
   } catch (err) {
-    const message = err?.message || "tidak diketahui";
+    const outcome = mapRapidApiError(err);
+    const message = outcome === RAPID_API_OUTCOMES.NOT_FOUND
+      ? "Profil tidak ditemukan."
+      : "Layanan pemeriksaan profil sedang tidak tersedia.";
     const status = {
       found: false,
       posts: null,
@@ -384,6 +395,7 @@ async function verifyTiktokHandle(handle) {
       likes: null,
       state: "",
       error: message,
+      upstreamOutcome: outcome,
     };
     return {
       summary: buildPlatformSummary(`TikTok (${normalized})`, status),
@@ -486,8 +498,12 @@ export async function buildAccountStatus(user) {
         lines.push("", note);
       }
     } catch (err) {
-      const errorMsg = err?.message || "tidak diketahui";
+      const outcome = mapRapidApiError(err);
+      const errorMsg = outcome === RAPID_API_OUTCOMES.NOT_FOUND
+        ? "Profil tidak ditemukan."
+        : "Layanan pemeriksaan profil sedang tidak tersedia.";
       result.instagram.error = errorMsg;
+      result.instagram.upstreamOutcome = outcome;
       result.instagram.summaryForSolution = buildPlatformSummary("Instagram", {
         error: errorMsg,
       });
@@ -559,8 +575,12 @@ export async function buildAccountStatus(user) {
         lines.push("", note);
       }
     } catch (err) {
-      const errorMsg = err?.message || "tidak diketahui";
+      const outcome = mapRapidApiError(err);
+      const errorMsg = outcome === RAPID_API_OUTCOMES.NOT_FOUND
+        ? "Profil tidak ditemukan."
+        : "Layanan pemeriksaan profil sedang tidak tersedia.";
       result.tiktok.error = errorMsg;
+      result.tiktok.upstreamOutcome = outcome;
       result.tiktok.summaryForSolution = buildPlatformSummary("TikTok", {
         error: errorMsg,
       });
