@@ -23,6 +23,7 @@ import {
 import * as clientModel from "../model/clientModel.js";
 import {
   authorizeReportRequest,
+  resolveReportRequestContext,
   sendReportAuthorizationError,
 } from "../service/reportAuthorizationService.js";
 
@@ -130,7 +131,8 @@ function parsePositiveDays(value) {
 }
 
 export async function getInstaRekapLikes(req, res) {
-  const authorization = await authorizeReportRequest(req);
+  const reportContext = resolveReportRequestContext(req);
+  const authorization = await authorizeReportRequest(req, reportContext);
   if (authorization.error) return sendReportAuthorizationError(res, authorization.error);
   let client_id =
     authorization.clientId;
@@ -140,7 +142,7 @@ export async function getInstaRekapLikes(req, res) {
     req.query.start_date || req.query.tanggal_mulai;
   const endDate = req.query.end_date || req.query.tanggal_selesai;
   const requestedRole = req.user?.role;
-  const requestedScope = req.query.scope;
+  const requestedScope = authorization.scope;
   const requestedRegionalId = req.query.regional_id || req.user?.regional_id;
   const officialOnlyFlag = parseOfficialOnlyFlag(req.query.official_only);
   const regionalId = requestedRegionalId
@@ -159,11 +161,10 @@ export async function getInstaRekapLikes(req, res) {
     "bidhumas",
     "ditsamapta",
   ];
-  const authenticatedClientId =
-    req.user?.client_id || req.headers?.["x-client-id"] || null;
+  const authenticatedClientId = authorization.clientId;
   const isOrgDirectorateScope =
     scopeLower === "org" && directorateRoles.includes(roleLower);
-  const usesStandardPayload = Boolean(requestedScope || req.query.role);
+  const usesStandardPayload = Boolean(req.query.scope || req.query.role);
 
   if (!usesStandardPayload && roleLower === "ditbinmas") {
     client_id = "ditbinmas";
