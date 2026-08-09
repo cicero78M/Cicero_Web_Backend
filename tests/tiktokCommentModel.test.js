@@ -28,14 +28,23 @@ function mockClientType(type = 'instansi') {
 const PRIORITY_UPPER = PRIORITY_USER_NAMES.map(name => name.toUpperCase());
 
 test('hasUserCommentedVideo checks only one video with normalized username', async () => {
-  mockQuery.mockResolvedValueOnce({ rows: [{ has_activity: true }] });
+  mockQuery.mockResolvedValueOnce({ rows: [{
+    has_activity: true,
+    updated_at: '2026-08-09T10:00:00.000Z',
+    captured_at: '2026-08-09T10:05:00.000Z',
+  }] });
   await expect(
     hasUserCommentedVideo('  @@Owner.Name ', ' video-1 ')
-  ).resolves.toBe(true);
+  ).resolves.toMatchObject({
+    hasActivity: true,
+    updatedAt: '2026-08-09T10:00:00.000Z',
+    latestAudit: { capturedAt: '2026-08-09T10:05:00.000Z' },
+  });
   expect(mockQuery).toHaveBeenCalledWith(
     expect.stringContaining('tc.video_id = $1'),
     ['video-1', 'owner.name']
   );
+  expect(mockQuery.mock.calls[0][0]).toContain('FROM tiktok_comment_audit');
 });
 
 test('getRekapKomentarByClient uses post created_at BETWEEN for date range in both CTEs', async () => {

@@ -37,6 +37,20 @@ describe('claim complaint evidence triage', () => {
     })).toEqual({ triageCode, triageQuality });
   });
 
+  test('waits for synchronization when collection predates performed activity', () => {
+    expect(triageClaimComplaintEvidence({
+      registeredUsername: 'stored.user',
+      snapshotAvailable: true,
+      snapshotUpdatedAt: '2026-08-09T10:00:00.000Z',
+      performedAt: '2026-08-09T10:30:00.000Z',
+      profile: availableProfile,
+      now,
+    })).toEqual({
+      triageCode: TRIAGE_CODES.DATA_COLLECTION_STALE,
+      triageQuality: 'low',
+    });
+  });
+
   test.each([
     [404, 'UNKNOWN', RAPID_API_OUTCOMES.NOT_FOUND],
     [400, 'PROFILE_NOT_FOUND', RAPID_API_OUTCOMES.NOT_FOUND],

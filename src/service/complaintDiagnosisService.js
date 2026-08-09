@@ -133,6 +133,7 @@ export async function diagnoseComplaint({
       activityRecorded: Boolean(selectedContent?.hasActivity),
       snapshotAvailable: Boolean(selectedContent?.snapshotAvailable),
       snapshotUpdatedAt: selectedContent?.snapshotUpdatedAt,
+      performedAt: selectedContent?.performedAt,
       profile: {
         outcome: profileOutcome,
         exists: Boolean(profileStatus.found),

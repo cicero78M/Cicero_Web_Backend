@@ -29,8 +29,16 @@ describe('claim complaint triage', () => {
       item: { shortcode: 'ABC123' },
       usernames: ['registered.ig'],
     });
-    hasUserLikedShortcode = jest.fn().mockResolvedValue(false);
-    hasUserCommentedVideo = jest.fn().mockResolvedValue(false);
+    hasUserLikedShortcode = jest.fn().mockResolvedValue({
+      hasActivity: false,
+      updatedAt: '2026-08-09T03:00:00.000Z',
+      latestAudit: { capturedAt: '2026-08-09T03:05:00.000Z' },
+    });
+    hasUserCommentedVideo = jest.fn().mockResolvedValue({
+      hasActivity: false,
+      updatedAt: null,
+      latestAudit: null,
+    });
 
     await jest.isolateModulesAsync(async () => {
       jest.unstable_mockModule('../src/model/userModel.js', () => ({
@@ -106,6 +114,9 @@ describe('claim complaint triage', () => {
       evidence: [{ type: 'registered_handle', available: true }],
       solutions: ['Lakukan verifikasi konten.'],
       can_escalate: true,
+      last_collected_at: '2026-08-09T03:05:00.000Z',
+      performed_at: '2026-08-09T10:30:00+07:00',
+      next_action: 'FOLLOW_TRIAGE_GUIDANCE',
     });
   });
 

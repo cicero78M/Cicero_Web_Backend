@@ -194,7 +194,13 @@ export async function triageClaimComplaint(req, res, next) {
         ? hasUserLikedShortcode(username, contentId)
         : hasUserCommentedVideo(username, contentId)
     );
-    const hasSelectedActivity = (await Promise.all(activityChecks)).some(Boolean);
+    const activityEvidence = await Promise.all(activityChecks);
+    const hasSelectedActivity = activityEvidence.some((item) => item.hasActivity);
+    const collectedTimes = activityEvidence
+      .flatMap((item) => [item.latestAudit?.capturedAt, item.updatedAt])
+      .filter(Boolean)
+      .sort((left, right) => Date.parse(right) - Date.parse(left));
+    const lastCollectedAt = collectedTimes[0] || scopedContent.item.snapshot_updated_at || null;
     const diagnosis = await diagnoseComplaint({
       user,
       userId,
@@ -204,8 +210,9 @@ export async function triageClaimComplaint(req, res, next) {
       selectedContent: {
         id: contentId,
         hasActivity: hasSelectedActivity,
-        snapshotAvailable: Boolean(scopedContent.item.snapshot_updated_at),
-        snapshotUpdatedAt: scopedContent.item.snapshot_updated_at || null,
+        snapshotAvailable: Boolean(lastCollectedAt),
+        snapshotUpdatedAt: lastCollectedAt,
+        performedAt: body.performed_at || null,
       },
     });
 
@@ -218,6 +225,13 @@ export async function triageClaimComplaint(req, res, next) {
       evidence: diagnosis.evidence,
       solutions: diagnosis.solution ? [diagnosis.solution] : [],
       can_escalate: diagnosis.canEscalate,
+      last_collected_at: lastCollectedAt,
+      performed_at: body.performed_at || null,
+      next_action: diagnosis.triageCode === 'DATA_COLLECTION_STALE'
+        ? 'WAIT_FOR_DATA_SYNC'
+        : diagnosis.canEscalate
+          ? 'FOLLOW_TRIAGE_GUIDANCE'
+          : 'NO_ACTION_REQUIRED',
     });
   } catch (err) {
     return next(err);
