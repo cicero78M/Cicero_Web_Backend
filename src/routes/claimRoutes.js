@@ -1,4 +1,5 @@
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import {
   confirmClaimPasswordReset,
   requestClaimPasswordReset,
@@ -9,10 +10,22 @@ import {
   updateUserData,
   updateClaimMe,
   getPendingContent,
+  validateClaimSocialProfile,
 } from '../controller/claimController.js';
 import { authRequired } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+const claimSocialValidationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error_code: 'CLAIM_SOCIAL_VALIDATION_RATE_LIMITED',
+    message: 'Terlalu banyak permintaan validasi. Coba lagi nanti.',
+  },
+});
 
 // Routes for claim registration via NRP + password
 router.post('/register', registerClaimCredentials); // body: { nrp, password }
@@ -25,5 +38,11 @@ router.put('/edit', updateUserData); // backward-compatible alias for /claim/edi
 router.get('/me', authRequired, getClaimMe);
 router.put('/me', authRequired, updateClaimMe);
 router.get('/pending-content', authRequired, getPendingContent);
+router.post(
+  '/social-profile/validate',
+  authRequired,
+  claimSocialValidationLimiter,
+  validateClaimSocialProfile
+);
 
 export default router;

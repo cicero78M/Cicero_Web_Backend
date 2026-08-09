@@ -209,3 +209,80 @@ Client baru wajib memakai endpoint `/api/claim/me` berbasis cookie `HttpOnly`.
 | `400` | `CLAIM_INVALID_DATE_FILTER` | Periode/format/rentang tanggal tidak valid.  |
 
 Error internal diteruskan ke error middleware global dan mengikuti format error global.
+
+# Validasi Profil Sosial Claim
+
+## `POST /api/claim/social-profile/validate`
+
+Endpoint ini memeriksa profil sebelum user menyimpan perubahan claim. Endpoint
+memerlukan autentikasi yang sama dengan `GET/PUT /api/claim/me`: kirim token JWT
+melalui `Authorization: Bearer <token>` atau cookie autentikasi yang berlaku.
+Validasi bersifat **read-only** dan tidak menulis tabel `"user"` maupun
+`user_social_accounts`. Penyimpanan tetap dilakukan melalui `PUT /api/claim/me`
+atau endpoint kompatibilitas yang sudah tersedia.
+
+Request JSON:
+
+```json
+{
+  "platform": "instagram",
+  "username": "https://www.instagram.com/cicero.test/"
+}
+```
+
+`platform` hanya menerima `instagram` atau `tiktok`. Username dapat berupa
+username, username berawalan `@`, atau URL profil. Instagram dinormalisasi ke
+huruf kecil tanpa `@`; TikTok dinormalisasi ke huruf kecil dengan awalan `@`.
+
+Response sukses (`200`):
+
+```json
+{
+  "success": true,
+  "data": {
+    "platform": "instagram",
+    "username": "cicero.test",
+    "found": true,
+    "profile_name": "Cicero",
+    "avatar_url": "https://example.invalid/avatar.jpg",
+    "is_private": false,
+    "is_verified": false,
+    "followers": 100,
+    "following": 20,
+    "content_count": 10,
+    "data_quality": {
+      "score": 100,
+      "label": "complete",
+      "components": [
+        { "field": "profile_name", "available": true, "points": 20 }
+      ],
+      "explanation": "Skor menunjukkan kelengkapan data profil yang tersedia, bukan keaslian akun."
+    }
+  }
+}
+```
+
+Setiap komponen yang tersedia (`profile_name`, `avatar_url`, `followers`,
+`following`, dan `content_count`) bernilai 20 poin. Labelnya deterministik:
+`complete` untuk 100, `partial` untuk 60–80, dan `limited` untuk 0–40. Nilai ini
+adalah indikator kelengkapan respons dan **bukan** klaim bahwa akun asli,
+terpercaya, atau dimiliki user.
+
+### Error
+
+| HTTP | `error_code`                             | Kondisi                                                            |
+| ---- | ---------------------------------------- | ------------------------------------------------------------------ |
+| 400  | `CLAIM_SOCIAL_PLATFORM_INVALID`          | Platform tidak didukung.                                           |
+| 400  | `CLAIM_SOCIAL_USERNAME_INVALID`          | Format username/URL tidak valid.                                   |
+| 401  | error autentikasi middleware             | Token tidak tersedia atau tidak valid.                             |
+| 404  | `CLAIM_SOCIAL_PROFILE_NOT_FOUND`         | Provider tidak menemukan profil.                                   |
+| 429  | `CLAIM_SOCIAL_UPSTREAM_RATE_LIMITED`     | RapidAPI membatasi permintaan.                                     |
+| 429  | `CLAIM_SOCIAL_VALIDATION_RATE_LIMITED`   | Batas endpoint 10 request per 60 detik per client terlampaui.      |
+| 502  | `CLAIM_SOCIAL_UPSTREAM_UNAVAILABLE`      | RapidAPI gagal atau responsnya tidak dapat digunakan.              |
+| 503  | `CLAIM_SOCIAL_CONFIGURATION_UNAVAILABLE` | Konfigurasi RapidAPI yang sudah digunakan aplikasi tidak tersedia. |
+
+Endpoint hanya mengembalikan DTO di atas; payload dan pesan error mentah dari
+provider tidak diteruskan. Konfigurasi primary/fallback sepenuhnya mengikuti
+service RapidAPI yang sudah ada. Fallback hanya dijalankan bila service existing
+mendukungnya; jika fallback tidak tersedia atau ikut gagal, endpoint mengembalikan
+kode konfigurasi/gangguan yang sesuai tanpa menyimpan data.
