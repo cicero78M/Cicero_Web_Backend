@@ -878,19 +878,30 @@ describe('POST /user-login', () => {
   test('logs in user with correct password', async () => {
     const passwordHash = await bcrypt.hash('Password1!', 10);
     mockQuery.mockResolvedValueOnce({
-      rows: [{ user_id: 'u1', nama: 'User', password_hash: passwordHash }]
+      rows: [{ user_id: 'u1', nama: 'User', password_hash: passwordHash, client_id: 'CLIENT_DB' }]
     });
 
     const res = await request(app)
       .post('/api/auth/user-login')
-      .send({ nrp: '00123', password: 'Password1!' });
+      .send({ nrp: '00123', password: 'Password1!', client_id: 'CLIENT_REQUEST' });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(mockQuery).toHaveBeenCalledWith(
-      'SELECT user_id, nama, password_hash FROM "user" WHERE user_id = $1',
+      'SELECT user_id, nama, password_hash, client_id FROM "user" WHERE user_id = $1',
       ['00123']
     );
+    expect(res.body.user).toEqual({
+      user_id: 'u1',
+      nama: 'User',
+      role: 'user',
+      client_id: 'CLIENT_DB'
+    });
+    expect(jwt.verify(res.body.token, 'testsecret')).toMatchObject({
+      user_id: 'u1',
+      role: 'user',
+      client_id: 'CLIENT_DB'
+    });
     expect(mockRedis.sAdd).toHaveBeenCalledWith('user_login:u1', res.body.token);
     expect(mockRedis.set).toHaveBeenCalledWith(
       `login_token:${res.body.token}`,
@@ -951,24 +962,34 @@ describe('POST /user-login', () => {
 
   test('logs in user with user_id and whatsapp', async () => {
     mockQuery.mockResolvedValueOnce({
-      rows: [{ user_id: 'u1', nama: 'User', whatsapp: '628123456789' }]
+      rows: [{ user_id: 'u1', nama: 'User', whatsapp: '628123456789', client_id: 'CLIENT_DB' }]
     });
 
     const res = await request(app)
       .post('/api/auth/user-login')
-      .send({ user_id: '00123', whatsapp: '628123456789' });
+      .send({
+        user_id: '00123',
+        whatsapp: '628123456789',
+        client_id: 'CLIENT_REQUEST'
+      });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.user).toEqual({
       user_id: 'u1',
       nama: 'User',
-      role: 'user'
+      role: 'user',
+      client_id: 'CLIENT_DB'
     });
     expect(mockQuery).toHaveBeenCalledWith(
-      'SELECT user_id, nama, whatsapp FROM "user" WHERE user_id = $1 AND whatsapp = $2',
+      'SELECT user_id, nama, whatsapp, "user".client_id FROM "user" WHERE user_id = $1 AND whatsapp = $2',
       ['00123', '628123456789']
     );
+    expect(jwt.verify(res.body.token, 'testsecret')).toMatchObject({
+      user_id: 'u1',
+      role: 'user',
+      client_id: 'CLIENT_DB'
+    });
     expect(mockRedis.sAdd).toHaveBeenCalledWith('user_login:u1', res.body.token);
     expect(mockRedis.set).toHaveBeenCalledWith(
       `login_token:${res.body.token}`,
@@ -993,7 +1014,7 @@ describe('POST /user-login', () => {
 
     expect(res.status).toBe(200);
     expect(mockQuery).toHaveBeenCalledWith(
-      'SELECT user_id, nama, whatsapp FROM "user" WHERE user_id = $1 AND whatsapp = $2',
+      'SELECT user_id, nama, whatsapp, "user".client_id FROM "user" WHERE user_id = $1 AND whatsapp = $2',
       ['00123', '08123456789']
     );
   });

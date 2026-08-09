@@ -81,6 +81,32 @@ This endpoint supports two authentication methods:
 > - The legacy `nrp` + `password` method is still supported for backward compatibility. These credentials are registered through the claim flow (`/api/claim/register`).
 > - WhatsApp numbers are normalized by removing non-digit characters and must be at least 8 digits long.
 
+Kedua metode mengambil `client_id` langsung dari record tabel `"user"`. JWT dan objek
+`user` pada response memuat payload identitas yang sama, termasuk `client_id`; nilai
+`client_id` pada request login tidak digunakan sebagai sumber identitas.
+
+```json
+{
+  "success": true,
+  "token": "<JWT>",
+  "user": {
+    "user_id": "123456",
+    "nama": "Budi",
+    "role": "user",
+    "client_id": "demo_client"
+  }
+}
+```
+
+#### Catatan deployment claim `client_id`
+
+Token user yang diterbitkan sebelum penambahan claim `client_id` tidak memperoleh claim
+tersebut secara retroaktif. Reposter dengan sesi lama harus login ulang. Jika rollout
+memerlukan pencabutan paksa, hapus sesi user melalui mekanisme Redis yang sama dengan
+`clearUserSessions`: hapus setiap `login_token:<token>` yang tercatat pada set
+`user_login:<user_id>`, lalu hapus set tersebut. Login user berikutnya juga menjalankan
+`clearUserSessions`, sehingga sesi lama user itu dicabut sebelum token baru disimpan.
+
 ### User Registration
 `POST /api/auth/user-register`
 ```json
