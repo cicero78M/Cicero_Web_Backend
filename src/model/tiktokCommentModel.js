@@ -109,7 +109,9 @@ export async function getCommentsByVideoId(video_id) {
 export async function hasUserCommentedVideo(username, videoId) {
   const normalizedUsername = normalizeUsernameForSearch(username);
   const normalizedVideoId = String(videoId || '').trim();
-  if (!normalizedUsername || !normalizedVideoId) return false;
+  if (!normalizedUsername || !normalizedVideoId) {
+    return { hasActivity: false, updatedAt: null, latestAudit: null };
+  }
 
   const { rows } = await query(
     `SELECT EXISTS (
@@ -118,10 +120,32 @@ export async function hasUserCommentedVideo(username, videoId) {
        CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(tc.comments, '[]'::jsonb)) raw_username
        WHERE tc.video_id = $1
          AND LOWER(REPLACE(TRIM(raw_username), '@', '')) = $2
-     ) AS has_activity`,
+     ) AS has_activity,
+     tc.updated_at,
+     audit.snapshot_window_start,
+     audit.snapshot_window_end,
+     audit.captured_at
+     FROM (SELECT $1::varchar AS video_id) requested
+     LEFT JOIN tiktok_comment tc ON tc.video_id = requested.video_id
+     LEFT JOIN LATERAL (
+       SELECT snapshot_window_start, snapshot_window_end, captured_at
+       FROM tiktok_comment_audit
+       WHERE video_id = requested.video_id
+       ORDER BY captured_at DESC
+       LIMIT 1
+     ) audit ON TRUE`,
     [normalizedVideoId, normalizedUsername]
   );
-  return Boolean(rows[0]?.has_activity);
+  const row = rows[0] || {};
+  return {
+    hasActivity: Boolean(row.has_activity),
+    updatedAt: row.updated_at || null,
+    latestAudit: row.captured_at ? {
+      snapshotWindowStart: row.snapshot_window_start,
+      snapshotWindowEnd: row.snapshot_window_end,
+      capturedAt: row.captured_at,
+    } : null,
+  };
 }
 
 /**

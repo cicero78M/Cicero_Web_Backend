@@ -119,7 +119,9 @@ export async function getLikesByShortcode(shortcode) {
 export async function hasUserLikedShortcode(username, shortcode) {
   const normalizedUsername = normalizeLikeUsername(username);
   const normalizedShortcode = String(shortcode || '').trim();
-  if (!normalizedUsername || !normalizedShortcode) return false;
+  if (!normalizedUsername || !normalizedShortcode) {
+    return { hasActivity: false, updatedAt: null, latestAudit: null };
+  }
 
   const { rows } = await query(
     `SELECT EXISTS (
@@ -128,10 +130,32 @@ export async function hasUserLikedShortcode(username, shortcode) {
        CROSS JOIN LATERAL jsonb_array_elements(COALESCE(il.likes, '[]'::jsonb)) elem
        WHERE il.shortcode = $1
          AND LOWER(REPLACE(TRIM(COALESCE(elem->>'username', TRIM(BOTH '"' FROM elem::text))), '@', '')) = $2
-     ) AS has_activity`,
+     ) AS has_activity,
+     il.updated_at,
+     audit.snapshot_window_start,
+     audit.snapshot_window_end,
+     audit.captured_at
+     FROM (SELECT $1::varchar AS shortcode) requested
+     LEFT JOIN insta_like il ON il.shortcode = requested.shortcode
+     LEFT JOIN LATERAL (
+       SELECT snapshot_window_start, snapshot_window_end, captured_at
+       FROM insta_like_audit
+       WHERE shortcode = requested.shortcode
+       ORDER BY captured_at DESC
+       LIMIT 1
+     ) audit ON TRUE`,
     [normalizedShortcode, normalizedUsername]
   );
-  return Boolean(rows[0]?.has_activity);
+  const row = rows[0] || {};
+  return {
+    hasActivity: Boolean(row.has_activity),
+    updatedAt: row.updated_at || null,
+    latestAudit: row.captured_at ? {
+      snapshotWindowStart: row.snapshot_window_start,
+      snapshotWindowEnd: row.snapshot_window_end,
+      capturedAt: row.captured_at,
+    } : null,
+  };
 }
 
 /**

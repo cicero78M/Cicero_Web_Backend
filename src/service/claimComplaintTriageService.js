@@ -1,3 +1,5 @@
+import { claimComplaintConfig } from '../config/claimComplaint.js';
+
 export const TRIAGE_CODES = Object.freeze({
   ACTIVITY_ALREADY_RECORDED: 'ACTIVITY_ALREADY_RECORDED',
   SOCIAL_USERNAME_MISSING: 'SOCIAL_USERNAME_MISSING',
@@ -16,8 +18,6 @@ export const RAPID_API_OUTCOMES = Object.freeze({
   NOT_FOUND: 'not_found',
   UNAVAILABLE: 'unavailable',
 });
-
-const DEFAULT_STALE_AFTER_MS = 2 * 60 * 60 * 1000;
 
 function normalizeUsername(value) {
   return String(value || '').trim().replace(/^@+/, '').toLowerCase();
@@ -64,9 +64,10 @@ export function triageClaimComplaintEvidence({
   activityRecorded = false,
   snapshotAvailable = false,
   snapshotUpdatedAt,
+  performedAt,
   profile = {},
   now = new Date(),
-  staleAfterMs = DEFAULT_STALE_AFTER_MS,
+  staleAfterMs = claimComplaintConfig.staleAfterMs,
 }) {
   const registered = normalizeUsername(registeredUsername);
   const actor = normalizeUsername(actorUsername);
@@ -79,6 +80,15 @@ export function triageClaimComplaintEvidence({
   }
   if (actorUsernameVerified && actor && actor !== registered) {
     return { triageCode: TRIAGE_CODES.SOCIAL_USERNAME_MISMATCH, triageQuality: 'high' };
+  }
+  const collectedTimestamp = Date.parse(snapshotUpdatedAt);
+  const performedTimestamp = Date.parse(performedAt);
+  if (
+    snapshotAvailable &&
+    Number.isFinite(performedTimestamp) &&
+    (!Number.isFinite(collectedTimestamp) || collectedTimestamp < performedTimestamp)
+  ) {
+    return { triageCode: TRIAGE_CODES.DATA_COLLECTION_STALE, triageQuality: 'low' };
   }
   if (snapshotAvailable && isSnapshotStale(snapshotUpdatedAt, now, staleAfterMs)) {
     return { triageCode: TRIAGE_CODES.DATA_COLLECTION_STALE, triageQuality: 'low' };

@@ -30,14 +30,25 @@ function expectPriorityParams(actualParams, baseParams) {
 }
 
 test('hasUserLikedShortcode checks only one shortcode with normalized username', async () => {
-  mockQuery.mockResolvedValueOnce({ rows: [{ has_activity: true }] });
+  mockQuery.mockResolvedValueOnce({ rows: [{
+    has_activity: true,
+    updated_at: '2026-08-09T10:00:00.000Z',
+    captured_at: '2026-08-09T10:05:00.000Z',
+    snapshot_window_start: '2026-08-09T00:00:00.000Z',
+    snapshot_window_end: '2026-08-09T10:00:00.000Z',
+  }] });
   await expect(
     hasUserLikedShortcode('  @@Owner.Name ', ' shortcode-1 ')
-  ).resolves.toBe(true);
+  ).resolves.toMatchObject({
+    hasActivity: true,
+    updatedAt: '2026-08-09T10:00:00.000Z',
+    latestAudit: { capturedAt: '2026-08-09T10:05:00.000Z' },
+  });
   expect(mockQuery).toHaveBeenCalledWith(
     expect.stringContaining('il.shortcode = $1'),
     ['shortcode-1', 'owner.name']
   );
+  expect(mockQuery.mock.calls[0][0]).toContain('FROM insta_like_audit');
 });
 
 test('harian with specific date uses date filter', async () => {
