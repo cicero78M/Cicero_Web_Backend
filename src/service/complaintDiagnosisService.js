@@ -50,6 +50,7 @@ export async function diagnoseComplaint({
   fallbackIssue,
   fallbackSolution = '',
   claimPlatform,
+  selectedContent,
 }) {
   const formattedIssue = buildFormattedIssue({
     parsedComplaint,
@@ -105,7 +106,8 @@ export async function diagnoseComplaint({
             fallbackIssue,
             parsedComplaint,
             user,
-            accountStatus
+            accountStatus,
+            selectedContent
           )
         : await buildComplaintSolutionsFromIssues(
             parsedComplaint,

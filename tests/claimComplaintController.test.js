@@ -6,6 +6,9 @@ describe('claim complaint triage', () => {
   let app;
   let findClaimProfileById;
   let diagnoseComplaint;
+  let getComplaintContentForUser;
+  let hasUserLikedShortcode;
+  let hasUserCommentedVideo;
 
   beforeEach(async () => {
     jest.resetModules();
@@ -22,6 +25,12 @@ describe('claim complaint triage', () => {
       evidence: [{ type: 'registered_handle', available: true }],
       canEscalate: true,
     });
+    getComplaintContentForUser = jest.fn().mockResolvedValue({
+      item: { shortcode: 'ABC123' },
+      usernames: ['registered.ig'],
+    });
+    hasUserLikedShortcode = jest.fn().mockResolvedValue(false);
+    hasUserCommentedVideo = jest.fn().mockResolvedValue(false);
 
     await jest.isolateModulesAsync(async () => {
       jest.unstable_mockModule('../src/model/userModel.js', () => ({
@@ -33,6 +42,16 @@ describe('claim complaint triage', () => {
           diagnoseComplaint,
         })
       );
+      jest.unstable_mockModule(
+        '../src/service/claimPendingContentService.js',
+        () => ({ getComplaintContentForUser })
+      );
+      jest.unstable_mockModule('../src/model/instaLikeModel.js', () => ({
+        hasUserLikedShortcode,
+      }));
+      jest.unstable_mockModule('../src/model/tiktokCommentModel.js', () => ({
+        hasUserCommentedVideo,
+      }));
       const { triageClaimComplaint } = await import(
         '../src/controller/claimComplaintController.js'
       );
@@ -56,12 +75,22 @@ describe('claim complaint triage', () => {
       .send({
         platform: 'instagram',
         issue_type: 'activity_not_recorded',
-        content_id: 'ABC123',
+        shortcode: 'ABC123',
         performed_at: '2026-08-09T10:30:00+07:00',
       });
 
     expect(response.status).toBe(200);
     expect(findClaimProfileById).toHaveBeenCalledWith('12345');
+    expect(getComplaintContentForUser).toHaveBeenCalledWith(
+      '12345',
+      'instagram',
+      'ABC123',
+      expect.objectContaining({ periode: 'harian' })
+    );
+    expect(hasUserLikedShortcode).toHaveBeenCalledWith(
+      'registered.ig',
+      'ABC123'
+    );
     expect(diagnoseComplaint).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: '12345',
@@ -98,6 +127,7 @@ describe('claim complaint triage', () => {
         .send({
           platform: 'instagram',
           issue_type: 'activity_not_recorded',
+          shortcode: 'ABC123',
           [field]: 'attacker-controlled',
         });
 
@@ -116,6 +146,7 @@ describe('claim complaint triage', () => {
     const payload = {
       platform: 'tiktok',
       issue_type: 'activity_not_recorded',
+      video_id: 'video-1',
       [field]: value,
     };
     const response = await request(app)
@@ -136,6 +167,7 @@ describe('claim complaint triage', () => {
         .send({
           platform: 'instagram',
           issue_type: 'activity_not_recorded',
+          shortcode: 'ABC123',
           [field]: 'Keputusan atau solusi buatan client',
         });
 
@@ -148,4 +180,35 @@ describe('claim complaint triage', () => {
       expect(diagnoseComplaint).not.toHaveBeenCalled();
     }
   );
+
+  test('requires the platform-specific identifier', async () => {
+    const response = await request(app)
+      .post('/api/claim/complaints/triage')
+      .set('x-test-user-id', '12345')
+      .send({ platform: 'instagram', issue_type: 'activity_not_recorded' });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      error_code: 'CLAIM_COMPLAINT_CONTENT_ID_REQUIRED',
+      field: 'shortcode',
+    });
+  });
+
+  test('rejects an identifier outside the pending-content scope', async () => {
+    getComplaintContentForUser.mockResolvedValue(false);
+    const response = await request(app)
+      .post('/api/claim/complaints/triage')
+      .set('x-test-user-id', '12345')
+      .send({
+        platform: 'tiktok',
+        issue_type: 'activity_not_recorded',
+        video_id: 'outside',
+      });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error_code).toBe(
+      'CLAIM_COMPLAINT_CONTENT_OUT_OF_SCOPE'
+    );
+    expect(diagnoseComplaint).not.toHaveBeenCalled();
+  });
 });

@@ -9,9 +9,12 @@ jest.unstable_mockModule('../src/repository/db.js', () => ({
 }));
 
 let getRekapLikesByClient;
+let hasUserLikedShortcode;
 
 beforeAll(async () => {
-  ({ getRekapLikesByClient } = await import('../src/model/instaLikeModel.js'));
+  ({ getRekapLikesByClient, hasUserLikedShortcode } = await import(
+    '../src/model/instaLikeModel.js'
+  ));
 });
 
 beforeEach(() => {
@@ -25,6 +28,17 @@ function expectPriorityParams(actualParams, baseParams) {
   expect(actualParams.slice(0, baseParams.length)).toEqual(baseParams);
   expect(actualParams.slice(baseParams.length)).toEqual(PRIORITY_UPPER);
 }
+
+test('hasUserLikedShortcode checks only one shortcode with normalized username', async () => {
+  mockQuery.mockResolvedValueOnce({ rows: [{ has_activity: true }] });
+  await expect(
+    hasUserLikedShortcode('  @@Owner.Name ', ' shortcode-1 ')
+  ).resolves.toBe(true);
+  expect(mockQuery).toHaveBeenCalledWith(
+    expect.stringContaining('il.shortcode = $1'),
+    ['shortcode-1', 'owner.name']
+  );
+});
 
 test('harian with specific date uses date filter', async () => {
   mockQuery.mockResolvedValueOnce({ rows: [] });

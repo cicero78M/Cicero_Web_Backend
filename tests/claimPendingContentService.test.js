@@ -2,7 +2,7 @@ import { jest } from '@jest/globals';
 
 const query = jest.fn();
 jest.unstable_mockModule('../src/repository/db.js', () => ({ query }));
-const { getPendingContentForUser } = await import(
+const { getPendingContentForUser, getComplaintContentForUser } = await import(
   '../src/service/claimPendingContentService.js'
 );
 
@@ -145,5 +145,24 @@ describe('claimPendingContentService', () => {
     expect(instagramSql).toContain('FROM insta_post_clients');
     expect(instagramSql).toContain('FROM insta_post_roles');
     expect(instagramSql).toContain('LOWER(p.client_id) = LOWER($1)');
+  });
+
+  test('allows complaints only for items exposed as pending in the selected scope', async () => {
+    mockContextAndAccounts([
+      { platform: 'instagram', username: '@Owner' },
+    ]);
+    query.mockResolvedValueOnce({
+      rows: [
+        { shortcode: 'pending', completed: false },
+        { shortcode: 'already-done', completed: true },
+      ],
+    });
+
+    await expect(
+      getComplaintContentForUser('user-1', 'instagram', 'pending', filters)
+    ).resolves.toMatchObject({
+      item: { shortcode: 'pending' },
+      usernames: ['owner'],
+    });
   });
 });

@@ -576,11 +576,17 @@ export async function buildAccountStatus(user) {
   return result;
 }
 
-async function buildInstagramIssueSolution(issueText, parsed, user, accountStatus) {
+async function buildInstagramIssueSolution(
+  issueText,
+  parsed,
+  user,
+  accountStatus,
+  useGlobalActivity = true
+) {
   const dbHandle = ensureHandle(user?.insta);
   const complaintHandle = normalizeComplaintHandle(parsed.instagram);
   const clientId = user?.client_id || user?.clientId || null;
-  if (dbHandle) {
+  if (useGlobalActivity && dbHandle) {
     const now = new Date();
     const likeCount = await hasUserLikedBetween(
       dbHandle,
@@ -715,15 +721,28 @@ export async function buildActivityNotRecordedSolution(
   issueText,
   parsed,
   user,
-  accountStatus
+  accountStatus,
+  selectedContent
 ) {
+  if (selectedContent?.hasActivity) {
+    return {
+      solutionText: [
+        `• Kendala: ${issueText}`,
+        '',
+        `Aktivitas pada konten *${selectedContent.id}* sudah tercatat untuk salah satu username aktif milik user.`,
+        'Muat ulang daftar pending-content. Jika tampilan belum berubah, eskalasi dengan identifier konten tersebut untuk pemeriksaan sinkronisasi.',
+      ].join('\n'),
+      handledKeys: new Set([`${platform}_not_recorded`]),
+    };
+  }
   if (platform === "instagram") {
     return {
       solutionText: await buildInstagramIssueSolution(
         issueText,
         parsed,
         user,
-        accountStatus
+        accountStatus,
+        selectedContent === undefined
       ),
       handledKeys: new Set(["instagram_not_recorded"]),
     };
@@ -734,7 +753,8 @@ export async function buildActivityNotRecordedSolution(
         issueText,
         parsed,
         user,
-        accountStatus
+        accountStatus,
+        selectedContent === undefined
       ),
       handledKeys: new Set(["tiktok_not_recorded"]),
     };
@@ -742,12 +762,18 @@ export async function buildActivityNotRecordedSolution(
   return { solutionText: "", handledKeys: new Set() };
 }
 
-async function buildTiktokIssueSolution(issueText, parsed, user, accountStatus) {
+async function buildTiktokIssueSolution(
+  issueText,
+  parsed,
+  user,
+  accountStatus,
+  useGlobalActivity = true
+) {
   const dbHandle = ensureHandle(user?.tiktok);
   const complaintHandle = normalizeComplaintHandle(parsed.tiktok);
   const clientId = user?.client_id || user?.clientId || null;
   let commentCount = null;
-  if (dbHandle) {
+  if (useGlobalActivity && dbHandle) {
     const now = new Date();
     commentCount = await hasUserCommentedBetween(
       dbHandle,

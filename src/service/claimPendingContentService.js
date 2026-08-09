@@ -162,3 +162,19 @@ export async function getPendingContentForUser(userId, filters) {
     tiktok,
   };
 }
+
+export async function getComplaintContentForUser(
+  userId,
+  platform,
+  contentId,
+  filters
+) {
+  const pendingContent = await getPendingContentForUser(userId, filters);
+  if (!pendingContent) return null;
+  const platformContent = pendingContent[platform];
+  const idField = platform === 'instagram' ? 'shortcode' : 'video_id';
+  const item = platformContent?.items.find(
+    (content) => String(content[idField]) === String(contentId)
+  );
+  return item ? { item, usernames: platformContent.usernames } : false;
+}
