@@ -62,6 +62,13 @@ describe('claim complaint triage', () => {
 
     expect(response.status).toBe(200);
     expect(findClaimProfileById).toHaveBeenCalledWith('12345');
+    expect(diagnoseComplaint).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: '12345',
+        claimPlatform: 'instagram',
+        fallbackIssue: expect.stringContaining('Instagram'),
+      })
+    );
     expect(response.body.data).toMatchObject({
       complaint_id: null,
       platform: 'instagram',
@@ -73,7 +80,16 @@ describe('claim complaint triage', () => {
     });
   });
 
-  test.each(['nrp', 'user_id', 'client_id', 'username'])(
+  test.each([
+    'nrp',
+    'user_id',
+    'client_id',
+    'username',
+    'insta',
+    'tiktok',
+    'instagram_username',
+    'tiktok_username',
+  ])(
     'rejects identity field %s before loading a user',
     async (field) => {
       const response = await request(app)
@@ -110,4 +126,26 @@ describe('claim complaint triage', () => {
     expect(response.status).toBe(400);
     expect(response.body.error_code).toBe(errorCode);
   });
+
+  test.each(['description', 'complaint', 'issue', 'solution', 'solutions'])(
+    'rejects client-authored triage field %s',
+    async (field) => {
+      const response = await request(app)
+        .post('/api/claim/complaints/triage')
+        .set('x-test-user-id', '12345')
+        .send({
+          platform: 'instagram',
+          issue_type: 'activity_not_recorded',
+          [field]: 'Keputusan atau solusi buatan client',
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        error_code: 'CLAIM_COMPLAINT_UNSUPPORTED_FIELD',
+        field,
+      });
+      expect(findClaimProfileById).not.toHaveBeenCalled();
+      expect(diagnoseComplaint).not.toHaveBeenCalled();
+    }
+  );
 });

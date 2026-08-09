@@ -1,6 +1,7 @@
 import { formatComplaintIssue } from '../utils/utilsHelper.js';
 import {
   UPDATE_DATA_LINK,
+  buildActivityNotRecordedSolution,
   buildAccountStatus,
   buildComplaintSolutionsFromIssues,
   buildUpdateDataInstructions,
@@ -48,6 +49,7 @@ export async function diagnoseComplaint({
   parsedComplaint,
   fallbackIssue,
   fallbackSolution = '',
+  claimPlatform,
 }) {
   const formattedIssue = buildFormattedIssue({
     parsedComplaint,
@@ -75,7 +77,8 @@ export async function diagnoseComplaint({
       typeof user.insta === 'string' ? user.insta.trim() : user.insta || '';
     const tiktok =
       typeof user.tiktok === 'string' ? user.tiktok.trim() : user.tiktok || '';
-    const platform = parsedComplaint?.instagram ? 'instagram' : 'tiktok';
+    const platform =
+      claimPlatform || (parsedComplaint?.instagram ? 'instagram' : 'tiktok');
     const handle = platform === 'instagram' ? instagram : tiktok;
     evidence.push({
       type: 'registered_handle',
@@ -96,11 +99,19 @@ export async function diagnoseComplaint({
       triageCode = 'SOCIAL_ACCOUNT_MISSING';
       triageQuality = 'limited';
     } else {
-      const result = await buildComplaintSolutionsFromIssues(
-        parsedComplaint,
-        user,
-        accountStatus
-      );
+      const result = claimPlatform
+        ? await buildActivityNotRecordedSolution(
+            claimPlatform,
+            fallbackIssue,
+            parsedComplaint,
+            user,
+            accountStatus
+          )
+        : await buildComplaintSolutionsFromIssues(
+            parsedComplaint,
+            user,
+            accountStatus
+          );
       solution = result.solutionText;
       evidence.push({
         type: 'matched_issue_keys',

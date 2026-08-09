@@ -128,6 +128,7 @@ export async function triageClaimComplaint(req, res, next) {
       userId,
       parsedComplaint,
       fallbackIssue: issueDetails.join(' '),
+      claimPlatform: body.platform,
     });
 
     return sendSuccess(res, {

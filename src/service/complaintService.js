@@ -667,15 +667,15 @@ async function buildInstagramIssueSolution(issueText, parsed, user, accountStatu
 
   actions.push("Ringkasan tindak lanjut:");
   actions.push(
-    `- Akun ${decoratedHandle} ${activityDescriptor}, namun belum ada data aktivitas like/komentar Instagram yang tercatat di sistem.`
+    `- Akun ${decoratedHandle} ${activityDescriptor}, namun belum ada data aktivitas like Instagram yang tercatat di sistem.`
   );
 
   actions.push("", "Panduan verifikasi:");
   actions.push(
-    `1) Pastikan like dan komentar dilakukan menggunakan akun yang tercatat (Instagram: ${dbHandle || complaintHandle || "-"}).`
+    `1) Pastikan like dilakukan menggunakan akun yang tercatat (Instagram: ${dbHandle || complaintHandle || "-"}).`
   );
   actions.push(
-    "2) Kirim tautan/URL unggahan yang sudah di-like atau dikomentari beserta tanggal dan waktu aksi dilakukan."
+    "2) Kirim tautan/URL unggahan yang sudah di-like beserta tanggal dan waktu aksi dilakukan."
   );
   actions.push(
     "3) Beri waktu sinkronisasi ±1 jam; jika tetap belum masuk, kirim ulang bukti (tautan + screenshot aksi) untuk dicek operator."
@@ -695,7 +695,7 @@ async function buildInstagramIssueSolution(issueText, parsed, user, accountStatu
       actions.push(buildUpdateDataInstructions("Instagram"));
     }
     actions.push(
-      "- Setelah dikonfirmasi, ulangi satu like atau komentar pada konten resmi dengan akun yang bersifat publik, lalu tunggu sinkronisasi ±1 jam sebelum pengecekan ulang."
+      "- Setelah dikonfirmasi, ulangi satu like pada konten resmi dengan akun yang bersifat publik, lalu tunggu sinkronisasi ±1 jam sebelum pengecekan ulang."
     );
   }
 
@@ -708,6 +708,38 @@ async function buildInstagramIssueSolution(issueText, parsed, user, accountStatu
   lines.push(...actions);
 
   return lines.join("\n").trim();
+}
+
+export async function buildActivityNotRecordedSolution(
+  platform,
+  issueText,
+  parsed,
+  user,
+  accountStatus
+) {
+  if (platform === "instagram") {
+    return {
+      solutionText: await buildInstagramIssueSolution(
+        issueText,
+        parsed,
+        user,
+        accountStatus
+      ),
+      handledKeys: new Set(["instagram_not_recorded"]),
+    };
+  }
+  if (platform === "tiktok") {
+    return {
+      solutionText: await buildTiktokIssueSolution(
+        issueText,
+        parsed,
+        user,
+        accountStatus
+      ),
+      handledKeys: new Set(["tiktok_not_recorded"]),
+    };
+  }
+  return { solutionText: "", handledKeys: new Set() };
 }
 
 async function buildTiktokIssueSolution(issueText, parsed, user, accountStatus) {
