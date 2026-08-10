@@ -6,6 +6,7 @@ import { getComplaintContentForUser } from '../service/claimPendingContentServic
 import { hasUserLikedShortcode } from '../model/instaLikeModel.js';
 import { hasUserCommentedVideo } from '../model/tiktokCommentModel.js';
 import { buildClaimTriageResponse } from '../service/claimTriageResponseService.js';
+import { createOrGetActiveClaimComplaint } from '../service/claimComplaintLifecycleService.js';
 import {
   validateDateRange,
   validateTanggalFilter,
@@ -224,17 +225,46 @@ export async function triageClaimComplaint(req, res, next) {
       },
     });
 
+    const triageDto = buildClaimTriageResponse({
+      platform: body.platform,
+      contentId,
+      triageCode: diagnosis.triageCode,
+      triageQuality: diagnosis.triageQuality,
+      registeredUsername:
+        body.platform === 'instagram' ? user.insta : user.tiktok,
+      lastCollectedAt,
+    });
+    const triageSnapshot = {
+      platform: body.platform,
+      content_id: contentId,
+      triage_code: diagnosis.triageCode,
+      triage_quality: diagnosis.triageQuality,
+      triage_evidence: {
+        activity_recorded: hasSelectedActivity,
+        snapshot_available: Boolean(lastCollectedAt),
+        last_collected_at: lastCollectedAt,
+        performed_at: body.performed_at || null,
+      },
+      diagnosed_at: new Date().toISOString(),
+      ...triageDto,
+    };
+    const report = await createOrGetActiveClaimComplaint({
+      userId,
+      platform: body.platform,
+      contentId,
+      triageSnapshot,
+    });
+
     return sendSuccess(
       res,
-      buildClaimTriageResponse({
-        platform: body.platform,
-        contentId,
-        triageCode: diagnosis.triageCode,
-        triageQuality: diagnosis.triageQuality,
-        registeredUsername:
-          body.platform === 'instagram' ? user.insta : user.tiktok,
-        lastCollectedAt,
-      })
+      {
+        ...triageDto,
+        complaint_id: report.complaint.complaint_id,
+        complaint_created: report.created,
+        complaint_status: report.complaint.status,
+        notification: report.notification,
+      },
+      report.created ? 201 : 200
     );
   } catch (err) {
     return next(err);

@@ -118,6 +118,21 @@ describe('claim routes credential flow', () => {
     expect(res.body.data.reset_token).toBeUndefined();
   });
 
+  test('does not expose a standalone complaint creation route', async () => {
+    const res = await request(app)
+      .post('/api/claim/complaints')
+      .set('x-test-user-id', '1')
+      .send({
+        triage: {
+          platform: 'instagram',
+          content_id: 'out-of-scope',
+          api_key: 'attacker-controlled',
+        },
+      });
+
+    expect(res.status).toBe(404);
+  });
+
   test('rejects weak password for claim register', async () => {
     const res = await request(app)
       .post('/api/claim/register')
