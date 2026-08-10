@@ -264,7 +264,6 @@ export async function triageClaimComplaint(req, res, next) {
         complaint_id: report.complaint.complaint_id,
         complaint_created: report.created,
         complaint_status: report.complaint.status,
-        notification: report.notification,
       },
       report.created ? 201 : 200
     );

@@ -18,7 +18,6 @@ import {
   escalateClaimComplaint,
   getClaimComplaints,
   resolveClaimComplaint,
-  retryClaimComplaintNotification,
 } from '../controller/claimComplaintLifecycleController.js';
 
 const router = express.Router();
@@ -57,11 +56,6 @@ router.post(
   '/complaints/:complaintId/resolve',
   authRequired,
   resolveClaimComplaint
-);
-router.post(
-  '/complaints/:complaintId/notifications/retry',
-  authRequired,
-  retryClaimComplaintNotification
 );
 router.post(
   '/social-profile/validate',

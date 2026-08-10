@@ -3,7 +3,6 @@ import { jest } from '@jest/globals';
 describe('claim complaint lifecycle authorization', () => {
   let handlers;
   let model;
-  let deliverClaimComplaintNotification;
 
   beforeEach(async () => {
     jest.resetModules();
@@ -12,16 +11,10 @@ describe('claim complaint lifecycle authorization', () => {
       findComplaintLifecycleById: jest.fn().mockResolvedValue(null),
       findComplaintById: jest.fn().mockResolvedValue(null),
       transitionComplaintStatus: jest.fn(),
-      findNotification: jest.fn(),
     };
-    deliverClaimComplaintNotification = jest.fn();
     jest.unstable_mockModule(
       '../src/model/claimComplaintModel.js',
       () => model
-    );
-    jest.unstable_mockModule(
-      '../src/service/claimComplaintNotificationService.js',
-      () => ({ deliverClaimComplaintNotification })
     );
     handlers = await import(
       '../src/controller/claimComplaintLifecycleController.js'
@@ -39,7 +32,6 @@ describe('claim complaint lifecycle authorization', () => {
     ['read status', 'getClaimComplaints'],
     ['escalate', 'escalateClaimComplaint'],
     ['resolve', 'resolveClaimComplaint'],
-    ['retry notification', 'retryClaimComplaintNotification'],
   ])('user A cannot %s for user B complaint', async (_label, handlerName) => {
     const req = {
       user: { user_id: '1001' },
@@ -67,7 +59,6 @@ describe('claim complaint lifecycle authorization', () => {
       error_code: 'CLAIM_COMPLAINT_NOT_FOUND',
     });
     expect(model.transitionComplaintStatus).not.toHaveBeenCalled();
-    expect(deliverClaimComplaintNotification).not.toHaveBeenCalled();
     expect(next).not.toHaveBeenCalled();
   });
 

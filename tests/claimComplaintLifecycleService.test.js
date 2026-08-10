@@ -15,15 +15,10 @@ describe('claim complaint lifecycle service', () => {
     jest.resetModules();
     model = {
       createComplaint: jest.fn(),
-      findNotification: jest.fn(),
       findComplaintById: jest.fn(),
       transitionComplaintStatus: jest.fn(),
     };
     jest.unstable_mockModule('../src/model/claimComplaintModel.js', () => model);
-    jest.unstable_mockModule(
-      '../src/service/claimComplaintNotificationService.js',
-      () => ({ deliverClaimComplaintNotification: jest.fn() })
-    );
     lifecycle = await import(
       '../src/service/claimComplaintLifecycleService.js'
     );

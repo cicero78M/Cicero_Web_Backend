@@ -1,5 +1,4 @@
 import * as claimComplaintModel from '../model/claimComplaintModel.js';
-import { deliverClaimComplaintNotification } from './claimComplaintNotificationService.js';
 
 export const claimComplaintTransitionMatrix = Object.freeze({
   triaged: Object.freeze([
@@ -87,7 +86,7 @@ export async function createOrGetActiveClaimComplaint({
   issueType,
   triageSnapshot,
 }) {
-  const result = await claimComplaintModel.createComplaint({
+  return claimComplaintModel.createComplaint({
     userId,
     clientId,
     platform,
@@ -95,15 +94,4 @@ export async function createOrGetActiveClaimComplaint({
     issueType,
     triage: triageSnapshot,
   });
-  let notification = await claimComplaintModel.findNotification(
-    result.complaint.complaint_id,
-    'created'
-  );
-  if (result.created) {
-    notification = await deliverClaimComplaintNotification(
-      result.complaint,
-      'created'
-    );
-  }
-  return { ...result, notification };
 }
