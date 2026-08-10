@@ -4,7 +4,6 @@ import { fetchInstagramInfo } from "./instaRapidService.js";
 import { fetchTiktokProfile } from "./tiktokRapidService.js";
 import { hasUserLikedBetween } from "../model/instaLikeModel.js";
 import { hasUserCommentedBetween } from "../model/tiktokCommentModel.js";
-import { normalizeUserWhatsAppId } from "../utils/waHelper.js";
 import {
   RAPID_API_OUTCOMES,
   mapRapidApiError,
@@ -1137,42 +1136,4 @@ export async function buildComplaintSolutionsFromIssues(parsed, user, accountSta
   }
 
   return { solutionText: solutions.join("\n\n"), handledKeys };
-}
-
-function buildWhatsappDeliveryStatus(rawNumber) {
-  const normalizedRaw =
-    typeof rawNumber === "string" ? rawNumber.trim() : rawNumber ?? "";
-  if (!normalizedRaw) {
-    return { status: "skipped", reason: "empty", target: null };
-  }
-  const normalizedTarget = normalizeUserWhatsAppId(normalizedRaw);
-  if (!normalizedTarget) {
-    return { status: "invalid", reason: "invalid_number", target: null };
-  }
-  return { status: "pending", reason: null, target: normalizedTarget };
-}
-
-export async function sendComplaintWhatsappResponse({
-  message,
-  personnelWhatsapp,
-  dashboardWhatsapp,
-} = {}) {
-  const personnel = buildWhatsappDeliveryStatus(personnelWhatsapp);
-  const dashboardUser = buildWhatsappDeliveryStatus(dashboardWhatsapp);
-
-  const targets = [personnel, dashboardUser].filter(
-    (entry) => entry.status === "pending"
-  );
-
-  if (!targets.length) {
-    return { personnel, dashboardUser };
-  }
-
-  // WhatsApp messaging removed - complaints handled through dashboard
-  targets.forEach((entry) => {
-    entry.status = "skipped";
-    entry.reason = "whatsapp_disabled";
-  });
-
-  return { personnel, dashboardUser };
 }
