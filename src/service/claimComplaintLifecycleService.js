@@ -4,14 +4,18 @@ import { deliverClaimComplaintNotification } from './claimComplaintNotificationS
 /** Creates the active report once, or returns the report already active for the content. */
 export async function createOrGetActiveClaimComplaint({
   userId,
+  clientId,
   platform,
   contentId,
+  issueType,
   triageSnapshot,
 }) {
   const result = await claimComplaintModel.createComplaint({
     userId,
+    clientId,
     platform,
     contentId,
+    issueType,
     triage: triageSnapshot,
   });
   let notification = await claimComplaintModel.findNotification(

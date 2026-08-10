@@ -15,6 +15,7 @@ describe('claim complaint triage', () => {
     jest.resetModules();
     findClaimProfileById = jest.fn().mockResolvedValue({
       user_id: '12345',
+      client_id: 'DITBINMAS',
       insta: 'registered.ig',
       tiktok: '@registered.tt',
     });
@@ -41,7 +42,7 @@ describe('claim complaint triage', () => {
       latestAudit: null,
     });
     createOrGetActiveClaimComplaint = jest.fn().mockResolvedValue({
-      complaint: { complaint_id: 'complaint-1', status: 'created' },
+      complaint: { complaint_id: 'complaint-1', status: 'triaged' },
       created: true,
       notification: { status: 'sent' },
     });
@@ -141,8 +142,10 @@ describe('claim complaint triage', () => {
     });
     expect(createOrGetActiveClaimComplaint).toHaveBeenCalledWith({
       userId: '12345',
+      clientId: 'DITBINMAS',
       platform: 'instagram',
       contentId: 'ABC123',
+      issueType: 'activity_not_recorded',
       triageSnapshot: expect.objectContaining({
         platform: 'instagram',
         content_id: 'ABC123',

@@ -250,8 +250,10 @@ export async function triageClaimComplaint(req, res, next) {
     };
     const report = await createOrGetActiveClaimComplaint({
       userId,
+      clientId: user.client_id,
       platform: body.platform,
       contentId,
+      issueType: body.issue_type,
       triageSnapshot,
     });
 
