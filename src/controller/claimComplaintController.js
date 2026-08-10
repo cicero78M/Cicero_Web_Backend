@@ -248,6 +248,15 @@ export async function triageClaimComplaint(req, res, next) {
       diagnosed_at: new Date().toISOString(),
       ...triageDto,
     };
+    // A recorded activity is a completed diagnosis, not an active complaint.
+    if (diagnosis.triageCode === 'ACTIVITY_ALREADY_RECORDED') {
+      return sendSuccess(res, {
+        ...triageDto,
+        complaint_id: null,
+        complaint_created: false,
+        complaint_status: null,
+      });
+    }
     const report = await createOrGetActiveClaimComplaint({
       userId,
       clientId: user.client_id,

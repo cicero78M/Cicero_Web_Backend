@@ -1,4 +1,27 @@
 import * as claimComplaintModel from '../model/claimComplaintModel.js';
+import { TRIAGE_CODES } from './claimComplaintTriageService.js';
+
+const initialStatusByTriageCode = Object.freeze({
+  [TRIAGE_CODES.ACTIVITY_ALREADY_RECORDED]: 'triaged',
+  [TRIAGE_CODES.SOCIAL_USERNAME_MISSING]: 'needs_user_action',
+  [TRIAGE_CODES.SOCIAL_USERNAME_MISMATCH]: 'needs_user_action',
+  [TRIAGE_CODES.SOCIAL_PROFILE_PRIVATE]: 'needs_user_action',
+  [TRIAGE_CODES.SOCIAL_PROFILE_NOT_FOUND]: 'needs_user_action',
+  [TRIAGE_CODES.SOCIAL_PROFILE_SUSPICIOUS]: 'triaged',
+  [TRIAGE_CODES.ENGAGEMENT_NOT_IN_SNAPSHOT]: 'triaged',
+  [TRIAGE_CODES.DATA_COLLECTION_STALE]: 'waiting_sync',
+  [TRIAGE_CODES.UPSTREAM_UNAVAILABLE]: 'waiting_sync',
+  [TRIAGE_CODES.MANUAL_REVIEW_REQUIRED]: 'triaged',
+});
+
+/** Maps every stable triage decision to its initial complaint lifecycle state. */
+export function getInitialClaimComplaintStatus(triageCode) {
+  const status = initialStatusByTriageCode[triageCode];
+  if (!status) {
+    throw new ClaimComplaintLifecycleError('CLAIM_COMPLAINT_TRIAGE_INVALID');
+  }
+  return status;
+}
 
 export const claimComplaintTransitionMatrix = Object.freeze({
   triaged: Object.freeze([
@@ -51,10 +74,14 @@ export async function transitionClaimComplaint({
 }) {
   const allowedTargets = claimComplaintTransitionMatrix[expectedStatus];
   if (!allowedTargets || !allowedTargets.includes(nextStatus)) {
-    throw new ClaimComplaintLifecycleError('CLAIM_COMPLAINT_TRANSITION_INVALID');
+    throw new ClaimComplaintLifecycleError(
+      'CLAIM_COMPLAINT_TRANSITION_INVALID'
+    );
   }
   if (actor === 'user' && !userAllowedTargetStatuses.has(nextStatus)) {
-    throw new ClaimComplaintLifecycleError('CLAIM_COMPLAINT_TRANSITION_FORBIDDEN');
+    throw new ClaimComplaintLifecycleError(
+      'CLAIM_COMPLAINT_TRANSITION_FORBIDDEN'
+    );
   }
 
   const existing = await claimComplaintModel.findComplaintById(
@@ -86,6 +113,7 @@ export async function createOrGetActiveClaimComplaint({
   issueType,
   triageSnapshot,
 }) {
+  const status = getInitialClaimComplaintStatus(triageSnapshot.triage_code);
   return claimComplaintModel.createComplaint({
     userId,
     clientId,
@@ -93,5 +121,6 @@ export async function createOrGetActiveClaimComplaint({
     contentId,
     issueType,
     triage: triageSnapshot,
+    status,
   });
 }

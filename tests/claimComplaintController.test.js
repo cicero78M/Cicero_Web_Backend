@@ -162,6 +162,70 @@ describe('claim complaint triage', () => {
   });
 
   test.each([
+    ['SOCIAL_USERNAME_MISSING', 'needs_user_action'],
+    ['SOCIAL_USERNAME_MISMATCH', 'needs_user_action'],
+    ['SOCIAL_PROFILE_PRIVATE', 'needs_user_action'],
+    ['SOCIAL_PROFILE_NOT_FOUND', 'needs_user_action'],
+    ['SOCIAL_PROFILE_SUSPICIOUS', 'triaged'],
+    ['ENGAGEMENT_NOT_IN_SNAPSHOT', 'triaged'],
+    ['DATA_COLLECTION_STALE', 'waiting_sync'],
+    ['UPSTREAM_UNAVAILABLE', 'waiting_sync'],
+    ['MANUAL_REVIEW_REQUIRED', 'triaged'],
+  ])(
+    'returns complaint_status %s persistence result for %s',
+    async (triageCode, complaintStatus) => {
+      diagnoseComplaint.mockResolvedValue({
+        triageCode,
+        triageQuality: 'low',
+      });
+      createOrGetActiveClaimComplaint.mockResolvedValue({
+        complaint: {
+          complaint_id: `complaint-${triageCode}`,
+          status: complaintStatus,
+        },
+        created: true,
+      });
+
+      const response = await request(app)
+        .post('/api/claim/complaints/triage')
+        .set('x-test-user-id', '12345')
+        .send({
+          platform: 'instagram',
+          issue_type: 'activity_not_recorded',
+          shortcode: 'ABC123',
+        });
+
+      expect(response.status).toBe(201);
+      expect(response.body.data.complaint_status).toBe(complaintStatus);
+    }
+  );
+
+  test('returns an already-recorded diagnosis without creating an active complaint', async () => {
+    diagnoseComplaint.mockResolvedValue({
+      triageCode: 'ACTIVITY_ALREADY_RECORDED',
+      triageQuality: 'high',
+    });
+
+    const response = await request(app)
+      .post('/api/claim/complaints/triage')
+      .set('x-test-user-id', '12345')
+      .send({
+        platform: 'instagram',
+        issue_type: 'activity_not_recorded',
+        shortcode: 'ABC123',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      triage_code: 'ACTIVITY_ALREADY_RECORDED',
+      complaint_id: null,
+      complaint_created: false,
+      complaint_status: null,
+    });
+    expect(createOrGetActiveClaimComplaint).not.toHaveBeenCalled();
+  });
+
+  test.each([
     'nrp',
     'user_id',
     'client_id',

@@ -7,6 +7,7 @@ const complaintInput = {
   platform: 'instagram',
   contentId: 'ABC123',
   issueType: 'activity_not_recorded',
+  status: 'triaged',
   triage: {
     triage_code: 'ENGAGEMENT_NOT_IN_SNAPSHOT',
     triage_quality: 'medium',
@@ -54,7 +55,7 @@ describe('claim complaint lifecycle deduplication', () => {
             client_id: params[2],
             platform: params[3],
             content_id: params[4],
-            status: 'triaged',
+            status: params[10],
             created_at: new Date(now).toISOString(),
           };
           records.push(record);
@@ -85,6 +86,8 @@ describe('claim complaint lifecycle deduplication', () => {
     expect(records).toHaveLength(1);
     expect(executedSql.join('\n')).toContain("status <> 'resolved'");
     expect(executedSql.join('\n')).toContain("INTERVAL '1 millisecond'");
+    expect(executedSql.join('\n')).toContain('triage_payload, status');
+    expect(first.complaint.status).toBe('triaged');
   });
 
   test('serializes parallel requests so only one active complaint is inserted', async () => {

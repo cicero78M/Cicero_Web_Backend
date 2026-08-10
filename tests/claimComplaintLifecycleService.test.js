@@ -7,6 +7,19 @@ const activeStatuses = [
   'escalated',
 ];
 
+const initialStatusCases = [
+  ['ACTIVITY_ALREADY_RECORDED', 'triaged'],
+  ['SOCIAL_USERNAME_MISSING', 'needs_user_action'],
+  ['SOCIAL_USERNAME_MISMATCH', 'needs_user_action'],
+  ['SOCIAL_PROFILE_PRIVATE', 'needs_user_action'],
+  ['SOCIAL_PROFILE_NOT_FOUND', 'needs_user_action'],
+  ['SOCIAL_PROFILE_SUSPICIOUS', 'triaged'],
+  ['ENGAGEMENT_NOT_IN_SNAPSHOT', 'triaged'],
+  ['DATA_COLLECTION_STALE', 'waiting_sync'],
+  ['UPSTREAM_UNAVAILABLE', 'waiting_sync'],
+  ['MANUAL_REVIEW_REQUIRED', 'triaged'],
+];
+
 describe('claim complaint lifecycle service', () => {
   let model;
   let lifecycle;
@@ -18,9 +31,49 @@ describe('claim complaint lifecycle service', () => {
       findComplaintById: jest.fn(),
       transitionComplaintStatus: jest.fn(),
     };
-    jest.unstable_mockModule('../src/model/claimComplaintModel.js', () => model);
+    jest.unstable_mockModule(
+      '../src/model/claimComplaintModel.js',
+      () => model
+    );
     lifecycle = await import(
       '../src/service/claimComplaintLifecycleService.js'
+    );
+  });
+
+  test.each(initialStatusCases)(
+    'maps %s to initial status %s',
+    (triageCode, expectedStatus) => {
+      expect(lifecycle.getInitialClaimComplaintStatus(triageCode)).toBe(
+        expectedStatus
+      );
+    }
+  );
+
+  test.each(
+    initialStatusCases.filter(([code]) => code !== 'ACTIVITY_ALREADY_RECORDED')
+  )(
+    'passes initial status for %s to persistence',
+    async (triageCode, expectedStatus) => {
+      model.createComplaint.mockResolvedValue({ created: true });
+
+      await lifecycle.createOrGetActiveClaimComplaint({
+        userId: 'user-1',
+        clientId: 'client-1',
+        platform: 'instagram',
+        contentId: 'content-1',
+        issueType: 'activity_not_recorded',
+        triageSnapshot: { triage_code: triageCode },
+      });
+
+      expect(model.createComplaint).toHaveBeenCalledWith(
+        expect.objectContaining({ status: expectedStatus })
+      );
+    }
+  );
+
+  test('rejects a triage code outside the domain mapping', () => {
+    expect(() => lifecycle.getInitialClaimComplaintStatus('UNKNOWN')).toThrow(
+      expect.objectContaining({ code: 'CLAIM_COMPLAINT_TRIAGE_INVALID' })
     );
   });
 
@@ -90,7 +143,8 @@ describe('claim complaint lifecycle service', () => {
   test.each(['triaged', 'waiting_sync', 'needs_user_action'])(
     'does not expose user transition to operational status %s',
     async (nextStatus) => {
-      const expectedStatus = nextStatus === 'triaged' ? 'waiting_sync' : 'triaged';
+      const expectedStatus =
+        nextStatus === 'triaged' ? 'waiting_sync' : 'triaged';
       await expect(
         lifecycle.transitionClaimComplaint({
           complaintId: 'complaint-1',
