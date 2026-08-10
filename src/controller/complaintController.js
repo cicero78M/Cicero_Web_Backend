@@ -9,7 +9,6 @@ import {
 import {
   normalizeComplaintHandle,
   parseComplaintMessage,
-  sendComplaintWhatsappResponse,
 } from '../service/complaintService.js';
 import { diagnoseComplaint } from '../service/complaintDiagnosisService.js';
 
@@ -148,33 +147,17 @@ async function handleComplaint(req, res, platformLabel) {
   const { issue, solution } = diagnosis;
 
   const message = buildComplaintMessage({ reporterName, nrp, issue, solution });
-  const dashboardWhatsapp = req.dashboardUser?.whatsapp || null;
-  const channel = user?.whatsapp
-    ? 'whatsapp'
-    : user?.email
-      ? 'email'
-      : 'unknown';
-  const whatsappDelivery = await sendComplaintWhatsappResponse({
-    message,
-    personnelWhatsapp: user?.whatsapp,
-    dashboardWhatsapp,
-  });
 
   sendSuccess(res, {
     platform: platformLabel,
     message,
     issue,
     solution,
-    channel,
-    whatsappDelivery,
     reporter: {
       nrp,
       name: reporterName,
       whatsapp: user?.whatsapp || null,
       email: user?.email || null,
-    },
-    dashboard: {
-      whatsapp: dashboardWhatsapp,
     },
   });
 }
