@@ -9,6 +9,7 @@ describe('claim complaint triage', () => {
   let getComplaintContentForUser;
   let hasUserLikedShortcode;
   let hasUserCommentedVideo;
+  let createOrGetActiveClaimComplaint;
 
   beforeEach(async () => {
     jest.resetModules();
@@ -39,6 +40,11 @@ describe('claim complaint triage', () => {
       updatedAt: null,
       latestAudit: null,
     });
+    createOrGetActiveClaimComplaint = jest.fn().mockResolvedValue({
+      complaint: { complaint_id: 'complaint-1', status: 'created' },
+      created: true,
+      notification: { status: 'sent' },
+    });
 
     await jest.isolateModulesAsync(async () => {
       jest.unstable_mockModule('../src/model/userModel.js', () => ({
@@ -60,6 +66,10 @@ describe('claim complaint triage', () => {
       jest.unstable_mockModule('../src/model/tiktokCommentModel.js', () => ({
         hasUserCommentedVideo,
       }));
+      jest.unstable_mockModule(
+        '../src/service/claimComplaintLifecycleService.js',
+        () => ({ createOrGetActiveClaimComplaint })
+      );
       const { triageClaimComplaint } = await import(
         '../src/controller/claimComplaintController.js'
       );
@@ -87,7 +97,7 @@ describe('claim complaint triage', () => {
         performed_at: '2026-08-09T10:30:00+07:00',
       });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(201);
     expect(findClaimProfileById).toHaveBeenCalledWith('12345');
     expect(getComplaintContentForUser).toHaveBeenCalledWith(
       '12345',
@@ -126,6 +136,26 @@ describe('claim complaint triage', () => {
       retry_after: null,
       can_escalate: true,
       last_collected_at: '2026-08-09T03:05:00.000Z',
+      complaint_id: 'complaint-1',
+      complaint_created: true,
+    });
+    expect(createOrGetActiveClaimComplaint).toHaveBeenCalledWith({
+      userId: '12345',
+      platform: 'instagram',
+      contentId: 'ABC123',
+      triageSnapshot: expect.objectContaining({
+        platform: 'instagram',
+        content_id: 'ABC123',
+        triage_code: 'ENGAGEMENT_NOT_IN_SNAPSHOT',
+        triage_quality: 'medium',
+        diagnosed_at: expect.any(String),
+        triage_evidence: {
+          activity_recorded: false,
+          snapshot_available: true,
+          last_collected_at: '2026-08-09T03:05:00.000Z',
+          performed_at: '2026-08-09T10:30:00+07:00',
+        },
+      }),
     });
   });
 
@@ -227,5 +257,28 @@ describe('claim complaint triage', () => {
       'CLAIM_COMPLAINT_CONTENT_OUT_OF_SCOPE'
     );
     expect(diagnoseComplaint).not.toHaveBeenCalled();
+    expect(createOrGetActiveClaimComplaint).not.toHaveBeenCalled();
   });
+
+  test.each(['triage', 'authorization', 'cookie', 'jwt', 'api_key', 'profile'])(
+    'does not allow client field %s into the server snapshot',
+    async (field) => {
+      const response = await request(app)
+        .post('/api/claim/complaints/triage')
+        .set('x-test-user-id', '12345')
+        .send({
+          platform: 'instagram',
+          issue_type: 'activity_not_recorded',
+          shortcode: 'ABC123',
+          [field]: { secret: 'must-not-be-stored' },
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        error_code: 'CLAIM_COMPLAINT_UNSUPPORTED_FIELD',
+        field,
+      });
+      expect(createOrGetActiveClaimComplaint).not.toHaveBeenCalled();
+    }
+  );
 });
