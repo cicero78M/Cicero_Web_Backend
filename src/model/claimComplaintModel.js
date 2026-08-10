@@ -88,6 +88,43 @@ export async function findComplaintById(complaintId, userId) {
   return rows[0] ?? null;
 }
 
+const complaintLifecycleColumns = `
+  complaint_id, platform, content_id, issue_type, status,
+  triage_code, triage_quality, triage_evidence,
+  created_at, updated_at, escalated_at, resolved_at`;
+
+export async function findComplaintsByUserId(userId) {
+  const { rows } = await query(
+    `SELECT ${complaintLifecycleColumns}
+     FROM claim_complaints
+     WHERE user_id = $1
+     ORDER BY created_at DESC`,
+    [userId]
+  );
+  return rows;
+}
+
+export async function findComplaintLifecycleById(complaintId, userId) {
+  const { rows } = await query(
+    `SELECT ${complaintLifecycleColumns}
+     FROM claim_complaints
+     WHERE complaint_id = $1 AND user_id = $2`,
+    [complaintId, userId]
+  );
+  return rows[0] ?? null;
+}
+
+export async function resolveComplaint(complaintId, userId) {
+  const { rows } = await query(
+    `UPDATE claim_complaints
+     SET status = 'resolved', resolved_at = NOW(), updated_at = NOW()
+     WHERE complaint_id = $1 AND user_id = $2 AND status <> 'resolved'
+     RETURNING *`,
+    [complaintId, userId]
+  );
+  return rows[0] ?? null;
+}
+
 export async function reserveNotification(
   complaintId,
   eventType,
