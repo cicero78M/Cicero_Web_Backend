@@ -1,14 +1,33 @@
 import { randomUUID } from 'node:crypto';
 import { query } from '../repository/db.js';
 
-export async function createComplaint({ userId, platform, contentId, triage }) {
+export async function createComplaint({
+  userId,
+  clientId,
+  platform,
+  contentId,
+  issueType,
+  triage,
+}) {
   const { rows } = await query(
     `INSERT INTO claim_complaints
-       (complaint_id, user_id, platform, content_id, triage_code, triage_payload)
-     VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+       (complaint_id, user_id, client_id, platform, content_id, issue_type,
+        triage_code, triage_quality, triage_evidence, triage_payload)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb)
      ON CONFLICT (user_id, platform, content_id) DO NOTHING
      RETURNING *`,
-    [randomUUID(), userId, platform, contentId, triage.triage_code, JSON.stringify(triage)]
+    [
+      randomUUID(),
+      userId,
+      clientId,
+      platform,
+      contentId,
+      issueType,
+      triage.triage_code,
+      triage.triage_quality,
+      JSON.stringify(triage.triage_evidence),
+      JSON.stringify(triage),
+    ]
   );
   if (rows[0]) return { complaint: rows[0], created: true };
   const existing = await findComplaintForUser({ userId, platform, contentId });
