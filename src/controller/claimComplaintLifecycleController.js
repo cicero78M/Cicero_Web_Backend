@@ -2,6 +2,22 @@ import { normalizeUserId } from '../utils/utilsHelper.js';
 import { sendSuccess } from '../utils/response.js';
 import * as claimComplaintModel from '../model/claimComplaintModel.js';
 import { deliverClaimComplaintNotification } from '../service/claimComplaintNotificationService.js';
+import {
+  ClaimComplaintLifecycleError,
+  transitionClaimComplaint,
+} from '../service/claimComplaintLifecycleService.js';
+
+function sendLifecycleError(res, error) {
+  if (!(error instanceof ClaimComplaintLifecycleError)) return false;
+  const status =
+    error.code === 'CLAIM_COMPLAINT_NOT_FOUND'
+      ? 404
+      : error.code === 'CLAIM_COMPLAINT_STATUS_CONFLICT'
+        ? 409
+        : 422;
+  res.status(status).json({ success: false, error_code: error.code });
+  return true;
+}
 
 function buildComplaintLifecycleDto(complaint) {
   const evidence = complaint.triage_evidence || {};
@@ -54,35 +70,26 @@ export async function getClaimComplaints(req, res, next) {
 export async function escalateClaimComplaint(req, res, next) {
   try {
     const userId = normalizeUserId(req.user?.user_id);
-    const existing = await claimComplaintModel.findComplaintById(
-      req.params.complaintId,
-      userId
-    );
-    if (!existing)
-      return res
-        .status(404)
-        .json({ success: false, error_code: 'CLAIM_COMPLAINT_NOT_FOUND' });
-    const complaint = await claimComplaintModel.escalateComplaint(
-      req.params.complaintId,
-      userId
-    );
-    let notification = await claimComplaintModel.findNotification(
-      existing.complaint_id,
+    const complaint = await transitionClaimComplaint({
+      complaintId: req.params.complaintId,
+      userId,
+      expectedStatus: req.body?.expected_status,
+      nextStatus: 'escalated',
+      actor: 'user',
+    });
+    const notification = await deliverClaimComplaintNotification(
+      complaint,
       'escalated'
     );
-    if (complaint)
-      notification = await deliverClaimComplaintNotification(
-        complaint,
-        'escalated'
-      );
     return sendSuccess(res, {
-      complaint_id: existing.complaint_id,
-      escalated: Boolean(complaint),
-      status: complaint?.status || existing.status,
-      triage: complaint?.triage_payload || existing.triage_payload,
+      complaint_id: complaint.complaint_id,
+      escalated: true,
+      status: complaint.status,
+      triage: complaint.triage_payload,
       notification,
     });
   } catch (err) {
+    if (sendLifecycleError(res, err)) return;
     return next(err);
   }
 }
@@ -116,24 +123,20 @@ export async function retryClaimComplaintNotification(req, res, next) {
 export async function resolveClaimComplaint(req, res, next) {
   try {
     const userId = normalizeUserId(req.user?.user_id);
-    const existing = await claimComplaintModel.findComplaintById(
-      req.params.complaintId,
-      userId
-    );
-    if (!existing)
-      return res
-        .status(404)
-        .json({ success: false, error_code: 'CLAIM_COMPLAINT_NOT_FOUND' });
-    const complaint = await claimComplaintModel.resolveComplaint(
-      req.params.complaintId,
-      userId
-    );
+    const complaint = await transitionClaimComplaint({
+      complaintId: req.params.complaintId,
+      userId,
+      expectedStatus: req.body?.expected_status,
+      nextStatus: 'resolved',
+      actor: 'user',
+    });
     return sendSuccess(res, {
-      complaint_id: existing.complaint_id,
-      resolved: Boolean(complaint),
-      status: complaint?.status || existing.status,
+      complaint_id: complaint.complaint_id,
+      resolved: true,
+      status: complaint.status,
     });
   } catch (err) {
+    if (sendLifecycleError(res, err)) return;
     return next(err);
   }
 }
