@@ -1,0 +1,88 @@
+import { randomUUID } from 'node:crypto';
+import { query } from '../repository/db.js';
+
+export async function createComplaint({ userId, platform, contentId, triage }) {
+  const { rows } = await query(
+    `INSERT INTO claim_complaints
+       (complaint_id, user_id, platform, content_id, triage_code, triage_payload)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+     ON CONFLICT (user_id, platform, content_id) DO NOTHING
+     RETURNING *`,
+    [randomUUID(), userId, platform, contentId, triage.triage_code, JSON.stringify(triage)]
+  );
+  if (rows[0]) return { complaint: rows[0], created: true };
+  const existing = await findComplaintForUser({ userId, platform, contentId });
+  return { complaint: existing, created: false };
+}
+
+export async function findComplaintForUser({ userId, platform, contentId }) {
+  const { rows } = await query(
+    `SELECT * FROM claim_complaints
+     WHERE user_id = $1 AND platform = $2 AND content_id = $3`,
+    [userId, platform, contentId]
+  );
+  return rows[0] ?? null;
+}
+
+export async function escalateComplaint(complaintId, userId) {
+  const { rows } = await query(
+    `UPDATE claim_complaints
+     SET status = 'escalated', escalated_at = NOW(), updated_at = NOW()
+     WHERE complaint_id = $1 AND user_id = $2 AND status <> 'escalated'
+     RETURNING *`,
+    [complaintId, userId]
+  );
+  return rows[0] ?? null;
+}
+
+export async function findComplaintById(complaintId, userId) {
+  const { rows } = await query(
+    'SELECT * FROM claim_complaints WHERE complaint_id = $1 AND user_id = $2',
+    [complaintId, userId]
+  );
+  return rows[0] ?? null;
+}
+
+export async function reserveNotification(complaintId, eventType, maxAttempts = 3) {
+  await query(
+    `INSERT INTO claim_complaint_notifications (complaint_id, event_type)
+     VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+    [complaintId, eventType]
+  );
+  const { rows } = await query(
+    `UPDATE claim_complaint_notifications
+     SET status = 'pending', attempt_count = attempt_count + 1,
+         last_attempt_at = NOW(), next_retry_at = NULL, updated_at = NOW()
+     WHERE complaint_id = $1 AND event_type = $2
+       AND status IN ('pending', 'failed')
+       AND attempt_count < $3
+       AND (next_retry_at IS NULL OR next_retry_at <= NOW())
+     RETURNING *`,
+    [complaintId, eventType, maxAttempts]
+  );
+  return rows[0] ?? null;
+}
+
+export async function finishNotification(complaintId, eventType, result) {
+  const retryDelayMinutes = Math.min(30, 2 ** Math.max(0, result.attemptCount - 1));
+  const { rows } = await query(
+    `UPDATE claim_complaint_notifications
+     SET status = $3, delivery_result = $4::jsonb, last_error = $5,
+         sent_at = CASE WHEN $3 = 'sent' THEN NOW() ELSE sent_at END,
+         next_retry_at = CASE WHEN $3 = 'failed'
+           THEN NOW() + ($6 * INTERVAL '1 minute') ELSE NULL END,
+         updated_at = NOW()
+     WHERE complaint_id = $1 AND event_type = $2 RETURNING *`,
+    [complaintId, eventType, result.status, JSON.stringify(result.deliveryResult || null), result.error || null, retryDelayMinutes]
+  );
+  return rows[0] ?? null;
+}
+
+export async function findNotification(complaintId, eventType) {
+  const { rows } = await query(
+    `SELECT * FROM claim_complaint_notifications
+     WHERE complaint_id = $1 AND event_type = $2`,
+    [complaintId, eventType]
+  );
+  return rows[0] ?? null;
+}
