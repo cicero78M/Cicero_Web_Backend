@@ -9,6 +9,7 @@ export async function createComplaint({
   contentId,
   issueType,
   triage,
+  status,
 }) {
   const complaintId = randomUUID();
   const deduplicationKey = `${userId}\u0000${platform}\u0000${contentId}`;
@@ -31,8 +32,8 @@ export async function createComplaint({
     const { rows } = await client.query(
       `INSERT INTO claim_complaints
        (complaint_id, user_id, client_id, platform, content_id, issue_type,
-        triage_code, triage_quality, triage_evidence, triage_payload)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb)
+        triage_code, triage_quality, triage_evidence, triage_payload, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11)
      RETURNING *`,
       [
         complaintId,
@@ -45,6 +46,7 @@ export async function createComplaint({
         triage.triage_quality,
         JSON.stringify(triage.triage_evidence),
         JSON.stringify(triage),
+        status,
       ]
     );
     return { complaint: rows[0], created: true };
