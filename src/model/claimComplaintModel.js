@@ -69,13 +69,21 @@ export async function findComplaintForUser(
   return rows[0] ?? null;
 }
 
-export async function escalateComplaint(complaintId, userId) {
+export async function transitionComplaintStatus({
+  complaintId,
+  userId,
+  expectedStatus,
+  nextStatus,
+}) {
   const { rows } = await query(
     `UPDATE claim_complaints
-     SET status = 'escalated', escalated_at = NOW(), updated_at = NOW()
-     WHERE complaint_id = $1 AND user_id = $2 AND status <> 'escalated'
+     SET status = $4,
+         escalated_at = CASE WHEN $4 = 'escalated' THEN NOW() ELSE escalated_at END,
+         resolved_at = CASE WHEN $4 = 'resolved' THEN NOW() ELSE NULL END,
+         updated_at = NOW()
+     WHERE complaint_id = $1 AND user_id = $2 AND status = $3
      RETURNING *`,
-    [complaintId, userId]
+    [complaintId, userId, expectedStatus, nextStatus]
   );
   return rows[0] ?? null;
 }
@@ -109,17 +117,6 @@ export async function findComplaintLifecycleById(complaintId, userId) {
     `SELECT ${complaintLifecycleColumns}
      FROM claim_complaints
      WHERE complaint_id = $1 AND user_id = $2`,
-    [complaintId, userId]
-  );
-  return rows[0] ?? null;
-}
-
-export async function resolveComplaint(complaintId, userId) {
-  const { rows } = await query(
-    `UPDATE claim_complaints
-     SET status = 'resolved', resolved_at = NOW(), updated_at = NOW()
-     WHERE complaint_id = $1 AND user_id = $2 AND status <> 'resolved'
-     RETURNING *`,
     [complaintId, userId]
   );
   return rows[0] ?? null;

@@ -11,8 +11,7 @@ describe('claim complaint lifecycle authorization', () => {
       findComplaintsByUserId: jest.fn().mockResolvedValue([]),
       findComplaintLifecycleById: jest.fn().mockResolvedValue(null),
       findComplaintById: jest.fn().mockResolvedValue(null),
-      escalateComplaint: jest.fn(),
-      resolveComplaint: jest.fn(),
+      transitionComplaintStatus: jest.fn(),
       findNotification: jest.fn(),
     };
     deliverClaimComplaintNotification = jest.fn();
@@ -46,7 +45,11 @@ describe('claim complaint lifecycle authorization', () => {
       user: { user_id: '1001' },
       params: { complaintId: 'user-b-complaint', user_id: 'user-b' },
       query: { user_id: 'user-b', nrp: 'user-b' },
-      body: { user_id: 'user-b', nrp: 'user-b' },
+      body: {
+        user_id: 'user-b',
+        nrp: 'user-b',
+        expected_status: 'triaged',
+      },
     };
     const res = createResponse();
     const next = jest.fn();
@@ -63,8 +66,7 @@ describe('claim complaint lifecycle authorization', () => {
       success: false,
       error_code: 'CLAIM_COMPLAINT_NOT_FOUND',
     });
-    expect(model.escalateComplaint).not.toHaveBeenCalled();
-    expect(model.resolveComplaint).not.toHaveBeenCalled();
+    expect(model.transitionComplaintStatus).not.toHaveBeenCalled();
     expect(deliverClaimComplaintNotification).not.toHaveBeenCalled();
     expect(next).not.toHaveBeenCalled();
   });
