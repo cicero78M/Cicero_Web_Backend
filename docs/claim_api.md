@@ -217,7 +217,7 @@ Error internal diteruskan ke error middleware global dan mengikuti format error 
 - **Endpoint:** `POST /api/claim/complaints/triage`
 - **Autentikasi:** wajib token/cookie yang diproses `authRequired`.
 - **Identitas:** selalu berasal dari `req.user.user_id`; field identitas di body ditolak.
-- **Pencatatan:** endpoint hanya mendiagnosis dan tidak membuat record komplain.
+- **Pencatatan:** endpoint membuat record complaint aktif atau mengambil record aktif yang sama dalam jendela deduplikasi. Diagnosis `ACTIVITY_ALREADY_RECORDED` tidak membuat complaint aktif.
 
 ### Request
 
@@ -259,6 +259,9 @@ isi pesan**.
 | `can_retry`         | boolean     | Apakah pemeriksaan ulang tersedia.                                                   |
 | `retry_after`       | string/null | Waktu ISO retry terjadwal; `null` karena backend belum mempunyai jadwal retry pasti. |
 | `can_escalate`      | boolean     | Apakah frontend boleh menawarkan eskalasi.                                           |
+| `complaint_id`      | string/null | ID record complaint aktif; `null` bila aktivitas sudah tercatat.                     |
+| `complaint_created` | boolean     | `true` bila request membuat complaint baru, selain itu `false`.                      |
+| `complaint_status`  | string/null | Status lifecycle complaint aktif; `null` bila tidak ada complaint aktif.             |
 
 Contoh response aktivitas yang sudah tercatat:
 
@@ -296,7 +299,10 @@ Contoh response aktivitas yang sudah tercatat:
     "last_collected_at": "2026-08-09T03:05:00.000Z",
     "can_retry": false,
     "retry_after": null,
-    "can_escalate": false
+    "can_escalate": false,
+    "complaint_id": null,
+    "complaint_created": false,
+    "complaint_status": null
   }
 }
 ```
@@ -316,8 +322,38 @@ Contoh response aktivitas yang sudah tercatat:
 | `UPSTREAM_UNAVAILABLE`       | Pemeriksaan sementara terganggu | Gangguan layanan bukan kesalahan user; tawarkan retry/eskalasi.              |
 | `MANUAL_REVIEW_REQUIRED`     | Bukti perlu diperiksa           | Bukti belum cukup, bukan kesalahan user; tawarkan retry/eskalasi.            |
 
-Formatter teks/WhatsApp hanya merender DTO sebagai adapter presentasi. Formatter
-tidak boleh memilih `triage_code`, mengubah flag tindakan, atau menjadi sumber aturan.
+Teks presentasi hanya merender DTO. Lapisan presentasi tidak boleh memilih
+`triage_code`, mengubah flag tindakan, atau menjadi sumber aturan.
+
+### Status HTTP dan pencatatan complaint
+
+- Response `201 Created` menandakan endpoint membuat record complaint aktif baru.
+- Response `200 OK` menandakan endpoint mengambil record complaint aktif yang sudah
+  ada untuk user, platform, dan konten yang sama dalam jendela deduplikasi.
+- Keduanya mengembalikan `complaint_id`, `complaint_created`, dan
+  `complaint_status` bersama DTO diagnosis. Untuk `ACTIVITY_ALREADY_RECORDED`, response
+  tetap `200` dengan `complaint_id: null`, `complaint_created: false`, dan
+  `complaint_status: null` karena diagnosis tersebut bukan complaint aktif.
+
+Contoh metadata complaint baru (`201`):
+
+```json
+{
+  "complaint_id": "2dc1ed65-d7fe-4470-a7dd-63314330e03d",
+  "complaint_created": true,
+  "complaint_status": "triaged"
+}
+```
+
+Contoh metadata complaint aktif terdeduplikasi (`200`):
+
+```json
+{
+  "complaint_id": "2dc1ed65-d7fe-4470-a7dd-63314330e03d",
+  "complaint_created": false,
+  "complaint_status": "triaged"
+}
+```
 
 ### Error
 
@@ -327,6 +363,45 @@ Error `400` meliputi `CLAIM_COMPLAINT_IDENTITY_FIELD_FORBIDDEN`,
 `CLAIM_COMPLAINT_PLATFORM_CONTENT_MISMATCH`, `CLAIM_COMPLAINT_INVALID_PERFORMED_AT`,
 dan `CLAIM_COMPLAINT_INVALID_DATE_FILTER`. Konten di luar scope pending memakai `403`
 dengan `CLAIM_COMPLAINT_CONTENT_OUT_OF_SCOPE`.
+
+## Lifecycle Complaint Claim
+
+Semua endpoint berikut memerlukan autentikasi dan role `user`. Identitas pemilik
+selalu berasal dari token; user hanya dapat membaca atau mengubah complaint miliknya.
+
+### List complaint
+
+- **Endpoint:** `GET /api/claim/complaints`
+- **Response `200`:** array complaint milik user, diurutkan dari yang terbaru.
+
+### Detail complaint
+
+- **Endpoint:** `GET /api/claim/complaints/:complaintId`
+- **Response `200`:** DTO lifecycle yang memuat `complaint_id`, `platform`,
+  `content_id`, `issue_type`, `status`, ringkasan `triage`, serta timestamp lifecycle.
+- **Response `404`:** `CLAIM_COMPLAINT_NOT_FOUND` bila complaint tidak ada atau bukan
+  milik user yang terautentikasi.
+
+### Eskalasi complaint
+
+- **Endpoint:** `POST /api/claim/complaints/:complaintId/escalate`
+- **Body:** `{ "expected_status": "triaged" }`; isi dengan status terakhir yang dibaca
+  frontend agar transisi bersifat compare-and-set.
+- **Response `200`:** mengembalikan `complaint_id`, `escalated: true`, status
+  `escalated`, dan snapshot triage.
+
+### Resolve complaint
+
+- **Endpoint:** `POST /api/claim/complaints/:complaintId/resolve`
+- **Body:** `{ "expected_status": "triaged" }`; isi dengan status terakhir yang dibaca
+  frontend.
+- **Response `200`:** mengembalikan `complaint_id`, `resolved: true`, dan status
+  `resolved`.
+
+Endpoint eskalasi dan resolve mengembalikan `404` untuk
+`CLAIM_COMPLAINT_NOT_FOUND`, `409` untuk `CLAIM_COMPLAINT_STATUS_CONFLICT`, dan
+`422` untuk transisi yang tidak diizinkan. Status complaint yang sudah `resolved`
+tidak dapat dibuka kembali melalui endpoint user.
 
 ## `POST /api/claim/social-profile/validate`
 

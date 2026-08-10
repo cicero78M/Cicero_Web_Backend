@@ -27,7 +27,7 @@ Catatan: Narasi lama yang menyebut "Absensi Amplifikasi" sudah diganti agar sela
 - Admin dapat membuka kembali menu dengan perintah `clientrequest` bila diperlukan.
 
 ## API respon komplain
-Endpoint komplain dipakai untuk menyusun pesan respon yang akan ditampilkan kembali di frontend sebelum dikirimkan melalui kanal lain.
+Endpoint komplain dipakai untuk menghasilkan diagnosis dan teks tindak lanjut yang ditampilkan di dashboard.
 
 **Endpoint**
 - `POST /api/dashboard/komplain/insta`
@@ -48,7 +48,7 @@ Endpoint komplain dipakai untuk menyusun pesan respon yang akan ditampilkan kemb
 }
 ```
 
-Field `issue`/`solution` boleh diganti dengan `kendala`, `solusi`, atau `tindak_lanjut`. Jika tidak diisi, sistem akan mencoba menyusun kendala dan solusi otomatis dengan logika yang sama seperti responder WhatsApp (memakai modul `complaintService`). Anda dapat mengirimkan `message`/`pesan` berisi format *Pesan Komplain* agar sistem mengekstrak daftar kendala dan menghasilkan solusi otomatis sesuai akun Instagram/TikTok pelapor. Respons API akan mengembalikan string pesan dengan format yang mengikuti `sendComplaintResponse` (sapaan, identitas pelapor, kendala, dan solusi), beserta data pelapor dan nomor WhatsApp dashboard user bila tersedia.
+Field `issue`/`solution` boleh diganti dengan `kendala`, `solusi`, atau `tindak_lanjut`. Jika tidak diisi, sistem akan menyusun diagnosis, kendala, dan solusi otomatis dengan modul `complaintService`. Anda dapat mengirimkan `message`/`pesan` berisi format *Pesan Komplain* agar sistem mengekstrak daftar kendala dan menghasilkan solusi otomatis sesuai akun Instagram/TikTok pelapor. Respons API mengembalikan diagnosis dan teks tindak lanjut untuk ditampilkan di dashboard; endpoint tidak memiliki kontrak pengiriman pesan.
 
 **Format payload**
 ```json
@@ -77,20 +77,11 @@ Keterangan:
 }
 ```
 
-## Status pengiriman WhatsApp
-Ketika endpoint komplain dipanggil, sistem akan mencoba mengirimkan pesan yang sudah diformat ke dua target WhatsApp: nomor personel (`user.whatsapp`) dan (bila token dashboard digunakan) nomor dashboard user (`req.dashboardUser.whatsapp`). Status pengiriman selalu dikembalikan di response frontend agar UI dapat menampilkan hasil pengiriman per nomor.
+## Response diagnosis
 
-Contoh ringkas objek `whatsappDelivery` pada response:
-```json
-{
-  "whatsappDelivery": {
-    "personnel": { "status": "sent", "target": "6281234567890@c.us" },
-    "dashboardUser": { "status": "invalid", "reason": "invalid_number" }
-  }
-}
-```
+Response berisi diagnosis dan teks tindak lanjut yang siap ditampilkan oleh frontend di dashboard.
 
-**Contoh response lengkap (ringkas)**
+**Contoh response (ringkas)**
 ```json
 {
   "success": true,
@@ -99,24 +90,12 @@ Contoh ringkas objek `whatsappDelivery` pada response:
     "message": "Selamat pagi! Kami menindaklanjuti laporan yang Anda sampaikan.\\n\\n*Pelapor*: Nama Pelapor\\n\\n*NRP/NIP*: 75020201\\n\\n*Kendala*:\\n- Sudah melaksanakan Instagram belum terdata.\\n\\n*Solusi/Tindak Lanjut*:\\n1) Pastikan like dan komentar dilakukan menggunakan akun yang tercatat (Instagram: @username).\\n2) Pastikan sudah mengisi absensi likes Instagram di dashboard.",
     "issue": "Pesan Komplain\\nNRP/NIP: 75020201\\nNama: Nama Pelapor\\nInstagram: @username\\n\\nKendala\\n- Sudah melaksanakan Instagram belum terdata.",
     "solution": "1) Pastikan like dan komentar dilakukan menggunakan akun yang tercatat (Instagram: @username).\\n2) Pastikan sudah mengisi absensi likes Instagram di dashboard.",
-    "channel": "whatsapp",
-    "whatsappDelivery": {
-      "personnel": { "status": "sent", "target": "6281234567890@c.us" },
-      "dashboardUser": { "status": "sent", "target": "6289876543210@c.us" }
-    },
     "reporter": {
       "nrp": "75020201",
       "name": "Nama Pelapor",
       "whatsapp": "6281234567890",
       "email": "pelapor@example.com"
-    },
-    "dashboard": { "whatsapp": "6289876543210" }
+    }
   }
 }
 ```
-
-Nilai status yang mungkin:
-- `sent`: pesan berhasil dikirim.
-- `failed`: pengiriman gagal (contoh: client WA belum siap atau error saat kirim).
-- `invalid`: nomor WA tidak valid.
-- `skipped`: nomor WA kosong/tidak tersedia.

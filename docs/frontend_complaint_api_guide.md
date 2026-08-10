@@ -147,14 +147,14 @@ export default function ComplaintForm() {
       });
       
       console.log('Success:', result);
-      alert('Komplain berhasil dikirim');
+      alert('Diagnosis komplain berhasil dibuat');
       
       // Handle success response
       // result.data akan berisi:
       // - message: pesan yang sudah diformat
       // - issue: kendala yang diidentifikasi
       // - solution: solusi yang diberikan
-      // - whatsappDelivery: status pengiriman WA
+      // Tampilkan diagnosis dan teks tindak lanjut tersebut di dashboard.
       
     } catch (err) {
       console.error('Error:', err);
@@ -199,7 +199,7 @@ export default function ComplaintForm() {
       {error && <div className="error">{error}</div>}
       
       <button type="submit" disabled={loading}>
-        {loading ? 'Mengirim...' : 'Kirim Komplain'}
+        {loading ? 'Mendiagnosis...' : 'Buat Diagnosis'}
       </button>
     </form>
   );
@@ -260,7 +260,10 @@ export async function submitTiktokComplaint(data) {
 
 ## Response Format
 
-### Success Response (200)
+### Success Response
+
+Endpoint menghasilkan diagnosis dan teks tindak lanjut untuk ditampilkan di dashboard. Response tidak menyatakan atau melacak pengiriman pesan.
+
 ```json
 {
   "success": true,
@@ -269,25 +272,11 @@ export async function submitTiktokComplaint(data) {
     "message": "Selamat pagi! Kami menindaklanjuti laporan yang Anda sampaikan.\n\n*Pelapor*: John Doe\n\n*NRP/NIP*: 75020201\n\n*Kendala*:\nSudah melaksanakan TikTok tetapi belum tercatat\n\n*Solusi/Tindak Lanjut*:\n1) Pastikan komentar dilakukan menggunakan akun yang tercatat (TikTok: @johndoe).\n2) Pastikan sudah mengisi absensi komentar TikTok di dashboard.",
     "issue": "Sudah melaksanakan TikTok tetapi belum tercatat",
     "solution": "1) Pastikan komentar dilakukan menggunakan akun yang tercatat (TikTok: @johndoe).\n2) Pastikan sudah mengisi absensi komentar TikTok di dashboard.",
-    "channel": "whatsapp",
-    "whatsappDelivery": {
-      "personnel": {
-        "status": "sent",
-        "target": "628123456789@c.us"
-      },
-      "dashboardUser": {
-        "status": "sent",
-        "target": "628987654321@c.us"
-      }
-    },
     "reporter": {
       "nrp": "75020201",
       "name": "John Doe",
       "whatsapp": "628123456789",
       "email": "johndoe@example.com"
-    },
-    "dashboard": {
-      "whatsapp": "628987654321"
     }
   }
 }
@@ -350,9 +339,9 @@ Sebelum melakukan integrasi, pastikan:
 - [ ] **Payload**: Minimal mengirim field `nrp`
 - [ ] **Error Handling**: Handle error 401, 403, 404, dan 400
 - [ ] **Token Refresh**: Implementasi logic untuk re-login jika token expired
-- [ ] **Response Display**: Tampilkan `message`, `whatsappDelivery` status, dan data reporter
+- [ ] **Response Display**: Tampilkan diagnosis (`issue`) dan teks tindak lanjut (`message`/`solution`) di dashboard
 - [ ] **Loading State**: Tampilkan loading indicator saat request
-- [ ] **Success Feedback**: Berikan feedback ke user setelah berhasil submit
+- [ ] **Success Feedback**: Beri tahu user bahwa diagnosis berhasil dibuat dan siap ditampilkan
 
 ## Troubleshooting
 
