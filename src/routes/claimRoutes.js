@@ -16,6 +16,8 @@ import { authRequired } from '../middleware/authMiddleware.js';
 import { triageClaimComplaint } from '../controller/claimComplaintController.js';
 import {
   escalateClaimComplaint,
+  getClaimComplaints,
+  resolveClaimComplaint,
   retryClaimComplaintNotification,
 } from '../controller/claimComplaintLifecycleController.js';
 
@@ -44,10 +46,17 @@ router.get('/me', authRequired, getClaimMe);
 router.put('/me', authRequired, updateClaimMe);
 router.get('/pending-content', authRequired, getPendingContent);
 router.post('/complaints/triage', authRequired, triageClaimComplaint);
+router.get('/complaints', authRequired, getClaimComplaints);
+router.get('/complaints/:complaintId', authRequired, getClaimComplaints);
 router.post(
   '/complaints/:complaintId/escalate',
   authRequired,
   escalateClaimComplaint
+);
+router.post(
+  '/complaints/:complaintId/resolve',
+  authRequired,
+  resolveClaimComplaint
 );
 router.post(
   '/complaints/:complaintId/notifications/retry',
