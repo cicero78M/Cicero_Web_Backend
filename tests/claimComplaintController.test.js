@@ -44,7 +44,6 @@ describe('claim complaint triage', () => {
     createOrGetActiveClaimComplaint = jest.fn().mockResolvedValue({
       complaint: { complaint_id: 'complaint-1', status: 'triaged' },
       created: true,
-      notification: { status: 'sent' },
     });
 
     await jest.isolateModulesAsync(async () => {

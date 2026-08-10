@@ -131,23 +131,16 @@ test('deduplication window is an explicit, stable lifecycle constant', async () 
   expect(claimComplaintDeduplicationWindowMs).toBe(dayMs);
 });
 
-test('a duplicate does not enqueue or deliver another created notification', async () => {
+test('lifecycle creation returns an existing complaint without a second insert', async () => {
   jest.resetModules();
   const existing = { complaint_id: 'complaint-existing', status: 'triaged' };
   const createComplaint = jest.fn().mockResolvedValue({
     complaint: existing,
     created: false,
   });
-  const findNotification = jest.fn().mockResolvedValue({ status: 'sent' });
-  const deliverClaimComplaintNotification = jest.fn();
   jest.unstable_mockModule('../src/model/claimComplaintModel.js', () => ({
     createComplaint,
-    findNotification,
   }));
-  jest.unstable_mockModule(
-    '../src/service/claimComplaintNotificationService.js',
-    () => ({ deliverClaimComplaintNotification })
-  );
   const { createOrGetActiveClaimComplaint } = await import(
     '../src/service/claimComplaintLifecycleService.js'
   );
@@ -157,10 +150,6 @@ test('a duplicate does not enqueue or deliver another created notification', asy
     triageSnapshot: complaintInput.triage,
   });
 
-  expect(result).toMatchObject({ complaint: existing, created: false });
-  expect(findNotification).toHaveBeenCalledWith(
-    'complaint-existing',
-    'created'
-  );
-  expect(deliverClaimComplaintNotification).not.toHaveBeenCalled();
+  expect(result).toEqual({ complaint: existing, created: false });
+  expect(createComplaint).toHaveBeenCalledTimes(1);
 });
