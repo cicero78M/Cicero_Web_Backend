@@ -139,6 +139,7 @@ describe('claim complaint triage', () => {
       complaint_id: 'complaint-1',
       complaint_created: true,
     });
+    expect(response.body.data).not.toHaveProperty('notification');
     expect(createOrGetActiveClaimComplaint).toHaveBeenCalledWith({
       userId: '12345',
       clientId: 'DITBINMAS',

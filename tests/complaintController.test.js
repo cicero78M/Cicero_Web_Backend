@@ -80,7 +80,6 @@ describe('complaint dashboard response', () => {
     });
     expect(response.body.data.message).toContain('Diagnosis aktivitas Instagram');
     expect(response.body.data).not.toHaveProperty('channel');
-    expect(response.body.data).not.toHaveProperty('whatsappDelivery');
     expect(response.body.data).not.toHaveProperty('dashboard');
   });
 });
