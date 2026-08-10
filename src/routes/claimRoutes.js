@@ -13,6 +13,7 @@ import {
   validateClaimSocialProfile,
 } from '../controller/claimController.js';
 import { authRequired } from '../middleware/authMiddleware.js';
+import { claimUserRoleRequired } from '../middleware/claimRoleMiddleware.js';
 import { triageClaimComplaint } from '../controller/claimComplaintController.js';
 import {
   escalateClaimComplaint,
@@ -44,17 +45,34 @@ router.put('/edit', updateUserData); // backward-compatible alias for /claim/edi
 router.get('/me', authRequired, getClaimMe);
 router.put('/me', authRequired, updateClaimMe);
 router.get('/pending-content', authRequired, getPendingContent);
-router.post('/complaints/triage', authRequired, triageClaimComplaint);
-router.get('/complaints', authRequired, getClaimComplaints);
-router.get('/complaints/:complaintId', authRequired, getClaimComplaints);
+router.post(
+  '/complaints/triage',
+  authRequired,
+  claimUserRoleRequired,
+  triageClaimComplaint
+);
+router.get(
+  '/complaints',
+  authRequired,
+  claimUserRoleRequired,
+  getClaimComplaints
+);
+router.get(
+  '/complaints/:complaintId',
+  authRequired,
+  claimUserRoleRequired,
+  getClaimComplaints
+);
 router.post(
   '/complaints/:complaintId/escalate',
   authRequired,
+  claimUserRoleRequired,
   escalateClaimComplaint
 );
 router.post(
   '/complaints/:complaintId/resolve',
   authRequired,
+  claimUserRoleRequired,
   resolveClaimComplaint
 );
 router.post(
