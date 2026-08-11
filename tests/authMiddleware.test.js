@@ -265,6 +265,7 @@ describe('authRequired middleware', () => {
     expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
     expect(res.body.message).toBe('Authorization harus format Bearer token');
+    expect(res.body.reason).toBe('invalid_authorization_format');
   });
 
   test('fails with Token required when Authorization header is missing', async () => {
@@ -319,7 +320,24 @@ describe('authRequired middleware', () => {
 
     expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
+    expect(res.body.reason).toBe('revoked_token');
+  });
+
+  test.each([
+    ['malformed', 'not-a-jwt'],
+    [
+      'signed with a different secret',
+      jwt.sign({ user_id: 'u6', role: 'user' }, 'different-secret'),
+    ],
+  ])('rejects %s token as invalid_token', async (_description, token) => {
+    const res = await request(app)
+      .get('/api/other')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(401);
+    expect(res.body.success).toBe(false);
     expect(res.body.reason).toBe('invalid_token');
+    expect(redisMock.get).not.toHaveBeenCalled();
   });
 
 });
