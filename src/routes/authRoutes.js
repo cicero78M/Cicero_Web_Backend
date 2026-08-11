@@ -13,7 +13,6 @@ import {
   normalizeWhatsappNumber,
   formatToWhatsAppId,
 } from "../utils/waHelper.js";
-import redis from "../config/redis.js";
 import { insertVisitorLog } from "../model/visitorLogModel.js";
 import { insertLoginLog } from "../model/loginLogModel.js";
 import { normalizeUserId } from '../utils/utilsHelper.js';
@@ -30,8 +29,9 @@ import {
   clearPenmasSessions,
   clearUserSessions,
   cookieOptions,
-  getAuthSessionTtlSeconds,
+  registerSession,
   revokeSessionToken,
+  sendSessionUnavailable,
   AUTH_TOKEN_LIFETIME_SECONDS,
 } from './auth/shared.js';
 import {
@@ -118,12 +118,14 @@ router.post('/penmas-login', async (req, res) => {
   });
   await clearPenmasSessions(user.user_id);
   try {
-    await redis.sAdd(`penmas_login:${user.user_id}`, token);
-    await redis.set(`login_token:${token}`, `penmas:${user.user_id}`, {
-      EX: getAuthSessionTtlSeconds(),
+    await registerSession({
+      sessionKey: `penmas_login:${user.user_id}`,
+      token,
+      tokenOwner: `penmas:${user.user_id}`,
     });
   } catch (err) {
     console.error('[AUTH] Gagal menyimpan token login penmas:', err.message);
+    return sendSessionUnavailable(res);
   }
   res.cookie('token', token, cookieOptions);
   await insertLoginLog({
@@ -334,12 +336,14 @@ router.post('/dashboard-login', async (req, res) => {
   });
   await clearDashboardSessions(user.dashboard_user_id);
   try {
-    await redis.sAdd(`dashboard_login:${user.dashboard_user_id}`, token);
-    await redis.set(`login_token:${token}`, `dashboard:${user.dashboard_user_id}`, {
-      EX: getAuthSessionTtlSeconds(),
+    await registerSession({
+      sessionKey: `dashboard_login:${user.dashboard_user_id}`,
+      token,
+      tokenOwner: `dashboard:${user.dashboard_user_id}`,
     });
   } catch (err) {
     console.error('[AUTH] Gagal menyimpan token login dashboard:', err.message);
+    return sendSessionUnavailable(res);
   }
   res.cookie('token', token, cookieOptions);
   await insertLoginLog({
@@ -448,11 +452,14 @@ router.post("/login", async (req, res) => {
   });
   await clearClientSessions(client_id);
   try {
-    const setKey = `login:${client_id}`;
-    await redis.sAdd(setKey, token);
-    await redis.set(`login_token:${token}`, client_id, { EX: getAuthSessionTtlSeconds() });
+    await registerSession({
+      sessionKey: `login:${client_id}`,
+      token,
+      tokenOwner: client_id,
+    });
   } catch (err) {
     console.error('[AUTH] Gagal menyimpan token login:', err.message);
+    return sendSessionUnavailable(res);
   }
   res.cookie('token', token, cookieOptions);
   await insertLoginLog({
@@ -561,12 +568,14 @@ router.post('/user-login', async (req, res) => {
     });
     await clearUserSessions(user.user_id);
     try {
-      await redis.sAdd(`user_login:${user.user_id}`, token);
-      await redis.set(`login_token:${token}`, `user:${user.user_id}`, {
-        EX: getAuthSessionTtlSeconds()
+      await registerSession({
+        sessionKey: `user_login:${user.user_id}`,
+        token,
+        tokenOwner: `user:${user.user_id}`,
       });
     } catch (err) {
       console.error('[AUTH] Gagal menyimpan token login user:', err.message);
+      return sendSessionUnavailable(res);
     }
     res.cookie('token', token, cookieOptions);
     await insertLoginLog({
@@ -619,12 +628,14 @@ router.post('/user-login', async (req, res) => {
     });
     await clearUserSessions(user.user_id);
     try {
-      await redis.sAdd(`user_login:${user.user_id}`, token);
-      await redis.set(`login_token:${token}`, `user:${user.user_id}`, {
-        EX: getAuthSessionTtlSeconds()
+      await registerSession({
+        sessionKey: `user_login:${user.user_id}`,
+        token,
+        tokenOwner: `user:${user.user_id}`,
       });
     } catch (err) {
       console.error('[AUTH] Gagal menyimpan token login user:', err.message);
+      return sendSessionUnavailable(res);
     }
     res.cookie('token', token, cookieOptions);
     await insertLoginLog({
