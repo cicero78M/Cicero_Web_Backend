@@ -124,7 +124,7 @@ async function ensureSessionTokenStillActive(token, req, res) {
   try {
     const exists = await redis.get(`login_token:${token}`);
     if (!exists) {
-      return sendAuthError(res, req, 401, 'Invalid token', 'invalid_token');
+      return sendAuthError(res, req, 401, 'Login session has been revoked', 'revoked_token');
     }
     return null;
   } catch (err) {
@@ -189,7 +189,13 @@ export async function authRequired(req, res, next) {
 
   const authorizationHeader = req.headers.authorization;
   if (authorizationHeader && !authorizationHeader.startsWith('Bearer ')) {
-    return sendAuthError(res, req, 401, 'Authorization harus format Bearer token', 'invalid_token');
+    return sendAuthError(
+      res,
+      req,
+      401,
+      'Authorization harus format Bearer token',
+      'invalid_authorization_format',
+    );
   }
 
   const token = authorizationHeader?.split(' ')[1] || req.cookies?.token;

@@ -333,9 +333,10 @@ Respons error dari middleware auth sekarang menyertakan field `reason` agar trou
 | HTTP Status | Message | Reason code | Kapan terjadi |
 | --- | --- | --- | --- |
 | `401` | `Token required` | `missing_token` | Header `Authorization` dan cookie `token` tidak ada. |
-| `401` | `Authorization harus format Bearer token` | `invalid_token` | Header `Authorization` ada tetapi tidak diawali `Bearer `. |
-| `401` | `Invalid token` | `invalid_token` | JWT tidak valid (signature salah, malformed, dsb.). |
-| `401` | `Token expired` | `expired_token` | JWT valid namun sudah melewati waktu kedaluwarsa **dan** melampaui grace period `JWT_EXPIRED_GRACE_SECONDS`. |
+| `401` | `Authorization harus format Bearer token` | `invalid_authorization_format` | Header `Authorization` ada tetapi tidak diawali `Bearer `. |
+| `401` | `Invalid token` | `invalid_token` | Verifikasi JWT gagal, misalnya karena signature salah atau token malformed. Token tidak diperiksa ke Redis jika verifikasi ini gagal. |
+| `401` | `Token expired` | `expired_token` | Signature dan struktur JWT valid, tetapi token sudah melewati waktu kedaluwarsa **dan** melampaui grace period `JWT_EXPIRED_GRACE_SECONDS`. |
+| `401` | `Login session has been revoked` | `revoked_token` | JWT lolos verifikasi, tetapi key sesi `login_token:<token>` tidak lagi ditemukan di Redis, misalnya setelah logout atau pencabutan sesi. |
 | `403` | `Forbidden` | `forbidden_operator_path` | Role `operator` mengakses path di luar allowlist middleware. |
 
 Konfigurasi tambahan untuk mengurangi false negative karena drift jam server/client:
