@@ -5,7 +5,14 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
 const mockQuery = jest.fn();
-const mockRedis = { sAdd: jest.fn(), set: jest.fn(), sMembers: jest.fn(), del: jest.fn() };
+const mockRedis = {
+  sAdd: jest.fn(),
+  sRem: jest.fn(),
+  set: jest.fn(),
+  get: jest.fn(),
+  sMembers: jest.fn(),
+  del: jest.fn(),
+};
 const mockInsertLoginLog = jest.fn();
 const mockWAClient = {
   info: {},
@@ -72,11 +79,16 @@ beforeAll(async () => {
 beforeEach(() => {
   mockQuery.mockReset();
   mockRedis.sAdd.mockReset();
+  mockRedis.sRem.mockReset();
   mockRedis.set.mockReset();
+  mockRedis.get.mockReset();
   mockRedis.sMembers.mockReset();
   mockRedis.del.mockReset();
   mockRedis.sMembers.mockResolvedValue([]);
   mockRedis.del.mockResolvedValue(1);
+  mockRedis.sAdd.mockResolvedValue(1);
+  mockRedis.sRem.mockResolvedValue(1);
+  mockRedis.set.mockResolvedValue('OK');
   mockInsertLoginLog.mockReset();
   mockWAClient.sendMessage.mockReset();
   mockQueueAdminNotification.mockReset();
@@ -1301,5 +1313,101 @@ describe('POST /dashboard-password-reset/confirm', () => {
     expect(aliasResponse.status).toBe(dashboardResponse.status);
     expect(aliasResponse.body).toEqual(dashboardResponse.body);
     expect(mockRedis.del).toHaveBeenCalledWith('dashboard_login:du1');
+  });
+});
+
+describe('login session registration failures', () => {
+  function expectUnavailableWithoutToken(res) {
+    expect(res.status).toBe(503);
+    expect(res.body).toEqual({
+      success: false,
+      message: 'Layanan autentikasi sementara tidak tersedia',
+    });
+    expect(res.body.token).toBeUndefined();
+    expect(res.headers['set-cookie']).toBeUndefined();
+    expect(mockInsertLoginLog).not.toHaveBeenCalled();
+  }
+
+  test('client login rolls back and withholds credentials when Redis set fails', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ client_id: 'c1', nama: 'Client', client_operator: '0812' }],
+    });
+    mockRedis.set.mockRejectedValueOnce(new Error('Redis unavailable'));
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ client_id: 'c1', client_operator: '0812' });
+
+    expectUnavailableWithoutToken(res);
+    const token = mockRedis.sAdd.mock.calls[0][1];
+    expect(mockRedis.sRem).toHaveBeenCalledWith('login:c1', token);
+    expect(mockRedis.del).toHaveBeenCalledWith(`login_token:${token}`);
+  });
+
+  test('penmas login rolls back and withholds credentials when Redis sAdd fails', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{
+        user_id: 'p1',
+        username: 'penmas',
+        password_hash: await bcrypt.hash('pass', 10),
+        role: 'penulis',
+      }],
+    });
+    mockRedis.sAdd.mockRejectedValueOnce(new Error('Redis unavailable'));
+
+    const res = await request(app)
+      .post('/api/auth/penmas-login')
+      .send({ username: 'penmas', password: 'pass' });
+
+    expectUnavailableWithoutToken(res);
+    const token = mockRedis.sAdd.mock.calls[0][1];
+    expect(mockRedis.set).not.toHaveBeenCalled();
+    expect(mockRedis.sRem).toHaveBeenCalledWith('penmas_login:p1', token);
+    expect(mockRedis.del).toHaveBeenCalledWith(`login_token:${token}`);
+  });
+
+  test('dashboard login rolls back and withholds credentials when Redis set fails', async () => {
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [{
+          dashboard_user_id: 'd1',
+          username: 'dash',
+          password_hash: await bcrypt.hash('pass', 10),
+          role: 'admin',
+          role_id: 2,
+          status: true,
+          approval_status: 'approved',
+          client_ids: ['c1'],
+        }],
+      })
+      .mockResolvedValueOnce({ rows: [{ client_type: 'instansi' }] });
+    mockRedis.set.mockRejectedValueOnce(new Error('Redis unavailable'));
+
+    const res = await request(app)
+      .post('/api/auth/dashboard-login')
+      .send({ username: 'dash', password: 'pass' });
+
+    expectUnavailableWithoutToken(res);
+    const token = mockRedis.sAdd.mock.calls[0][1];
+    expect(mockRedis.sRem).toHaveBeenCalledWith('dashboard_login:d1', token);
+    expect(mockRedis.del).toHaveBeenCalledWith(`login_token:${token}`);
+  });
+
+  test.each([
+    ['WhatsApp', { user_id: 'u1', whatsapp: '628123456789' }, false],
+    ['legacy password', { nrp: 'u1', password: 'Password1!' }, true],
+  ])('user login via %s withholds credentials when Redis set fails', async (_name, body, usesPassword) => {
+    const user = { user_id: 'u1', nama: 'User', client_id: 'c1' };
+    if (usesPassword) user.password_hash = await bcrypt.hash('Password1!', 10);
+    else user.whatsapp = '628123456789';
+    mockQuery.mockResolvedValueOnce({ rows: [user] });
+    mockRedis.set.mockRejectedValueOnce(new Error('Redis unavailable'));
+
+    const res = await request(app).post('/api/auth/user-login').send(body);
+
+    expectUnavailableWithoutToken(res);
+    const token = mockRedis.sAdd.mock.calls[0][1];
+    expect(mockRedis.sRem).toHaveBeenCalledWith('user_login:u1', token);
+    expect(mockRedis.del).toHaveBeenCalledWith(`login_token:${token}`);
   });
 });

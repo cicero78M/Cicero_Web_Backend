@@ -62,7 +62,7 @@ export async function clearSessions(userId, keyPrefix) {
           tokens.map((token) =>
             redis.del(`login_token:${token}`).catch((err) =>
               console.error(
-                `[AUTH] Gagal menghapus token login ${token}: ${err.message}`,
+                `[AUTH] Gagal menghapus token login: ${err.message}`,
               ),
             ),
           ),
@@ -111,6 +111,33 @@ export function getAuthSessionTtlSeconds() {
   return AUTH_TOKEN_LIFETIME_SECONDS + getNumericEnv('JWT_EXPIRED_GRACE_SECONDS', 0);
 }
 
+export async function registerSession({ sessionKey, token, tokenOwner }) {
+  const tokenKey = `login_token:${token}`;
+
+  try {
+    await redis.sAdd(sessionKey, token);
+    await redis.set(tokenKey, tokenOwner, {
+      EX: getAuthSessionTtlSeconds(),
+    });
+  } catch (error) {
+    const cleanupResults = await Promise.allSettled([
+      redis.sRem(sessionKey, token),
+      redis.del(tokenKey),
+    ]);
+    if (cleanupResults.some((result) => result.status === 'rejected')) {
+      console.error('[AUTH] Gagal membersihkan registrasi sesi parsial');
+    }
+    throw error;
+  }
+}
+
+export function sendSessionUnavailable(res) {
+  return res.status(503).json({
+    success: false,
+    message: 'Layanan autentikasi sementara tidak tersedia',
+  });
+}
+
 function inferSessionKeyFromDecodedToken(decodedToken) {
   if (!decodedToken || typeof decodedToken !== 'object') {
     return null;
@@ -137,7 +164,7 @@ export async function revokeSessionToken(token) {
   try {
     tokenOwner = await redis.get(`login_token:${token}`);
   } catch (err) {
-    console.error(`[AUTH] Gagal membaca token login ${token}: ${err.message}`);
+    console.error(`[AUTH] Gagal membaca token login: ${err.message}`);
   }
 
   const cleanupTargets = [];
@@ -173,14 +200,14 @@ export async function revokeSessionToken(token) {
       ...cleanupTargets.map((sessionKey) =>
         redis.sRem(sessionKey, token).catch((err) =>
           console.error(
-            `[AUTH] Gagal menghapus token ${token} dari sesi ${sessionKey}: ${err.message}`,
+            `[AUTH] Gagal menghapus token dari sesi: ${err.message}`,
           ),
         ),
       ),
       redis.del(`login_token:${token}`),
     ]);
   } catch (err) {
-    console.error(`[AUTH] Gagal mencabut token login ${token}: ${err.message}`);
+    console.error(`[AUTH] Gagal mencabut token login: ${err.message}`);
   }
 }
 

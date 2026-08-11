@@ -44,6 +44,30 @@ Untuk deployment web yang mengandalkan cookie token lintas origin:
 - `sameSite=none` akan ditolak browser jika `secure=false`.
 - Jika deployment HTTP non-HTTPS (khusus lokal), gunakan `sameSite=lax` dan `secure=false`.
 
+## Authentication backend unavailable
+
+Semua endpoint login (`/api/auth/login`, `/api/auth/penmas-login`,
+`/api/auth/dashboard-login`, dan kedua metode `/api/auth/user-login`) hanya
+mengirim cookie dan JWT setelah indeks sesi Redis berhasil disimpan sepenuhnya.
+Jika registrasi sesi Redis gagal, backend membersihkan perubahan sesi parsial dan
+mengembalikan respons berikut tanpa header `Set-Cookie` dan tanpa field `token`:
+
+```http
+HTTP/1.1 503 Service Unavailable
+Content-Type: application/json
+```
+
+```json
+{
+  "success": false,
+  "message": "Layanan autentikasi sementara tidak tersedia"
+}
+```
+
+Client tidak boleh memperlakukan respons ini sebagai login berhasil atau mencoba
+menggunakan JWT dari percobaan tersebut. Permintaan login dapat dicoba kembali
+setelah layanan autentikasi pulih.
+
 ## 1. Payload Format
 
 ### Client Login
