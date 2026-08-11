@@ -15,6 +15,7 @@ import { notFound, errorHandler } from '../middleware/errorHandler.js';
 import { authRequired } from '../middleware/authMiddleware.js';
 import { dedupRequest } from '../middleware/dedupRequestMiddleware.js';
 import { sensitivePathGuard } from '../middleware/sensitivePathGuard.js';
+import { trustedProxy } from '../config/trustedProxy.js';
 
 async function getRedisStatus() {
   try {
@@ -49,7 +50,7 @@ export function createApp() {
   const app = express();
   app.disable('etag');
   app.disable('x-powered-by');
-  app.set('trust proxy', 1);
+  app.set('trust proxy', trustedProxy);
 
   const corsOrigin = env.CORS_ORIGIN.split(',')
     .map((origin) => origin.trim())
