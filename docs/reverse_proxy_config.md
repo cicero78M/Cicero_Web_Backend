@@ -35,6 +35,13 @@ sudo nginx -t && sudo systemctl reload nginx
 
 The above forwards all requests on port 80 to the Node.js app running on `localhost:3000`.
 
+The Express application trusts forwarding headers only when the immediate peer is on
+the loopback interface, matching the `proxy_pass` target above. Keep port `3000`
+bound to localhost or blocked from external access. Nginx appends its observed client
+address to `X-Forwarded-For`; Express then ignores any untrusted addresses supplied to
+the left of that address. `X-Real-IP` is forwarded for compatibility but is not used
+by the authentication audit logger.
+
 ## 3. HTTPS (Optional)
 
 If using HTTPS, configure a certificate via `certbot` or another provider. Update the `server` block with `listen 443 ssl;` and the appropriate `ssl_certificate` options.
@@ -71,4 +78,3 @@ location / {
 ```
 
 > Gunakan origin eksplisit dan jangan gunakan `*` saat `Access-Control-Allow-Credentials: true`.
-

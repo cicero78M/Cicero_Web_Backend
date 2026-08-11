@@ -89,23 +89,7 @@ function summarizeUserAgent(userAgent) {
 }
 
 function getSourceIp(req) {
-  const forwardedForHeader = req.headers['x-forwarded-for'];
-  if (forwardedForHeader) {
-    const [forwardedIp] = String(forwardedForHeader)
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean);
-    if (forwardedIp) {
-      return forwardedIp;
-    }
-  }
-
-  const realIpHeader = req.headers['x-real-ip'];
-  if (realIpHeader) {
-    return String(realIpHeader).trim();
-  }
-
-  return req.ip || req.socket?.remoteAddress || 'unknown';
+  return req.ips?.[0] || req.ip || req.socket?.remoteAddress || 'unknown';
 }
 
 function classifyJwtError(err) {
