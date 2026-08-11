@@ -7,6 +7,11 @@ const maxUserAgentLength = 120;
 const defaultJwtClockToleranceSeconds = 30;
 const defaultExpiredTokenGraceSeconds = 0;
 const jwtAllowedAlgorithms = ['HS256'];
+const jwtErrorNames = new Set([
+  'JsonWebTokenError',
+  'NotBeforeError',
+  'TokenExpiredError',
+]);
 
 const operatorAllowlist = [
   { path: '/clients/profile', type: 'exact' },
@@ -103,11 +108,31 @@ function getSourceIp(req) {
   return req.ip || req.socket?.remoteAddress || 'unknown';
 }
 
-function logAuthDenied(req, reason, statusCode, message) {
+function classifyJwtError(err) {
+  const errorName = jwtErrorNames.has(err?.name) ? err.name : 'UnknownError';
+  let errorCategory = 'invalid_token';
+
+  if (errorName === 'TokenExpiredError') {
+    errorCategory = 'token_expired';
+  } else if (errorName === 'NotBeforeError') {
+    errorCategory = 'token_not_active';
+  } else if (errorName === 'JsonWebTokenError') {
+    if (err.message === 'jwt malformed') {
+      errorCategory = 'malformed_token';
+    } else if (err.message === 'invalid signature') {
+      errorCategory = 'invalid_signature';
+    }
+  }
+
+  return { errorName, errorCategory };
+}
+
+function logAuthDenied(req, reason, statusCode, message, errorClassification) {
   console.warn(authLogEvent, {
     reason,
     statusCode,
     message,
+    ...(errorClassification || {}),
     method: req.method,
     path: req.originalUrl || req.path,
     sourceIp: getSourceIp(req),
@@ -115,8 +140,15 @@ function logAuthDenied(req, reason, statusCode, message) {
   });
 }
 
-function sendAuthError(res, req, statusCode, message, reason) {
-  logAuthDenied(req, reason, statusCode, message);
+function sendAuthError(
+  res,
+  req,
+  statusCode,
+  message,
+  reason,
+  errorClassification,
+) {
+  logAuthDenied(req, reason, statusCode, message, errorClassification);
   return res.status(statusCode).json({ success: false, message, reason });
 }
 
@@ -221,6 +253,7 @@ export async function authRequired(req, res, next) {
     }
     next();
   } catch (err) {
+    const errorClassification = classifyJwtError(err);
     if (err.name === 'TokenExpiredError') {
       try {
         const graceDecodedToken = decodeExpiredTokenWithinGrace(token);
@@ -245,8 +278,22 @@ export async function authRequired(req, res, next) {
           path: req.originalUrl || req.path,
         });
       }
-      return sendAuthError(res, req, 401, 'Token expired', 'expired_token');
+      return sendAuthError(
+        res,
+        req,
+        401,
+        'Token expired',
+        'expired_token',
+        errorClassification,
+      );
     }
-    return sendAuthError(res, req, 401, 'Invalid token', 'invalid_token');
+    return sendAuthError(
+      res,
+      req,
+      401,
+      'Invalid token',
+      'invalid_token',
+      errorClassification,
+    );
   }
 }

@@ -52,6 +52,18 @@ describe('authRequired middleware', () => {
     redisMock.get.mockResolvedValue('session:active');
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function expectSafeDeniedLog(warnSpy, token, expectedClassification) {
+    expect(warnSpy).toHaveBeenCalledWith(
+      'auth.middleware.denied',
+      expect.objectContaining(expectedClassification),
+    );
+    expect(JSON.stringify(warnSpy.mock.calls)).not.toContain(token);
+  }
+
   test('blocks operator role on claim routes when protected by authRequired', async () => {
     const token = jwt.sign({ user_id: 'o1', role: 'operator' }, process.env.JWT_SECRET);
     const res = await request(app)
@@ -293,6 +305,7 @@ describe('authRequired middleware', () => {
   });
 
   test('rejects expired token outside grace window', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     process.env.JWT_EXPIRED_GRACE_SECONDS = '60';
     process.env.JWT_CLOCK_TOLERANCE_SECONDS = '0';
     const token = jwt.sign(
@@ -308,6 +321,12 @@ describe('authRequired middleware', () => {
     expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
     expect(res.body.reason).toBe('expired_token');
+    expectSafeDeniedLog(warnSpy, token, {
+      reason: 'expired_token',
+      statusCode: 401,
+      errorName: 'TokenExpiredError',
+      errorCategory: 'token_expired',
+    });
   });
 
   test('rejects token when login session has been revoked', async () => {
@@ -324,12 +343,14 @@ describe('authRequired middleware', () => {
   });
 
   test.each([
-    ['malformed', 'not-a-jwt'],
+    ['malformed', 'not-a-jwt', 'malformed_token'],
     [
       'signed with a different secret',
       jwt.sign({ user_id: 'u6', role: 'user' }, 'different-secret'),
+      'invalid_signature',
     ],
-  ])('rejects %s token as invalid_token', async (_description, token) => {
+  ])('rejects %s token as invalid_token', async (_description, token, errorCategory) => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     const res = await request(app)
       .get('/api/other')
       .set('Authorization', `Bearer ${token}`);
@@ -338,6 +359,39 @@ describe('authRequired middleware', () => {
     expect(res.body.success).toBe(false);
     expect(res.body.reason).toBe('invalid_token');
     expect(redisMock.get).not.toHaveBeenCalled();
+    expectSafeDeniedLog(warnSpy, token, {
+      reason: 'invalid_token',
+      statusCode: 401,
+      errorName: 'JsonWebTokenError',
+      errorCategory,
+    });
+  });
+
+  test('rejects token with a future nbf and safely classifies the internal log', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    process.env.JWT_CLOCK_TOLERANCE_SECONDS = '0';
+    const token = jwt.sign(
+      { user_id: 'u7', role: 'user', nbf: Math.floor(Date.now() / 1000) + 120 },
+      process.env.JWT_SECRET,
+    );
+
+    const res = await request(app)
+      .get('/api/other')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({
+      success: false,
+      message: 'Invalid token',
+      reason: 'invalid_token',
+    });
+    expect(redisMock.get).not.toHaveBeenCalled();
+    expectSafeDeniedLog(warnSpy, token, {
+      reason: 'invalid_token',
+      statusCode: 401,
+      errorName: 'NotBeforeError',
+      errorCategory: 'token_not_active',
+    });
   });
 
 });
