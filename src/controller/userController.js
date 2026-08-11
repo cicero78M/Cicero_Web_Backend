@@ -1,7 +1,67 @@
 import * as userModel from '../model/userModel.js';
-import { getUserDirectoryUsers, UserDirectoryError } from '../service/userDirectoryService.js';
+import {
+  getUserDirectoryUsers,
+  UserDirectoryError,
+} from '../service/userDirectoryService.js';
 import { sendSuccess } from '../utils/response.js';
 import { normalizeWhatsappNumber } from '../utils/waHelper.js';
+import {
+  extractInstagramUsername,
+  extractTiktokUsername,
+} from '../utils/socialUsername.js';
+
+const socialUsernameConflictErrorCode = 'SOCIAL_USERNAME_CONFLICT';
+
+function normalizePrimarySocialUsernames(data) {
+  if (Object.hasOwn(data, 'insta')) {
+    data.insta = extractInstagramUsername(data.insta) ?? '';
+  }
+  if (Object.hasOwn(data, 'tiktok')) {
+    data.tiktok = extractTiktokUsername(data.tiktok) ?? '';
+  }
+}
+
+function sendSocialUsernameConflict(res, platform, username = undefined) {
+  return res.status(409).json({
+    success: false,
+    error_code: socialUsernameConflictErrorCode,
+    field: platform,
+    message: `Username ${platform} sudah digunakan akun lain.`,
+    ...(username ? { conflict: { platform, username } } : {}),
+  });
+}
+
+async function findPrimarySocialConflict(userId, data, excludeUser = true) {
+  for (const [field, platform] of [
+    ['insta', 'instagram'],
+    ['tiktok', 'tiktok'],
+  ]) {
+    if (!Object.hasOwn(data, field) || !data[field]) continue;
+    const usernames = [data[field]];
+    const conflict = excludeUser
+      ? await userModel.findSocialUsernameConflict(userId, platform, usernames)
+      : await userModel.findSocialUsernameOwner(platform, usernames);
+    if (conflict) return { ...conflict, platform };
+  }
+  return null;
+}
+
+async function syncPrimarySocialUsernames(userId, data) {
+  if (Object.hasOwn(data, 'insta')) {
+    await userModel.replaceUserSocialAccounts(
+      userId,
+      'instagram',
+      data.insta ? [data.insta] : []
+    );
+  }
+  if (Object.hasOwn(data, 'tiktok')) {
+    await userModel.replaceUserSocialAccounts(
+      userId,
+      'tiktok',
+      data.tiktok ? [data.tiktok] : []
+    );
+  }
+}
 
 export const getAllUsers = async (req, res, next) => {
   try {
@@ -26,6 +86,7 @@ export const createUser = async (req, res, next) => {
     const role = req.user?.role?.toLowerCase();
     const adminClientId = req.user?.client_id;
     const data = { ...req.body };
+    normalizePrimarySocialUsernames(data);
     let roles = [];
     const defaultRoleFlags = {
       ditbinmas: false,
@@ -48,14 +109,21 @@ export const createUser = async (req, res, next) => {
       return {};
     };
 
-    const syncExistingUserClientId = async (existingUserId, existingClientId) => {
+    const syncExistingUserClientId = async (
+      existingUserId,
+      existingClientId
+    ) => {
       if (!data.client_id) return;
 
       const incomingClientId = data.client_id.toUpperCase();
       const currentClientId = existingClientId?.toUpperCase();
 
       if (incomingClientId !== currentClientId) {
-        await userModel.updateUserField(existingUserId, 'client_id', incomingClientId);
+        await userModel.updateUserField(
+          existingUserId,
+          'client_id',
+          incomingClientId
+        );
       }
     };
 
@@ -119,7 +187,20 @@ export const createUser = async (req, res, next) => {
         return;
       }
 
+      const conflict = await findPrimarySocialConflict(
+        data.user_id,
+        data,
+        false
+      );
+      if (conflict) {
+        return sendSocialUsernameConflict(
+          res,
+          conflict.platform,
+          conflict.username
+        );
+      }
       const user = await userModel.createUser(data);
+      await syncPrimarySocialUsernames(user.user_id, data);
       sendSuccess(res, user, 201);
       return;
     }
@@ -155,18 +236,50 @@ export const createUser = async (req, res, next) => {
       return;
     }
 
+    const conflict = await findPrimarySocialConflict(data.user_id, data, false);
+    if (conflict) {
+      return sendSocialUsernameConflict(
+        res,
+        conflict.platform,
+        conflict.username
+      );
+    }
     const user = await userModel.createUser(data);
+    await syncPrimarySocialUsernames(user.user_id, data);
     sendSuccess(res, user, 201);
   } catch (err) {
+    if (err?.code === '23505') {
+      const platform = Object.hasOwn(req.body, 'insta')
+        ? 'instagram'
+        : 'tiktok';
+      return sendSocialUsernameConflict(res, platform);
+    }
     next(err);
   }
 };
 
 export const updateUser = async (req, res, next) => {
   try {
-    const user = await userModel.updateUser(req.params.id, req.body);
+    const data = { ...req.body };
+    normalizePrimarySocialUsernames(data);
+    const conflict = await findPrimarySocialConflict(req.params.id, data);
+    if (conflict) {
+      return sendSocialUsernameConflict(
+        res,
+        conflict.platform,
+        conflict.username
+      );
+    }
+    const user = await userModel.updateUser(req.params.id, data);
+    await syncPrimarySocialUsernames(user.user_id, data);
     sendSuccess(res, user);
   } catch (err) {
+    if (err?.code === '23505') {
+      const platform = Object.hasOwn(req.body, 'insta')
+        ? 'instagram'
+        : 'tiktok';
+      return sendSocialUsernameConflict(res, platform);
+    }
     next(err);
   }
 };
@@ -240,7 +353,14 @@ export const updateUserRoles = async (req, res, next) => {
     const roles = Array.isArray(req.body.roles)
       ? req.body.roles.map((r) => r.toLowerCase())
       : [];
-    const allowed = ['ditbinmas', 'ditlantas', 'bidhumas', 'ditsamapta', 'ditintelkam', 'operator'];
+    const allowed = [
+      'ditbinmas',
+      'ditlantas',
+      'bidhumas',
+      'ditsamapta',
+      'ditintelkam',
+      'operator',
+    ];
     const data = {};
     for (const r of allowed) {
       data[r] = roles.includes(r);
@@ -266,7 +386,9 @@ export const deleteUser = async (req, res, next) => {
   try {
     const rawRole = req.query?.role ?? req.body?.role;
     const role =
-      typeof rawRole === 'string' && rawRole.trim() ? rawRole.trim().toLowerCase() : null;
+      typeof rawRole === 'string' && rawRole.trim()
+        ? rawRole.trim().toLowerCase()
+        : null;
     const user = await userModel.deactivateRoleOrUser(req.params.id, role);
     sendSuccess(res, user);
   } catch (err) {
@@ -304,7 +426,13 @@ export const getUsersByClient = async (req, res, next) => {
       clientId = tokenClientIds[matchedIndex];
     }
     if (
-      ['ditbinmas', 'ditlantas', 'bidhumas', 'ditsamapta', 'ditintelkam'].includes(role) &&
+      [
+        'ditbinmas',
+        'ditlantas',
+        'bidhumas',
+        'ditsamapta',
+        'ditintelkam',
+      ].includes(role) &&
       tokenClientId
     ) {
       clientId = tokenClientId;
@@ -346,7 +474,13 @@ export const getUsersByClientFull = async (req, res, next) => {
       clientId = tokenClientIds[matchedIndex];
     }
     if (
-      ['ditbinmas', 'ditlantas', 'bidhumas', 'ditsamapta', 'ditintelkam'].includes(role) &&
+      [
+        'ditbinmas',
+        'ditlantas',
+        'bidhumas',
+        'ditsamapta',
+        'ditintelkam',
+      ].includes(role) &&
       tokenClientId
     ) {
       clientId = tokenClientId;
@@ -391,7 +525,9 @@ export const getUserList = async (req, res, next) => {
     sendSuccess(res, users);
   } catch (err) {
     if (err instanceof UserDirectoryError) {
-      return res.status(err.status).json({ success: false, message: err.message });
+      return res
+        .status(err.status)
+        .json({ success: false, message: err.message });
     }
     next(err);
   }

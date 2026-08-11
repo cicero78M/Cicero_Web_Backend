@@ -888,6 +888,36 @@ export async function findSocialUsernameConflict(userId, platform, usernames = [
   return rows[0];
 }
 
+export async function findSocialUsernameOwner(platform, usernames = []) {
+  if (!(await hasUserSocialAccountsTable())) return null;
+
+  const normalizedPlatform = String(platform || '').toLowerCase();
+  if (!['instagram', 'tiktok'].includes(normalizedPlatform)) {
+    throw new Error('platform tidak valid');
+  }
+
+  const normalizedUsernames = usernames
+    .filter(
+      (username) =>
+        username !== null && username !== undefined && username !== ''
+    )
+    .map((username) => String(username).trim().toLowerCase())
+    .filter(Boolean);
+  if (normalizedUsernames.length === 0) return null;
+
+  const { rows } = await query(
+    `SELECT platform, username, user_id
+     FROM user_social_accounts
+     WHERE is_active = TRUE
+       AND LOWER(platform) = LOWER($1)
+       AND LOWER(username) = ANY($2::text[])
+     ORDER BY created_at ASC
+     LIMIT 1`,
+    [normalizedPlatform, normalizedUsernames]
+  );
+  return rows[0] || null;
+}
+
 export async function findUserSocialAccounts(userId) {
   const uid = normalizeUserId(userId);
   if (!(await hasUserSocialAccountsTable())) {
