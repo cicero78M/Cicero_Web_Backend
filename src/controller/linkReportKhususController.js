@@ -5,6 +5,7 @@ import { resolveClientIdForLinkReportKhusus } from '../service/userClientService
 import { findClientIdByUserId } from '../model/userModel.js';
 import { sendDebug } from '../middleware/debugHandler.js';
 import { generateExcelBuffer } from '../service/amplifyExportService.js';
+import { resolveLinkReportMutationUserId } from '../service/linkReportIdentityService.js';
 
 function normalizeOptionalField(value) {
   if (value == null) return null;
@@ -211,7 +212,7 @@ export async function updateLinkReport(req, res, next) {
 
     const report = await linkReportModel.updateLinkReport(
       req.params.shortcode,
-      bodyData.user_id,
+      resolveLinkReportMutationUserId(req, bodyData.user_id),
       bodyData
     );
     sendSuccess(res, report);
@@ -224,7 +225,7 @@ export async function deleteLinkReport(req, res, next) {
   try {
     const report = await linkReportModel.deleteLinkReport(
       req.params.shortcode,
-      req.query.user_id
+      resolveLinkReportMutationUserId(req, req.query.user_id)
     );
     sendSuccess(res, report);
   } catch (err) {

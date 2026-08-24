@@ -5,6 +5,7 @@ import {
   generateExcelBuffer,
   generateLinkReportExcelBuffer,
 } from '../service/amplifyExportService.js';
+import { resolveLinkReportMutationUserId } from '../service/linkReportIdentityService.js';
 
 export async function getAllLinkReports(req, res, next) {
   try {
@@ -84,6 +85,7 @@ export async function getLinkReportByShortcode(req, res, next) {
 export async function createLinkReport(req, res) {
   try {
     const data = { ...req.body };
+    data.user_id = resolveLinkReportMutationUserId(req, data.user_id);
     [
       'instagram_link',
       'facebook_link',
@@ -123,7 +125,7 @@ export async function updateLinkReport(req, res, next) {
     });
     const report = await linkReportModel.updateLinkReport(
       req.params.shortcode,
-      bodyData.user_id,
+      resolveLinkReportMutationUserId(req, bodyData.user_id),
       bodyData
     );
     sendSuccess(res, report);
@@ -136,7 +138,7 @@ export async function deleteLinkReport(req, res, next) {
   try {
     const report = await linkReportModel.deleteLinkReport(
       req.params.shortcode,
-      req.query.user_id
+      resolveLinkReportMutationUserId(req, req.query.user_id)
     );
     sendSuccess(res, report);
   } catch (err) {
