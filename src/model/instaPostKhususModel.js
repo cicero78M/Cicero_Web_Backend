@@ -40,6 +40,18 @@ export async function findPostByShortcode(shortcode) {
   return res.rows[0] || null;
 }
 
+export async function findPostByShortcodeInsensitive(shortcode) {
+  if (!shortcode) return null;
+  const res = await query(
+    `SELECT *
+     FROM insta_post_khusus
+     WHERE LOWER(shortcode) = LOWER($1)
+     LIMIT 1`,
+    [shortcode]
+  );
+  return res.rows[0] || null;
+}
+
 export async function getShortcodesTodayByClient(client_id) {
   const today = new Date();
   const yyyy = today.getFullYear();

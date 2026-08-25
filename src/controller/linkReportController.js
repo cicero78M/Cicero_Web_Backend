@@ -1,4 +1,6 @@
 import * as linkReportModel from '../model/linkReportModel.js';
+import * as linkReportKhususModel from '../model/linkReportKhususModel.js';
+import { findPostByShortcodeInsensitive } from '../model/instaPostKhususModel.js';
 import { sendSuccess } from '../utils/response.js';
 import { extractFirstUrl } from '../utils/utilsHelper.js';
 import {
@@ -17,7 +19,11 @@ export async function getAllLinkReports(req, res, next) {
         : [];
 
     if (duplicateLinks.length > 0) {
-      const duplicates = await linkReportModel.findDuplicateLinks(duplicateLinks);
+      const [regularDuplicates, specialDuplicates] = await Promise.all([
+        linkReportModel.findDuplicateLinks(duplicateLinks),
+        linkReportKhususModel.findDuplicateLinks(duplicateLinks),
+      ]);
+      const duplicates = Array.from(new Set([...regularDuplicates, ...specialDuplicates]));
       return sendSuccess(res, { duplicates });
     }
 
@@ -95,7 +101,10 @@ export async function createLinkReport(req, res) {
     ].forEach((f) => {
       if (data[f]) data[f] = extractFirstUrl(data[f]);
     });
-    const report = await linkReportModel.createLinkReport(data);
+    const specialPost = await findPostByShortcodeInsensitive(data.shortcode);
+    const report = specialPost
+      ? await linkReportKhususModel.createLinkReport(data)
+      : await linkReportModel.createLinkReport(data);
 
     // Note: User notification for amplification link submission has been removed
     // as per requirement: "pada mekanisme yang berkaitan dengan amplifikasi 
@@ -123,11 +132,12 @@ export async function updateLinkReport(req, res, next) {
     ].forEach((f) => {
       if (bodyData[f]) bodyData[f] = extractFirstUrl(bodyData[f]);
     });
-    const report = await linkReportModel.updateLinkReport(
-      req.params.shortcode,
-      resolveLinkReportMutationUserId(req, bodyData.user_id),
-      bodyData
-    );
+    const userId = resolveLinkReportMutationUserId(req, bodyData.user_id);
+    const specialPost = await findPostByShortcodeInsensitive(req.params.shortcode);
+    const resolvedShortcode = specialPost?.shortcode || req.params.shortcode;
+    const report = specialPost
+      ? await linkReportKhususModel.updateLinkReport(resolvedShortcode, userId, bodyData)
+      : await linkReportModel.updateLinkReport(req.params.shortcode, userId, bodyData);
     sendSuccess(res, report);
   } catch (err) {
     next(err);
@@ -136,10 +146,12 @@ export async function updateLinkReport(req, res, next) {
 
 export async function deleteLinkReport(req, res, next) {
   try {
-    const report = await linkReportModel.deleteLinkReport(
-      req.params.shortcode,
-      resolveLinkReportMutationUserId(req, req.query.user_id)
-    );
+    const userId = resolveLinkReportMutationUserId(req, req.query.user_id);
+    const specialPost = await findPostByShortcodeInsensitive(req.params.shortcode);
+    const resolvedShortcode = specialPost?.shortcode || req.params.shortcode;
+    const report = specialPost
+      ? await linkReportKhususModel.deleteLinkReport(resolvedShortcode, userId)
+      : await linkReportModel.deleteLinkReport(req.params.shortcode, userId);
     sendSuccess(res, report);
   } catch (err) {
     next(err);
