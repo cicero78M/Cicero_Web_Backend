@@ -87,6 +87,18 @@ export function createApp() {
     },
   });
 
+  const adminAuthRateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skipSuccessfulRequests: false,
+    message: {
+      success: false,
+      message: 'Terlalu banyak permintaan autentikasi admin. Coba lagi beberapa menit lagi.',
+    },
+  });
+
   app.use(cors({
     origin: isWildcardCors
       ? true
@@ -129,6 +141,7 @@ export function createApp() {
 
   // Admin-system has its own auth middleware inside route module.
   // Keep it outside global `authRequired` so login endpoints remain public.
+  app.use('/api/admin-system/auth', adminAuthRateLimiter);
   app.use('/api/admin-system', adminSystemRoutes);
 
   app.use('/api', authRequired, routes);

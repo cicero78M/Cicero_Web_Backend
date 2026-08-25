@@ -70,7 +70,15 @@ router.post('/logout', async (req, res) => {
 });
 
 router.post('/penmas-register', async (req, res) => {
-  const { username, password, role = 'penulis' } = req.body;
+  if (process.env.PENMAS_PUBLIC_REGISTRATION_ENABLED !== 'true') {
+    return res.status(403).json({
+      success: false,
+      message: 'Registrasi Penmas publik dinonaktifkan. Hubungi administrator.',
+    });
+  }
+
+  const { username, password } = req.body;
+  const role = 'penulis';
   if (!username || !password) {
     return res
       .status(400)

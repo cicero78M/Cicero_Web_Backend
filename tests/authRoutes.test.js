@@ -66,6 +66,7 @@ let passwordResetRoutes;
 
 beforeAll(async () => {
   process.env.JWT_SECRET = 'testsecret';
+  process.env.PENMAS_PUBLIC_REGISTRATION_ENABLED = 'true';
   const mod = await import('../src/routes/authRoutes.js');
   authRoutes = mod.default;
   const passwordResetMod = await import('../src/routes/passwordResetAliasRoutes.js');
@@ -203,6 +204,18 @@ describe('POST /login', () => {
 });
 
 describe('POST /penmas-register', () => {
+  test('returns 403 when public registration is disabled', async () => {
+    process.env.PENMAS_PUBLIC_REGISTRATION_ENABLED = 'false';
+    const res = await request(app)
+      .post('/api/auth/penmas-register')
+      .send({ username: 'user', password: 'pass' });
+    process.env.PENMAS_PUBLIC_REGISTRATION_ENABLED = 'true';
+
+    expect(res.status).toBe(403);
+    expect(res.body.success).toBe(false);
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
   test('creates new user when username free', async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [] })
