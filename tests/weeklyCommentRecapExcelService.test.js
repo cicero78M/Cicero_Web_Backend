@@ -88,7 +88,7 @@ test('saveWeeklyCommentRecapExcel creates formatted weekly recap', async () => {
     'Sudah Likes',
     'Belum Likes',
   ]);
-  const lastIdx = aoa[2].length - 3;
+  const lastIdx = aoa[4].length - 3;
   expect(aoa[4].slice(0, 4)).toEqual([1, 'AKP', 'Budi', 'Sat A']);
   expect(aoa[4].slice(lastIdx, lastIdx + 3)).toEqual([4, 2, 2]);
 
@@ -296,7 +296,7 @@ test('saveWeeklyCommentRecapExcel aggregates Ditbinmas posts across satker', asy
   const sheet = wb.Sheets['POLRES A'];
   const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-  const lastIdx = aoa[2].length - 3;
+  const lastIdx = aoa[4].length - 3;
   expect(aoa[4].slice(lastIdx, lastIdx + 3)).toEqual([7, 5, 2]);
   const satkerB = XLSX.utils.sheet_to_json(wb.Sheets['POLRES B'], { header: 1 });
   expect(satkerB[4].slice(lastIdx, lastIdx + 3)).toEqual([7, 3, 4]);

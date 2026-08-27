@@ -781,6 +781,30 @@ export async function updateUser(userId, userData) {
     }
   }
 
+  const allowedColumns = new Set([
+    'nama',
+    'title',
+    'divisi',
+    'jabatan',
+    'desa',
+    'status',
+    'whatsapp',
+    'email',
+    'insta',
+    'tiktok',
+    'client_id',
+    'exception',
+    'premium_status',
+    'premium_end_date',
+    'wa_notification_opt_in',
+  ]);
+  const rejectedColumns = Object.keys(userData).filter(
+    (column) => !allowedColumns.has(column),
+  );
+  if (rejectedColumns.length > 0) {
+    throw new Error(`Field tidak diizinkan: ${rejectedColumns.join(', ')}`);
+  }
+
   const columns = Object.keys(userData);
   if (columns.length > 0) {
     const setClause = columns.map((c, i) => `${c}=$${i + 1}`).join(', ');

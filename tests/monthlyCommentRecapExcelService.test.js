@@ -62,7 +62,7 @@ test('saveMonthlyCommentRecapExcel creates formatted monthly recap', async () =>
     'Nama',
     'Divisi / Satfung',
   ]);
-  const lastIdx = aoa[2].length - 3;
+  const lastIdx = aoa[3].length - 3;
   expect(aoa[3].slice(lastIdx, lastIdx + 3)).toEqual([
     'Jumlah Post',
     'Sudah Komentar',
@@ -182,7 +182,7 @@ test('saveMonthlyCommentRecapExcel aggregates Ditbinmas posts for backlog', asyn
   const sheet = wb.Sheets['POLRES A'];
   const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-  const lastIdx = aoa[2].length - 3;
+  const lastIdx = aoa[4].length - 3;
   expect(aoa[4].slice(lastIdx - 3, lastIdx)).toEqual([6, 4, 2]);
   expect(aoa[4].slice(lastIdx, lastIdx + 3)).toEqual([8, 5, 3]);
 

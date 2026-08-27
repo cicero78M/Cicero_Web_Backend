@@ -13,6 +13,7 @@ import claimRoutes from '../routes/claimRoutes.js';
 import adminSystemRoutes from '../routes/adminSystemRoutes.js';
 import { notFound, errorHandler } from '../middleware/errorHandler.js';
 import { authRequired } from '../middleware/authMiddleware.js';
+import { createCsrfProtection } from '../middleware/csrfProtection.js';
 import { dedupRequest } from '../middleware/dedupRequestMiddleware.js';
 import { sensitivePathGuard } from '../middleware/sensitivePathGuard.js';
 import { trustedProxy } from '../config/trustedProxy.js';
@@ -116,6 +117,7 @@ export function createApp() {
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: false, limit: '1mb' }));
   app.use(cookieParser());
+  app.use(createCsrfProtection(corsOrigin));
   app.use(morgan('dev'));
   app.use(dedupRequest);
   app.use(sensitivePathGuard);

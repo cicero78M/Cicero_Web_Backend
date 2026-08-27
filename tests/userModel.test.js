@@ -60,6 +60,13 @@ test('findClaimProfileById selects only claim-safe profile columns', async () =>
   expect(params).toEqual(['1']);
 });
 
+test('updateUser rejects unknown column names before building SQL', async () => {
+  await expect(
+    updateUser('1', { 'nama = NULL WHERE 1=1 --': 'attack' }),
+  ).rejects.toThrow('Field tidak diizinkan');
+  expect(mockQuery).not.toHaveBeenCalled();
+});
+
 test('findUserByIdAndWhatsApp returns user', async () => {
   mockQuery.mockResolvedValueOnce({ rows: [{ user_id: '1', nama: 'Test', ditbinmas: false, ditlantas: false, bidhumas: false, operator: false }] });
   const user = await findUserByIdAndWhatsApp('1', '0808');

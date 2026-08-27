@@ -1,7 +1,6 @@
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import { v4 as uuidv4 } from 'uuid';
 import * as userModel from '../model/userModel.js';
 import * as claimPasswordResetModel from '../model/claimPasswordResetModel.js';
 import redis from '../config/redis.js';
@@ -849,7 +848,7 @@ export async function requestClaimPasswordReset(req, res, next) {
       });
     }
 
-    const requestId = uuidv4();
+    const requestId = crypto.randomUUID();
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
 

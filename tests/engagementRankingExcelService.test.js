@@ -46,7 +46,7 @@ jest.unstable_mockModule('fs/promises', () => ({
   mkdir: mockMkdir,
 }));
 
-jest.unstable_mockModule('xlsx', () => ({
+jest.unstable_mockModule('../src/utils/xlsxCompat.js', () => ({
   default: {
     utils: {
       aoa_to_sheet: mockAoAToSheet,

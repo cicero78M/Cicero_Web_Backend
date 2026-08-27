@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt';
-import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 import * as dashboardUserModel from '../../model/dashboardUserModel.js';
 import * as dashboardPasswordResetModel from '../../model/dashboardPasswordResetModel.js';
 import { normalizeWhatsappNumber } from '../../utils/waHelper.js';
@@ -57,7 +57,7 @@ export async function handleDashboardPasswordResetRequest(req, res) {
       });
     }
 
-    const resetToken = uuidv4();
+    const resetToken = crypto.randomUUID();
     const expiresAt = new Date(
       Date.now() + RESET_TOKEN_EXPIRY_MINUTES * 60 * 1000,
     );

@@ -47,7 +47,7 @@ test('saveMonthlyLikesRecapExcel creates formatted monthly recap', async () => {
     'Nama',
     'Divisi / Satfung',
   ]);
-  const lastIdx = aoa[2].length - 3;
+  const lastIdx = aoa[3].length - 3;
   expect(aoa[3].slice(lastIdx, lastIdx + 3)).toEqual([
     'Jumlah Post',
     'Sudah Likes',

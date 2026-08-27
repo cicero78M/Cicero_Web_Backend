@@ -11,6 +11,58 @@ import {
 } from '../utils/socialUsername.js';
 
 const socialUsernameConflictErrorCode = 'SOCIAL_USERNAME_CONFLICT';
+const tenantScopedRoles = new Set([
+  'operator',
+  'user',
+  'ditbinmas',
+  'ditlantas',
+  'bidhumas',
+  'ditsamapta',
+  'ditintelkam',
+]);
+
+function getActorClientIds(req) {
+  const rawClientIds = Array.isArray(req.user?.client_ids)
+    ? req.user.client_ids
+    : req.user?.client_id
+      ? [req.user.client_id]
+      : [];
+  return rawClientIds
+    .map((clientId) => String(clientId || '').trim())
+    .filter(Boolean);
+}
+
+function isTenantScoped(req) {
+  return tenantScopedRoles.has(String(req.user?.role || '').toLowerCase());
+}
+
+function isAllowedClient(req, clientId) {
+  if (!isTenantScoped(req)) return true;
+  const normalizedClientId = String(clientId || '').trim().toLowerCase();
+  return Boolean(normalizedClientId) && getActorClientIds(req).some(
+    (allowedClientId) => allowedClientId.toLowerCase() === normalizedClientId,
+  );
+}
+
+function sendTenantForbidden(res) {
+  return res.status(403).json({
+    success: false,
+    message: 'client_id tidak diizinkan',
+  });
+}
+
+async function findAuthorizedTargetUser(req, res, userId = req.params.id) {
+  const user = await userModel.findUserById(userId);
+  if (!user) {
+    res.status(404).json({ success: false, message: 'user tidak ditemukan' });
+    return null;
+  }
+  if (!isAllowedClient(req, user.client_id)) {
+    sendTenantForbidden(res);
+    return null;
+  }
+  return user;
+}
 
 function normalizePrimarySocialUsernames(data) {
   if (Object.hasOwn(data, 'insta')) {
@@ -65,7 +117,19 @@ async function syncPrimarySocialUsernames(userId, data) {
 
 export const getAllUsers = async (req, res, next) => {
   try {
-    const users = await userModel.getAllUsers();
+    let users;
+    if (isTenantScoped(req)) {
+      const clientIds = getActorClientIds(req);
+      if (clientIds.length === 0) return sendTenantForbidden(res);
+      const usersByClient = await Promise.all(
+        clientIds.map((clientId) => userModel.getAllUsers(clientId, req.user?.role)),
+      );
+      users = Array.from(
+        new Map(usersByClient.flat().map((user) => [user.user_id, user])).values(),
+      );
+    } else {
+      users = await userModel.getAllUsers();
+    }
     sendSuccess(res, users);
   } catch (err) {
     next(err);
@@ -74,7 +138,8 @@ export const getAllUsers = async (req, res, next) => {
 
 export const getUserById = async (req, res, next) => {
   try {
-    const user = await userModel.findUserById(req.params.id);
+    const user = await findAuthorizedTargetUser(req, res);
+    if (!user) return;
     sendSuccess(res, user);
   } catch (err) {
     next(err);
@@ -140,6 +205,10 @@ export const createUser = async (req, res, next) => {
       if (role === 'bidhumas') data.bidhumas = true;
       if (role === 'ditsamapta') data.ditsamapta = true;
       if (role === 'ditintelkam') data.ditintelkam = true;
+    }
+
+    if (isTenantScoped(req) && !isAllowedClient(req, data.client_id)) {
+      return sendTenantForbidden(res);
     }
 
     if (role === 'operator') {
@@ -260,7 +329,15 @@ export const createUser = async (req, res, next) => {
 
 export const updateUser = async (req, res, next) => {
   try {
+    const existing = await findAuthorizedTargetUser(req, res);
+    if (!existing) return;
     const data = { ...req.body };
+    if (
+      Object.hasOwn(data, 'client_id') &&
+      !isAllowedClient(req, data.client_id)
+    ) {
+      return sendTenantForbidden(res);
+    }
     normalizePrimarySocialUsernames(data);
     const conflict = await findPrimarySocialConflict(req.params.id, data);
     if (conflict) {
@@ -316,12 +393,8 @@ export const updateWaNotificationPreference = async (req, res, next) => {
         .json({ success: false, message: 'opt_in harus bernilai boolean' });
     }
 
-    const existing = await userModel.findUserById(userId);
-    if (!existing) {
-      return res
-        .status(404)
-        .json({ success: false, message: 'user tidak ditemukan' });
-    }
+    const existing = await findAuthorizedTargetUser(req, res, userId);
+    if (!existing) return;
     if (!existing.whatsapp) {
       return res.status(400).json({
         success: false,
@@ -350,6 +423,8 @@ export const updateWaNotificationPreference = async (req, res, next) => {
 
 export const updateUserRoles = async (req, res, next) => {
   try {
+    const existing = await findAuthorizedTargetUser(req, res);
+    if (!existing) return;
     const roles = Array.isArray(req.body.roles)
       ? req.body.roles.map((r) => r.toLowerCase())
       : [];
@@ -384,6 +459,8 @@ export const updateUserRoleIds = async (req, res, next) => {
 
 export const deleteUser = async (req, res, next) => {
   try {
+    const existing = await findAuthorizedTargetUser(req, res);
+    if (!existing) return;
     const rawRole = req.query?.role ?? req.body?.role;
     const role =
       typeof rawRole === 'string' && rawRole.trim()

@@ -69,7 +69,7 @@ test('saveWeeklyLikesRecapExcel creates formatted weekly recap', async () => {
     'Sudah Likes',
     'Belum Likes',
   ]);
-  const lastIdx = aoa[2].length - 3;
+  const lastIdx = aoa[4].length - 3;
   expect(aoa[4].slice(0, 4)).toEqual([1, 'AKP', 'Budi', 'Sat A']);
   expect(aoa[4].slice(lastIdx, lastIdx + 3)).toEqual([3, 2, 1]);
 
@@ -125,4 +125,3 @@ test('saveWeeklyLikesRecapExcel prioritizes configured names before totals', asy
   await unlink(filePath);
   jest.useRealTimers();
 });
-

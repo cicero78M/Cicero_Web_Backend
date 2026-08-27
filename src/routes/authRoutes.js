@@ -1,8 +1,8 @@
 import express from "express";
+import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { query } from "../db/index.js";
 import bcrypt from "bcrypt";
-import { v4 as uuidv4 } from "uuid";
 import * as penmasUserModel from "../model/penmasUserModel.js";
 import * as dashboardUserModel from "../model/dashboardUserModel.js";
 import * as userModel from "../model/userModel.js";
@@ -38,6 +38,7 @@ import {
   handleDashboardPasswordResetConfirm,
   handleDashboardPasswordResetRequest,
 } from './auth/passwordResetHandlers.js';
+import { verifyDashboardOrClientToken } from '../middleware/dashboardAuth.js';
 
 export {
   handleDashboardPasswordResetConfirm,
@@ -45,6 +46,26 @@ export {
 };
 
 const router = express.Router();
+
+router.get('/session', verifyDashboardOrClientToken, (req, res) => {
+  const user = req.user || {};
+  return res.json({
+    success: true,
+    data: {
+      dashboard_user_id: user.dashboard_user_id || null,
+      user_id: user.user_id || null,
+      username: user.username || null,
+      nama: user.nama || null,
+      role: user.role || null,
+      role_id: user.role_id || null,
+      client_id: user.client_id || null,
+      client_ids: Array.isArray(user.client_ids) ? user.client_ids : [],
+      premium_status: Boolean(user.premium_status),
+      premium_tier: user.premium_tier || null,
+      premium_expires_at: user.premium_expires_at || null,
+    },
+  });
+});
 
 function getApprovalNotificationStatus(results) {
   if (!Array.isArray(results)) return results ? 'sent' : 'failed';
@@ -90,7 +111,7 @@ router.post('/penmas-register', async (req, res) => {
       .status(400)
       .json({ success: false, message: 'username sudah terpakai' });
   }
-  const user_id = uuidv4();
+  const user_id = crypto.randomUUID();
   const password_hash = await bcrypt.hash(password, 10);
   const user = await penmasUserModel.createUser({
     user_id,
@@ -172,7 +193,7 @@ router.post('/dashboard-register', async (req, res) => {
       .status(400)
       .json({ success: false, message: 'username sudah terpakai' });
   }
-  const dashboard_user_id = uuidv4();
+  const dashboard_user_id = crypto.randomUUID();
   const password_hash = await bcrypt.hash(password, 10);
 
   let roleRow;

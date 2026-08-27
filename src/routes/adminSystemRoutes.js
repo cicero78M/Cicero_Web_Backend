@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import crypto from 'crypto';
+import { sanitizeSpreadsheetCell } from '../utils/spreadsheet.js';
+import { cookieOptions } from './auth/shared.js';
 import fs from 'fs/promises';
 import path from 'path';
 import jwt from 'jsonwebtoken';
@@ -292,9 +294,13 @@ router.post('/auth/telegram/verify', async (req, res) => {
     return res.status(503).json({ success: false, message: 'Service temporarily unavailable' });
   }
 
+  res.cookie('admin_system_token', token, {
+    ...cookieOptions,
+    maxAge: tokenTtlSeconds * 1000,
+  });
+
   return res.json({
     success: true,
-    token,
     admin: {
       role: 'system_admin',
       admin_role: adminRole,
@@ -321,6 +327,17 @@ router.get('/auth/telegram/widget-config', async (_req, res) => {
 });
 
 router.use(verifySystemAdminToken);
+
+router.post('/auth/logout', async (req, res) => {
+  const token = req.cookies?.admin_system_token;
+  if (token) {
+    await redis.del(`login_token:${token}`).catch((err) => {
+      console.error('[ADMIN AUTH] Failed to revoke admin token:', err);
+    });
+  }
+  res.clearCookie('admin_system_token', cookieOptions);
+  return res.json({ success: true });
+});
 
 router.get('/auth/me', async (req, res) => {
   return res.json({
@@ -1309,7 +1326,7 @@ router.get('/management/funds/audit/export.csv', async (_req, res) => {
       row.notes || '',
     ];
     return values
-      .map(value => `"${String(value ?? '').replace(/"/g, '""')}"`)
+      .map(value => `"${sanitizeSpreadsheetCell(value).replace(/"/g, '""')}"`)
       .join(',');
   });
 

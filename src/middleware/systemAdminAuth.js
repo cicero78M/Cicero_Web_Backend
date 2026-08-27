@@ -6,7 +6,7 @@ const jwtAllowedAlgorithms = ['HS256'];
 function getTokenFromRequest(req) {
   const authHeader = req.headers.authorization;
   return (
-    req.cookies?.token ||
+    req.cookies?.admin_system_token ||
     (authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader)
   );
 }

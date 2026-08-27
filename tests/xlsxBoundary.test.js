@@ -13,7 +13,7 @@ function collectJavaScriptFiles(directory) {
   });
 }
 
-test('production source accesses xlsx only through the write-only facade', () => {
+test('production workbook generation uses the ExcelJS write-only facade', () => {
   const directImports = collectJavaScriptFiles(sourceRoot)
     .filter((filePath) => !filePath.endsWith(path.join('utils', 'xlsxCompat.js')))
     .filter((filePath) => /from\s+['"]xlsx['"]|require\(\s*['"]xlsx['"]\s*\)/.test(
@@ -21,6 +21,9 @@ test('production source accesses xlsx only through the write-only facade', () =>
     ));
 
   expect(directImports).toEqual([]);
+  expect(
+    fs.readFileSync(path.join(sourceRoot, 'utils', 'xlsxCompat.js'), 'utf8'),
+  ).not.toMatch(/from\s+['"]xlsx['"]|require\(\s*['"]xlsx['"]\s*\)/);
   expect(XLSX.read).toBeUndefined();
   expect(XLSX.readFile).toBeUndefined();
   expect(typeof XLSX.write).toBe('function');
