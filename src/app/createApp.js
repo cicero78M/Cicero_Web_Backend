@@ -108,7 +108,9 @@ export function createApp() {
             callback(null, true);
             return;
           }
-          callback(new Error('Origin not allowed by CORS'));
+          const corsError = new Error('Origin not allowed by CORS');
+          corsError.statusCode = 403;
+          callback(corsError);
         },
     credentials: true,
   }));
