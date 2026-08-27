@@ -32,9 +32,18 @@ describe('tiktokThumbnailService', () => {
     expect(buildTikTokPostUrl('bad/user', '7123456789012345678')).toBe('');
   });
 
-  test('enriches database posts through official TikTok oEmbed', async () => {
+  test('enriches database posts with current TikTok metrics', async () => {
     mockAxiosGet.mockResolvedValue({
-      data: { thumbnail_url: 'https://cdn.test/oembed.jpg' },
+      data: {
+        code: 0,
+        data: {
+          cover: 'https://cdn.test/tikwm.jpg',
+          play_count: 3210,
+          digg_count: 120,
+          comment_count: 30,
+          share_count: 4,
+        },
+      },
     });
 
     const result = await enrichTikTokPostThumbnails(
@@ -43,30 +52,40 @@ describe('tiktokThumbnailService', () => {
     );
 
     expect(mockAxiosGet).toHaveBeenCalledWith(
-      'https://www.tiktok.com/oembed',
+      'https://www.tikwm.com/api/',
       expect.objectContaining({
         params: {
           url: 'https://www.tiktok.com/@cicero.test/video/7123456789012345678',
+          hd: 0,
         },
       }),
     );
     expect(result[0]).toEqual(
       expect.objectContaining({
-        thumbnail_url: 'https://cdn.test/oembed.jpg',
+        thumbnail_url: 'https://cdn.test/tikwm.jpg',
+        view_count: 3210,
+        like_count: 120,
+        comment_count: 30,
+        share_count: 4,
         url: 'https://www.tiktok.com/@cicero.test/video/7123456789012345678',
       }),
     );
   });
 
-  test('keeps the post usable when oEmbed is unavailable', async () => {
-    mockAxiosGet.mockRejectedValue(new Error('timeout'));
+  test('falls back to official oEmbed when metrics provider is unavailable', async () => {
+    mockAxiosGet
+      .mockRejectedValueOnce(new Error('metrics timeout'))
+      .mockResolvedValueOnce({
+        data: { thumbnail_url: 'https://cdn.test/oembed.jpg' },
+      });
 
     const result = await enrichTikTokPostThumbnails(
       [{ video_id: '7123456789012345679' }],
       'cicero.test',
     );
 
-    expect(result[0].thumbnail_url).toBeUndefined();
+    expect(result[0].thumbnail_url).toBe('https://cdn.test/oembed.jpg');
+    expect(result[0].view_count).toBeUndefined();
     expect(result[0].url).toContain('/video/7123456789012345679');
   });
 });
