@@ -10,6 +10,7 @@ import { fetchInstagramProfile } from "./instagramApi.js";
 import { fetchAndStoreInstaContent } from "../handler/fetchpost/instaFetchPost.js";
 import { fetchAndStoreTiktokContent } from "../handler/fetchpost/tiktokFetchPost.js";
 import { fetchTiktokProfile } from "./tiktokRapidService.js";
+import { enrichTikTokPostThumbnails } from "./tiktokThumbnailService.js";
 import { sendConsoleDebug } from "../middleware/debugHandler.js";
 
 function normalizeRegionalId(value) {
@@ -158,6 +159,10 @@ export async function buildAggregatorPayload(client, resolvedClientId, periode, 
       });
     }
   }
+  tiktokPosts = await enrichTikTokPostThumbnails(
+    tiktokPosts,
+    tiktokProfile?.username || client.client_tiktok,
+  );
 
   const instagramLinks = Array.from(
     new Set(

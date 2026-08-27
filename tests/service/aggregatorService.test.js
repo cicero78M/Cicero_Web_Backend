@@ -14,6 +14,9 @@ jest.unstable_mockModule('../../src/service/instagramApi.js', () => ({ fetchInst
 jest.unstable_mockModule('../../src/handler/fetchpost/instaFetchPost.js', () => ({ fetchAndStoreInstaContent: jest.fn() }));
 jest.unstable_mockModule('../../src/handler/fetchpost/tiktokFetchPost.js', () => ({ fetchAndStoreTiktokContent: jest.fn() }));
 jest.unstable_mockModule('../../src/service/tiktokRapidService.js', () => ({ fetchTiktokProfile: jest.fn() }));
+jest.unstable_mockModule('../../src/service/tiktokThumbnailService.js', () => ({
+  enrichTikTokPostThumbnails: jest.fn(async (posts) => posts),
+}));
 jest.unstable_mockModule('../../src/middleware/debugHandler.js', () => ({ sendConsoleDebug: jest.fn() }));
 
 const { resolveAggregatorClient } = await import('../../src/service/aggregatorService.js');

@@ -16,6 +16,7 @@ const mockFetchAndStoreInstaContent = jest.fn();
 const mockFetchAndStoreTiktokContent = jest.fn();
 const mockFetchTiktokProfile = jest.fn();
 const mockSendConsoleDebug = jest.fn();
+const mockEnrichTikTokPostThumbnails = jest.fn(async (posts) => posts);
 
 jest.unstable_mockModule('../src/model/clientModel.js', () => ({
   findAllActiveDirektoratWithSosmed: mockFindAllActive,
@@ -60,6 +61,10 @@ jest.unstable_mockModule('../src/handler/fetchpost/tiktokFetchPost.js', () => ({
 
 jest.unstable_mockModule('../src/service/tiktokRapidService.js', () => ({
   fetchTiktokProfile: mockFetchTiktokProfile,
+}));
+
+jest.unstable_mockModule('../src/service/tiktokThumbnailService.js', () => ({
+  enrichTikTokPostThumbnails: mockEnrichTikTokPostThumbnails,
 }));
 
 jest.unstable_mockModule('../src/middleware/debugHandler.js', () => ({
