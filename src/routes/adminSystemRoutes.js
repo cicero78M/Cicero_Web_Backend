@@ -878,6 +878,77 @@ router.get('/management/system-audit', async (_req, res) => {
   });
 });
 
+router.get('/management/system-health', async (_req, res) => {
+  const startedAt = Date.now();
+  const checkedAt = new Date().toISOString();
+  const component = async (name, check) => {
+    const componentStartedAt = Date.now();
+    try {
+      const details = await check();
+      return { name, status: 'ok', latency_ms: Date.now() - componentStartedAt, details: details || {} };
+    } catch (err) {
+      return {
+        name,
+        status: 'down',
+        latency_ms: Date.now() - componentStartedAt,
+        details: { message: err?.message || 'health check failed' },
+      };
+    }
+  };
+
+  const waHealthUrl = String(process.env.ADMIN_SYSTEM_WA_LIVENESS_URL || 'http://127.0.0.1:3016/readyz').trim();
+  const [database, redisHealth, whatsappAdmin, clientSummary] = await Promise.all([
+    component('database', async () => {
+      await query('SELECT 1 AS ok');
+      return { driver: process.env.DB_DRIVER || 'postgres' };
+    }),
+    component('redis', async () => ({ response: await redis.ping() })),
+    component('whatsapp_admin', async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 1500);
+      try {
+        const response = await fetch(waHealthUrl, { signal: controller.signal, cache: 'no-store' });
+        if (!response.ok) throw new Error(`WA Admin HTTP ${response.status}`);
+        const payload = await response.json().catch(() => ({}));
+        return { reachable: true, ready: payload?.status === 'ok', endpoint: 'local-readiness', clients: payload?.clients || [] };
+      } finally {
+        clearTimeout(timeout);
+      }
+    }),
+    component('clients', async () => {
+      const result = await query(
+        `SELECT COUNT(*)::int AS total,
+                COUNT(*) FILTER (WHERE client_status = true)::int AS active,
+                COUNT(*) FILTER (WHERE client_status = false)::int AS inactive,
+                COUNT(*) FILTER (WHERE client_insta_status = true)::int AS instagram_enabled,
+                COUNT(*) FILTER (WHERE client_tiktok_status = true)::int AS tiktok_enabled,
+                COUNT(*) FILTER (WHERE client_amplify_status = true)::int AS amplify_enabled
+         FROM clients`,
+      );
+      return result.rows[0] || {};
+    }),
+  ]);
+
+  const components = [database, redisHealth, whatsappAdmin, clientSummary];
+  const downCount = components.filter((item) => item.status === 'down').length;
+  const activeClients = Number(clientSummary.details?.active || 0);
+
+  return res.json({
+    success: true,
+    data: {
+      status: downCount > 0 ? 'degraded' : activeClients === 0 ? 'warning' : 'ok',
+      checked_at: checkedAt,
+      total_latency_ms: Date.now() - startedAt,
+      process: {
+        uptime_seconds: Math.floor(process.uptime()),
+        node_version: process.version,
+        environment: process.env.NODE_ENV || 'development',
+      },
+      components,
+    },
+  });
+});
+
 router.get('/management/payments/requests', async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(config.paginationMaxLimit, Math.max(1, Number(req.query.limit) || config.paginationDefaultLimit));
