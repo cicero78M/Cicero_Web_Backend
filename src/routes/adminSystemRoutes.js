@@ -751,8 +751,8 @@ router.post('/management/clients', requireSystemAdminRoles('super_admin'), async
     `INSERT INTO clients (
       client_id, nama, client_type, client_status, client_insta, client_insta_status,
       client_tiktok, client_tiktok_status, client_amplify_status, client_operator,
-      client_group, regional_id, parent_client_id, client_level, tiktok_secuid, client_super
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+      client_group, regional_id, client_level, tiktok_secuid, client_super
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
     RETURNING *`,
     [
       clientId,
@@ -767,7 +767,6 @@ router.post('/management/clients', requireSystemAdminRoles('super_admin'), async
       body.client_operator || null,
       body.client_group || null,
       body.regional_id || null,
-      body.parent_client_id || null,
       body.client_level || null,
       body.tiktok_secuid || null,
       body.client_super || null,
@@ -794,10 +793,9 @@ router.put('/management/clients/:clientId', requireSystemAdminRoles('super_admin
       client_operator = COALESCE($10, client_operator),
       client_group = COALESCE($11, client_group),
       regional_id = COALESCE($12, regional_id),
-      parent_client_id = COALESCE($13, parent_client_id),
-      client_level = COALESCE($14, client_level),
-      tiktok_secuid = COALESCE($15, tiktok_secuid),
-      client_super = COALESCE($16, client_super)
+      client_level = COALESCE($13, client_level),
+      tiktok_secuid = COALESCE($14, tiktok_secuid),
+      client_super = COALESCE($15, client_super)
      WHERE LOWER(client_id)=LOWER($1)
      RETURNING *`,
     [
@@ -813,7 +811,6 @@ router.put('/management/clients/:clientId', requireSystemAdminRoles('super_admin
       body.client_operator ?? null,
       body.client_group ?? null,
       body.regional_id ?? null,
-      body.parent_client_id ?? null,
       body.client_level ?? null,
       body.tiktok_secuid ?? null,
       body.client_super ?? null,
