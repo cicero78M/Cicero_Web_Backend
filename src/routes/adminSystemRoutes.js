@@ -99,6 +99,15 @@ const config = getAdminSystemConfig();
 const OTP_TTL_SECONDS = config.otpTtlSeconds;
 const ADMIN_SESSION_TTL_SECONDS = config.sessionTtlSeconds;
 
+async function tableExists(tableName) {
+  try {
+    const result = await query('SELECT to_regclass($1) IS NOT NULL AS exists', [tableName]);
+    return result.rows[0]?.exists === true;
+  } catch {
+    return false;
+  }
+}
+
 function buildAdminChatIds() {
   return config.adminChatIds;
 }
@@ -611,12 +620,14 @@ router.get('/management/config/audit', async (req, res) => {
 });
 
 router.get('/management/overview', async (_req, res) => {
+  const hasFundRequests = await tableExists('system_management_fund_request');
   const [clientResult, dashboardUserResult, premiumRequestResult, pendingFundReqResult] = await Promise.all([
     query('SELECT COUNT(*)::int AS total_clients FROM clients'),
     query('SELECT COUNT(*)::int AS total_dashboard_users FROM dashboard_user'),
     query("SELECT COUNT(*)::int AS total_pending_premium_requests FROM dashboard_premium_request WHERE status = 'pending'"),
-    query("SELECT COUNT(*)::int AS total_pending_fund_requests FROM system_management_fund_request WHERE status = 'pending'")
-      .catch(() => ({ rows: [{ total_pending_fund_requests: 0 }] })),
+    hasFundRequests
+      ? query("SELECT COUNT(*)::int AS total_pending_fund_requests FROM system_management_fund_request WHERE status = 'pending'")
+      : Promise.resolve({ rows: [{ total_pending_fund_requests: 0 }] }),
   ]);
 
   return res.json({
@@ -651,8 +662,8 @@ router.get('/management/clients/summary', async (_req, res) => {
     ),
     query(
       `SELECT
-        COUNT(*) FILTER (WHERE parent_client_id IS NULL)::int AS root_clients,
-        COUNT(*) FILTER (WHERE parent_client_id IS NOT NULL)::int AS child_clients
+        COUNT(*)::int AS root_clients,
+        0::int AS child_clients
        FROM clients`,
     ),
     query(
@@ -700,7 +711,8 @@ router.get('/management/clients', async (req, res) => {
     query(
       `SELECT client_id, nama, client_type, client_status, client_group, regional_id,
               client_insta, client_insta_status, client_tiktok, client_tiktok_status,
-              client_amplify_status, client_operator, client_level, tiktok_secuid, client_super, parent_client_id
+              client_amplify_status, client_operator, client_level, tiktok_secuid, client_super,
+              NULL::varchar AS parent_client_id
        FROM clients
        ${whereClause}
        ORDER BY client_id
@@ -827,6 +839,10 @@ router.delete('/management/clients/:clientId', requireSystemAdminRoles('super_ad
 router.get('/management/system-audit', async (_req, res) => {
   const cfg = getAdminSystemConfig();
   const analysis = analyzeAdminSystemConfig(cfg);
+  const [hasFundTransactions, hasConfigAudit] = await Promise.all([
+    tableExists('system_management_fund_transaction'),
+    tableExists('system_management_config_audit'),
+  ]);
 
   const [overview, clients, funds, authAudit] = await Promise.all([
     query(
@@ -842,19 +858,19 @@ router.get('/management/system-audit', async (_req, res) => {
         COUNT(*) FILTER (WHERE client_status = false)::int AS inactive_clients
        FROM clients`,
     ),
-    query(
+    hasFundTransactions ? query(
       `SELECT
         COUNT(*)::int AS total_fund_transactions,
         COALESCE(SUM(CASE WHEN direction='inflow' THEN amount ELSE 0 END),0)::numeric AS total_inflow,
         COALESCE(SUM(CASE WHEN direction='outflow' THEN amount ELSE 0 END),0)::numeric AS total_outflow
        FROM system_management_fund_transaction`,
-    ).catch(() => ({ rows: [{ total_fund_transactions: 0, total_inflow: 0, total_outflow: 0 }] })),
-    query(
+    ) : Promise.resolve({ rows: [{ total_fund_transactions: 0, total_inflow: 0, total_outflow: 0 }] }),
+    hasConfigAudit ? query(
       `SELECT audit_id, action_type, config_key, actor_telegram_chat_id, created_at
        FROM system_management_config_audit
        ORDER BY created_at DESC
        LIMIT 20`,
-    ).catch(() => ({ rows: [] })),
+    ) : Promise.resolve({ rows: [] }),
   ]);
 
   return res.json({
@@ -945,6 +961,84 @@ router.get('/management/system-health', async (_req, res) => {
         environment: process.env.NODE_ENV || 'development',
       },
       components,
+    },
+  });
+});
+
+router.get('/management/system-topology', async (_req, res) => {
+  const startedAt = Date.now();
+  const safeQuery = async (sql, values = []) => {
+    try {
+      const result = await query(sql, values);
+      return { ok: true, row: result.rows[0] || {}, rows: result.rows || [] };
+    } catch (error) {
+      return { ok: false, row: {}, rows: [], error: error?.message || 'query failed' };
+    }
+  };
+
+  const [clients, instagram, instagramLikes, tiktok, tiktokComments, amplify] = await Promise.all([
+    safeQuery(`
+      SELECT client_id, nama, client_status,
+             client_insta_status, client_tiktok_status, client_amplify_status,
+             client_group, regional_id
+      FROM clients
+      ORDER BY client_id
+      LIMIT 250
+    `),
+    safeQuery(`SELECT COUNT(*)::int AS total, MAX(COALESCE(original_created_at, created_at)) AS latest_at FROM insta_post`),
+    safeQuery(`SELECT COUNT(*)::int AS total, MAX(updated_at) AS latest_at FROM insta_like`),
+    safeQuery(`SELECT COUNT(*)::int AS total, MAX(COALESCE(original_created_at, created_at)) AS latest_at FROM tiktok_post`),
+    safeQuery(`SELECT COUNT(*)::int AS total, MAX(updated_at) AS latest_at FROM tiktok_comment`),
+    safeQuery(`SELECT COUNT(*)::int AS total, MAX(created_at) AS latest_at FROM link_report`),
+  ]);
+
+  const pipeline = (name, source, result) => ({
+    name,
+    source,
+    status: result.ok ? 'ok' : 'unavailable',
+    total_records: Number(result.row.total || 0),
+    latest_at: result.row.latest_at || null,
+    safe_message: result.ok ? null : 'Data pipeline belum dapat diperiksa',
+  });
+
+  const rows = clients.rows;
+  const activeClients = rows.filter((item) => item.client_status === true);
+  const matrix = activeClients.map((item) => ({
+    client_id: item.client_id,
+    name: item.nama || item.client_id,
+    group: item.client_group || null,
+    regional_id: item.regional_id || null,
+    platforms: {
+      instagram: item.client_insta_status === true ? 'enabled' : 'disabled',
+      tiktok: item.client_tiktok_status === true ? 'enabled' : 'disabled',
+      amplify: item.client_amplify_status === true ? 'enabled' : 'disabled',
+    },
+  }));
+
+  return res.json({
+    success: true,
+    data: {
+      observed_at: new Date().toISOString(),
+      latency_ms: Date.now() - startedAt,
+      topology: [
+        { id: 'backend', label: 'Backend API', kind: 'core', status: 'ok' },
+        { id: 'database', label: 'PostgreSQL', kind: 'dependency', status: clients.ok ? 'ok' : 'degraded' },
+        { id: 'data-pipelines', label: 'Data Pipelines', kind: 'worker', status: 'ok' },
+        { id: 'dashboard', label: 'Cicero Dashboard', kind: 'surface', status: 'ok' },
+      ],
+      pipelines: [
+        pipeline('Instagram posts', 'insta_post', instagram),
+        pipeline('Instagram likes', 'insta_like', instagramLikes),
+        pipeline('TikTok posts', 'tiktok_post', tiktok),
+        pipeline('TikTok comments', 'tiktok_comment', tiktokComments),
+        pipeline('Amplify reports', 'link_report', amplify),
+      ],
+      clients: {
+        total: rows.length,
+        active: activeClients.length,
+        matrix,
+        truncated: rows.length >= 250,
+      },
     },
   });
 });
