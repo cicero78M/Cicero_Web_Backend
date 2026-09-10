@@ -90,4 +90,15 @@ describe('TikTok rapid endpoints username validation', () => {
     expect(mockFetchTiktokPosts).not.toHaveBeenCalled();
     expect(mockFetchTiktokPostsBySecUid).not.toHaveBeenCalled();
   });
+
+  test('rapid-info uses the requested username for comparison', async () => {
+    mockFetchTiktokInfo.mockResolvedValue({ userInfo: { user: { uniqueId: 'compare.user' } } });
+
+    const res = await request(app)
+      .get('/api/tiktok/rapid-info')
+      .query({ username: '@compare.user' });
+
+    expect(res.status).toBe(200);
+    expect(mockFetchTiktokInfo).toHaveBeenCalledWith('compare.user');
+  });
 });

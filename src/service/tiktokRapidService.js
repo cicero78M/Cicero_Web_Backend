@@ -15,6 +15,7 @@ const RAPIDAPI_HOST = 'tiktok-api23.p.rapidapi.com';
 const RAPIDAPI_KEY = env.RAPIDAPI_KEY;
 const RAPIDAPI_FALLBACK_KEY = env.RAPIDAPI_FALLBACK_KEY;
 const RAPIDAPI_FALLBACK_HOST = env.RAPIDAPI_FALLBACK_HOST;
+const RAPIDAPI_TIMEOUT_MS = 15000;
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -98,6 +99,7 @@ function parsePostDetail(resData) {
 async function requestRapidApiPosts({ host, key, endpoint, params }) {
   const res = await axios.get(`https://${host}/${endpoint}`, {
     params,
+    timeout: RAPIDAPI_TIMEOUT_MS,
     headers: {
       'X-RapidAPI-Key': key,
       'X-RapidAPI-Host': host,
@@ -153,6 +155,7 @@ export async function fetchTiktokProfile(username) {
   try {
     const res = await axios.get(`https://${RAPIDAPI_HOST}/api/user/info`, {
       params: { uniqueId: username.replace(/^@/, '') },
+      timeout: RAPIDAPI_TIMEOUT_MS,
       headers: {
         'X-RapidAPI-Key': RAPIDAPI_KEY,
         'X-RapidAPI-Host': RAPIDAPI_HOST,
@@ -187,6 +190,7 @@ export async function fetchTiktokInfo(username) {
   try {
     const res = await axios.get(`https://${RAPIDAPI_HOST}/api/user/info`, {
       params: { uniqueId: username.replace(/^@/, '') },
+      timeout: RAPIDAPI_TIMEOUT_MS,
       headers: {
         'X-RapidAPI-Key': RAPIDAPI_KEY,
         'X-RapidAPI-Host': RAPIDAPI_HOST,

@@ -586,22 +586,8 @@ export async function getRekapKomentarByClient(
   const priorityExpr = `(${priorityCase})`;
 
   const { rows } = await query(
-    `WITH valid_comments AS (
-      SELECT c.video_id,
-             c.updated_at,
-             lower(replace(trim(cmt), '@', '')) AS username
-      FROM tiktok_comment c
-      JOIN tiktok_post p ON p.video_id = c.video_id
-      ${postRegionalJoin}
-      ${postRoleJoin}
-      JOIN LATERAL jsonb_array_elements_text(c.comments) cmt ON TRUE
-      WHERE ${postClientFilter}
-        ${postRoleFilter}
-        ${postRegionalFilter}
-        AND ${commentTanggalFilter}
-    ),
-    total_posts AS (
-      SELECT COUNT(DISTINCT p.video_id) AS total_konten
+    `WITH scoped_posts AS MATERIALIZED (
+      SELECT DISTINCT p.video_id
       FROM tiktok_post p
       ${postRegionalJoin}
       ${postRoleJoin}
@@ -609,6 +595,20 @@ export async function getRekapKomentarByClient(
         ${postRoleFilter}
         ${postRegionalFilter}
         AND ${postTanggalFilter}
+    ),
+    valid_comments AS (
+      SELECT c.video_id,
+             c.updated_at,
+             lower(replace(trim(cmt), '@', '')) AS username
+      FROM tiktok_comment c
+      JOIN scoped_posts sp ON sp.video_id = c.video_id
+      JOIN tiktok_post p ON p.video_id = sp.video_id
+      JOIN LATERAL jsonb_array_elements_text(c.comments) cmt ON TRUE
+      WHERE ${commentTanggalFilter}
+    ),
+    total_posts AS (
+      SELECT COUNT(*) AS total_konten
+      FROM scoped_posts
     ),
     comment_counts AS (
       SELECT

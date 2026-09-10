@@ -380,15 +380,25 @@ export async function getRapidTiktokProfile(req, res) {
 
 export async function getRapidTiktokInfo(req, res) {
   try {
-    const authorization = await authorizeReportRequest(req);
-    if (authorization.error) return sendReportAuthorizationError(res, authorization.error);
-    const client_id = authorization.clientId;
-    const client = await clientService.findClientById(client_id);
-    const username = client?.client_tiktok;
+    const requestedUsername = req.query.username;
+    let username = requestedUsername;
+    if (!username) {
+      const authorization = await authorizeReportRequest(req);
+      if (authorization.error) return sendReportAuthorizationError(res, authorization.error);
+      const client = await clientService.findClientById(authorization.clientId);
+      username = client?.client_tiktok;
+    }
     if (!username) {
       return res
         .status(404)
         .json({ success: false, message: 'Username TikTok tidak ditemukan' });
+    }
+    username = normalizeTikTokUsername(username);
+    if (!username) {
+      return res.status(400).json({
+        success: false,
+        message: 'Format username TikTok tidak valid'
+      });
     }
     const info = await fetchTiktokInfo(username);
     sendSuccess(res, info);
