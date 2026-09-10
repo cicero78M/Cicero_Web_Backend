@@ -10,7 +10,7 @@ import {
 } from "./claimComplaintTriageService.js";
 
 const numberFormatter = new Intl.NumberFormat("id-ID");
-export const UPDATE_DATA_LINK = "https://papiqo.com/claim";
+export const UPDATE_DATA_LINK = "https://claim.papiqo.com/claim";
 const ACTIVITY_START_DATE = "2025-09-01";
 const ID_DATE_FORMATTER = new Intl.DateTimeFormat("id-ID", {
   day: "numeric",

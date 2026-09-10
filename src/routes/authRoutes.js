@@ -28,12 +28,16 @@ import {
   clearDashboardSessions,
   clearPenmasSessions,
   clearUserSessions,
-  cookieOptions,
   registerSession,
   revokeSessionToken,
+  setAuthCookie,
   sendSessionUnavailable,
   AUTH_TOKEN_LIFETIME_SECONDS,
 } from './auth/shared.js';
+import {
+  getAuthToken,
+  getRequestedAuthScope,
+} from '../config/authCookies.js';
 import {
   handleDashboardPasswordResetConfirm,
   handleDashboardPasswordResetRequest,
@@ -46,6 +50,11 @@ export {
 };
 
 const router = express.Router();
+
+router.use((_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
 
 router.get('/session', verifyDashboardOrClientToken, (req, res) => {
   const user = req.user || {};
@@ -73,20 +82,13 @@ function getApprovalNotificationStatus(results) {
   return results.some(Boolean) ? 'sent' : 'bot_unavailable';
 }
 
-function getRequestToken(req) {
-  const authorizationHeader = req.headers.authorization;
-  if (authorizationHeader?.startsWith('Bearer ')) {
-    return authorizationHeader.split(' ')[1];
-  }
-  return req.cookies?.token || null;
-}
-
 router.post('/logout', async (req, res) => {
-  const token = getRequestToken(req);
+  const requestedScope = getRequestedAuthScope(req);
+  const token = getAuthToken(req, requestedScope);
   if (token) {
     await revokeSessionToken(token);
   }
-  clearAuthCookie(res);
+  clearAuthCookie(res, requestedScope);
   return res.json({ success: true, message: 'Logout berhasil' });
 });
 
@@ -156,7 +158,7 @@ router.post('/penmas-login', async (req, res) => {
     console.error('[AUTH] Gagal menyimpan token login penmas:', err.message);
     return sendSessionUnavailable(res);
   }
-  res.cookie('token', token, cookieOptions);
+  setAuthCookie(res, 'penmas', token);
   await insertLoginLog({
     actorId: user.user_id,
     loginType: 'operator',
@@ -374,7 +376,7 @@ router.post('/dashboard-login', async (req, res) => {
     console.error('[AUTH] Gagal menyimpan token login dashboard:', err.message);
     return sendSessionUnavailable(res);
   }
-  res.cookie('token', token, cookieOptions);
+  setAuthCookie(res, 'dashboard', token);
   await insertLoginLog({
     actorId: user.dashboard_user_id,
     loginType: 'operator',
@@ -490,7 +492,7 @@ router.post("/login", async (req, res) => {
     console.error('[AUTH] Gagal menyimpan token login:', err.message);
     return sendSessionUnavailable(res);
   }
-  res.cookie('token', token, cookieOptions);
+  setAuthCookie(res, 'client', token);
   await insertLoginLog({
     actorId: client.client_id,
     loginType: 'operator',
@@ -606,7 +608,7 @@ router.post('/user-login', async (req, res) => {
       console.error('[AUTH] Gagal menyimpan token login user:', err.message);
       return sendSessionUnavailable(res);
     }
-    res.cookie('token', token, cookieOptions);
+    setAuthCookie(res, 'reposter', token);
     await insertLoginLog({
       actorId: user.user_id,
       loginType: 'user',
@@ -666,7 +668,7 @@ router.post('/user-login', async (req, res) => {
       console.error('[AUTH] Gagal menyimpan token login user:', err.message);
       return sendSessionUnavailable(res);
     }
-    res.cookie('token', token, cookieOptions);
+    setAuthCookie(res, 'reposter', token);
     await insertLoginLog({
       actorId: user.user_id,
       loginType: 'user',

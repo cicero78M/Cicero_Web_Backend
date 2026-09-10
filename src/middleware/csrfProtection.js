@@ -1,3 +1,5 @@
+import { hasAuthCookie } from '../config/authCookies.js';
+
 const unsafeMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 function normalizeOrigin(value) {
@@ -20,7 +22,7 @@ export function createCsrfProtection(allowedOrigins = []) {
     if (req.headers.authorization?.startsWith('Bearer ')) return next();
 
     // Let the authentication middleware handle anonymous requests.
-    if (!req.cookies?.token && !req.cookies?.admin_system_token) return next();
+    if (!hasAuthCookie(req) && !req.cookies?.admin_system_token) return next();
 
     const fetchSite = String(req.headers['sec-fetch-site'] || '').toLowerCase();
     if (fetchSite === 'cross-site') {

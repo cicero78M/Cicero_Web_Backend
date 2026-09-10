@@ -132,7 +132,7 @@ describe('POST /login', () => {
       loginSource: 'mobile'
     });
     const setCookie = res.headers['set-cookie']?.[0] || '';
-    expect(setCookie).toContain('token=');
+    expect(setCookie).toContain('cicero_client_session=');
     expect(setCookie).toContain('HttpOnly');
     expect(setCookie).toContain('SameSite=Lax');
   });
@@ -285,6 +285,7 @@ describe('POST /penmas-login', () => {
       loginType: 'operator',
       loginSource: 'web'
     });
+    expect(res.headers['set-cookie'].join(';')).toContain('cicero_penmas_session=');
   });
 
   test('returns 401 when password wrong', async () => {
@@ -672,6 +673,7 @@ describe('POST /dashboard-login', () => {
     expect(mockGetPremiumSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({ dashboard_user_id: 'd1' })
     );
+    expect(res.headers['set-cookie'].join(';')).toContain('cicero_dashboard_session=');
   });
 
   test('logs in legacy active dashboard user even when approval_status is still pending', async () => {
@@ -938,6 +940,7 @@ describe('POST /user-login', () => {
       loginType: 'user',
       loginSource: 'mobile'
     });
+    expect(res.headers['set-cookie'].join(';')).toContain('cicero_reposter_session=');
   });
 
   test('returns 401 when user has no password_hash', async () => {
@@ -1137,8 +1140,8 @@ describe('POST /dashboard-password-reset/request', () => {
     expect(mockSendTelegramAdminMessage).toHaveBeenCalledTimes(1);
     const [message] = mockSendTelegramAdminMessage.mock.calls[0];
     expect(message).toContain('Reset Password Dashboard');
-    expect(message).toContain('https://papiqo.com/reset-password?token=');
-    expect(message).toContain('Dengan url https://papiqo.com/reset-password');
+    expect(message).toContain('https://dashboard.papiqo.com/reset-password?token=');
+    expect(message).toContain('Dengan url https://dashboard.papiqo.com/reset-password');
     expect(mockSendPasswordResetFailureNotification).not.toHaveBeenCalled();
   });
 

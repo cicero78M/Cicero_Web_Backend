@@ -59,6 +59,13 @@ CREATE TABLE "user" (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+CREATE TABLE claim_email_verifications (
+  user_id VARCHAR PRIMARY KEY REFERENCES "user"(user_id) ON DELETE CASCADE,
+  verified_email TEXT NOT NULL,
+  verified_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE roles (
   role_id SERIAL PRIMARY KEY,
   role_name VARCHAR UNIQUE

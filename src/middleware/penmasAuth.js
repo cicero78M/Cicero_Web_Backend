@@ -1,10 +1,11 @@
 import jwt from 'jsonwebtoken';
 import redis from '../config/redis.js';
+import { getAuthToken } from '../config/authCookies.js';
 
 const jwtAllowedAlgorithms = ['HS256'];
 
 export async function verifyPenmasToken(req, res, next) {
-  const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
+  const token = getAuthToken(req, 'penmas');
   if (!token) return res.status(401).json({ success: false, message: 'Token required' });
 
   let payload;

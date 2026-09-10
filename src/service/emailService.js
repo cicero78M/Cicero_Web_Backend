@@ -79,3 +79,34 @@ export async function sendClaimPasswordResetEmail(email, token, options = {}) {
     text: lines.join('\n'),
   });
 }
+
+export async function sendClaimRecoveryEmailConfirmation(email, token, options = {}) {
+  const { nrp, expiryMinutes = 30, confirmationBaseUrl } = options;
+  const baseUrl = (
+    confirmationBaseUrl ||
+    process.env.CLAIM_PASSWORD_RESET_URL ||
+    'https://claim.papiqo.com/claim'
+  ).trim();
+  const separator = baseUrl.includes('?') ? '&' : '?';
+  const confirmationLink = `${baseUrl}${separator}email_confirmation_token=${encodeURIComponent(token)}`;
+
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to: email,
+    subject: 'Konfirmasi Email Pemulihan Akun CICERO',
+    text: [
+      'Halo,',
+      '',
+      'Email ini diminta sebagai email baru untuk pemulihan akun CICERO.',
+      `NRP: ${nrp}`,
+      '',
+      `Konfirmasi email dan lanjutkan pembuatan password baru melalui tautan berikut: ${confirmationLink}`,
+      `Tautan berlaku selama ${expiryMinutes} menit dan hanya dapat digunakan satu kali.`,
+      '',
+      'Jika Anda tidak merasa melakukan permintaan ini, abaikan email ini. Email akun tidak akan berubah.',
+      '',
+      'Salam,',
+      'Tim CICERO',
+    ].join('\n'),
+  });
+}

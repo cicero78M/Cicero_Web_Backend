@@ -2,18 +2,12 @@ import jwt from 'jsonwebtoken';
 import * as dashboardUserModel from '../model/dashboardUserModel.js';
 import { query } from '../repository/db.js';
 import redis from '../config/redis.js';
+import {
+  getAuthToken,
+  getRequestedAuthScope,
+} from '../config/authCookies.js';
 
 const jwtAllowedAlgorithms = ['HS256'];
-
-function getTokenFromRequest(req) {
-  const authHeader = req.headers.authorization;
-  return (
-    req.cookies?.token ||
-    (authHeader?.startsWith('Bearer ')
-      ? authHeader.split(' ')[1]
-      : authHeader)
-  );
-}
 
 function normalizeClientIds(clientIds) {
   if (!Array.isArray(clientIds)) {
@@ -107,7 +101,7 @@ function applyDashboardRequestContext(req, dashboardUser) {
 }
 
 export async function verifyDashboardToken(req, res, next) {
-  const token = getTokenFromRequest(req);
+  const token = getAuthToken(req, 'dashboard');
   if (!token) {
     return res.status(401).json({ success: false, message: 'Token required' });
   }
@@ -131,7 +125,8 @@ export async function verifyDashboardToken(req, res, next) {
 }
 
 export async function verifyDashboardOrClientToken(req, res, next) {
-  const token = getTokenFromRequest(req);
+  const requestedScope = getRequestedAuthScope(req);
+  const token = getAuthToken(req, requestedScope);
   if (!token) {
     return res.status(401).json({ success: false, message: 'Token required' });
   }
@@ -159,13 +154,31 @@ export async function verifyDashboardOrClientToken(req, res, next) {
       return res.status(401).json({ success: false, message: 'Invalid token' });
     }
 
-    if (String(exists).startsWith('dashboard:')) {
+    const tokenOwner = String(exists);
+    if (requestedScope === 'dashboard' && !tokenOwner.startsWith('dashboard:')) {
+      return res.status(403).json({ success: false, message: 'Forbidden', reason: 'auth_scope_mismatch' });
+    }
+    if (requestedScope === 'reposter' && !tokenOwner.startsWith('user:')) {
+      return res.status(403).json({ success: false, message: 'Forbidden', reason: 'auth_scope_mismatch' });
+    }
+    if (requestedScope === 'client' && tokenOwner.includes(':')) {
+      return res.status(403).json({ success: false, message: 'Forbidden', reason: 'auth_scope_mismatch' });
+    }
+    if (requestedScope === 'penmas' && !tokenOwner.startsWith('penmas:')) {
+      return res.status(403).json({ success: false, message: 'Forbidden', reason: 'auth_scope_mismatch' });
+    }
+
+    if (tokenOwner.startsWith('dashboard:')) {
       const dashboardContext = await buildDashboardRequestContext(token, payload, exists);
       if (dashboardContext.error) {
         return res.status(dashboardContext.error.status).json(dashboardContext.error.body);
       }
       applyDashboardRequestContext(req, dashboardContext.user);
       return next();
+    }
+
+    if (requestedScope === 'reposter' && (payload.role !== 'user' || !payload.user_id)) {
+      return res.status(403).json({ success: false, message: 'Forbidden', reason: 'auth_scope_mismatch' });
     }
 
     const userPayload = { ...payload };

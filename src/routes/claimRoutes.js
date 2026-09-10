@@ -2,9 +2,13 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import {
   confirmClaimPasswordReset,
+  confirmClaimRecoveryEmail,
   requestClaimPasswordReset,
   verifyClaimPasswordResetOtp,
   registerClaimCredentials,
+  verifyClaimRegistrationOtp,
+  requestClaimEmailUpdate,
+  verifyClaimEmailUpdate,
   getUserData,
   getClaimMe,
   updateUserData,
@@ -35,8 +39,10 @@ const claimSocialValidationLimiter = rateLimit({
 });
 
 // Routes for claim registration via NRP + password
-router.post('/register', registerClaimCredentials); // body: { nrp, password }
+router.post('/register', registerClaimCredentials); // body: { nrp, email, password }
+router.post('/register/verify', verifyClaimRegistrationOtp);
 router.post('/password-reset/request', requestClaimPasswordReset); // body: { nrp, channel?, destination? }
+router.post('/password-reset/confirm-email', confirmClaimRecoveryEmail); // body: { token }
 router.post('/password-reset/verify', verifyClaimPasswordResetOtp); // body: { request_id, otp }
 router.post('/password-reset/confirm', confirmClaimPasswordReset); // body: { token, password, confirmPassword }
 router.post('/user-data', getUserData); // body: { nrp, password }
@@ -44,6 +50,8 @@ router.put('/update', updateUserData); // body: { nrp, password, ... }
 router.put('/edit', updateUserData); // backward-compatible alias for /claim/edit
 router.get('/me', authRequired, getClaimMe);
 router.put('/me', authRequired, updateClaimMe);
+router.post('/email/request', authRequired, requestClaimEmailUpdate);
+router.post('/email/verify', authRequired, verifyClaimEmailUpdate);
 router.get('/pending-content', authRequired, getPendingContent);
 router.post(
   '/complaints/triage',

@@ -118,6 +118,41 @@ describe('verifyDashboardOrClientToken - Redis failure', () => {
     expect(res.body.success).toBe(true);
   });
 
+  test('rejects a dashboard session presented as a reposter session', async () => {
+    const token = jwt.sign(
+      { dashboard_user_id: 'u1', role: 'operator' },
+      process.env.JWT_SECRET,
+    );
+    mockRedis.get.mockResolvedValueOnce('dashboard:u1');
+
+    const app = makeApp(verifyDashboardOrClientToken);
+    const res = await request(app)
+      .get('/protected')
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Cicero-Auth-Scope', 'reposter');
+
+    expect(res.status).toBe(403);
+    expect(res.body.reason).toBe('auth_scope_mismatch');
+    expect(mockDashboardUserModel.findById).not.toHaveBeenCalled();
+  });
+
+  test('accepts a user session only in the reposter scope', async () => {
+    const token = jwt.sign(
+      { user_id: 'r1', client_id: 'JOMBANG', role: 'user' },
+      process.env.JWT_SECRET,
+    );
+    mockRedis.get.mockResolvedValueOnce('user:r1');
+
+    const app = makeApp(verifyDashboardOrClientToken);
+    const res = await request(app)
+      .get('/protected')
+      .set('Authorization', `Bearer ${token}`)
+      .set('X-Cicero-Auth-Scope', 'reposter');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
   test('reuses dashboard validation path without double Redis lookup', async () => {
     const token = jwt.sign(
       { dashboard_user_id: 'u1', role: 'operator' },

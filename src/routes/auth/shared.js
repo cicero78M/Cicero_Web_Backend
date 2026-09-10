@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import { env } from '../../config/env.js';
 import redis from '../../config/redis.js';
 import { normalizeWhatsappNumber } from '../../utils/waHelper.js';
+import { AUTH_COOKIE_NAMES } from '../../config/authCookies.js';
 
 export const RESET_TOKEN_EXPIRY_MINUTES = Number(
   process.env.DASHBOARD_RESET_TOKEN_EXPIRY_MINUTES || 15,
@@ -11,7 +12,7 @@ export const AUTH_TOKEN_LIFETIME_SECONDS = Number(
   process.env.AUTH_TOKEN_LIFETIME_SECONDS || 2 * 60 * 60,
 );
 
-export const DEFAULT_RESET_BASE_URL = 'https://papiqo.com';
+export const DEFAULT_RESET_BASE_URL = 'https://dashboard.papiqo.com';
 
 export function buildWhatsappVariants(phoneNumber) {
   const normalized = normalizeWhatsappNumber(phoneNumber);
@@ -230,9 +231,30 @@ if (env.AUTH_COOKIE_DOMAIN) {
   cookieOptions.domain = env.AUTH_COOKIE_DOMAIN;
 }
 
-export function clearAuthCookie(res) {
-  res.clearCookie('token', {
+function clearCookieByName(res, cookieName) {
+  res.clearCookie(cookieName, {
     ...cookieOptions,
     maxAge: undefined,
+  });
+}
+
+export function setAuthCookie(res, scope, token) {
+  const cookieName = AUTH_COOKIE_NAMES[scope];
+  if (!cookieName || scope === 'legacy') {
+    throw new Error(`Unsupported auth cookie scope: ${scope}`);
+  }
+  res.cookie(cookieName, token, cookieOptions);
+  clearCookieByName(res, AUTH_COOKIE_NAMES.legacy);
+}
+
+export function clearAuthCookie(res, scope = null) {
+  if (scope && AUTH_COOKIE_NAMES[scope] && scope !== 'legacy') {
+    clearCookieByName(res, AUTH_COOKIE_NAMES[scope]);
+    clearCookieByName(res, AUTH_COOKIE_NAMES.legacy);
+    return;
+  }
+
+  Object.values(AUTH_COOKIE_NAMES).forEach((cookieName) => {
+    clearCookieByName(res, cookieName);
   });
 }

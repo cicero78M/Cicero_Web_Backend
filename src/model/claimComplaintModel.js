@@ -12,7 +12,9 @@ export async function createComplaint({
   status,
 }) {
   const complaintId = randomUUID();
-  const deduplicationKey = `${userId}\u0000${platform}\u0000${contentId}`;
+  // PostgreSQL text values cannot contain NUL bytes. JSON encoding preserves
+  // unambiguous field boundaries without sending a NUL-delimited lock key.
+  const deduplicationKey = JSON.stringify([userId, platform, contentId]);
 
   return withTransaction(async (client) => {
     // Serialize equivalent report attempts for the duration of this transaction.

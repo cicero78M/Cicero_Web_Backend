@@ -284,7 +284,7 @@ export async function sendPasswordResetToken(chatId, resetData) {
   const { username, token, expiryMinutes = 15, resetUrl } = resetData;
 
   const RESET_TOKEN_EXPIRY_MINUTES = expiryMinutes;
-  const DEFAULT_RESET_BASE_URL = 'https://papiqo.com';
+  const DEFAULT_RESET_BASE_URL = 'https://dashboard.papiqo.com';
 
   const configuredBaseUrl = resetUrl || process.env.DASHBOARD_PASSWORD_RESET_URL || process.env.DASHBOARD_URL;
   const resetBaseUrl = configuredBaseUrl || DEFAULT_RESET_BASE_URL;

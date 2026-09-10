@@ -5,10 +5,10 @@ import * as userModel from '../model/userModel.js';
 import * as claimPasswordResetModel from '../model/claimPasswordResetModel.js';
 import redis from '../config/redis.js';
 import {
+  sendClaimRecoveryEmailConfirmation,
   sendClaimPasswordResetEmail,
   sendOtpEmail,
 } from '../service/emailService.js';
-import { sendTelegramAdminMessage } from '../service/telegramService.js';
 import { sendSuccess } from '../utils/response.js';
 import { normalizeEmail, normalizeUserId } from '../utils/utilsHelper.js';
 import {
@@ -141,6 +141,7 @@ const claimProfileFields = [
   'client_id',
   'whatsapp',
   'email',
+  'email_verified_at',
   'insta',
   'tiktok',
   'instagram_accounts',
@@ -182,6 +183,91 @@ const claimPasswordResetNeutralMessage =
 const CLAIM_RESET_OTP_TTL_SECONDS = 10 * 60;
 const CLAIM_RESET_OTP_MAX_ATTEMPTS = 5;
 const CLAIM_RESET_REQUEST_COOLDOWN_SECONDS = 45;
+const CLAIM_RECOVERY_EMAIL_CONFIRM_TTL_SECONDS = 30 * 60;
+const CLAIM_EMAIL_OTP_TTL_SECONDS = 10 * 60;
+const CLAIM_EMAIL_OTP_MAX_ATTEMPTS = 5;
+
+function hashClaimOtp(value) {
+  return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+function createClaimOtp() {
+  return String(crypto.randomInt(100000, 1000000));
+}
+
+function hashClaimRecoveryToken(value) {
+  return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+async function consumeRedisSingleUse(key) {
+  if (typeof redis.getDel === 'function') {
+    try {
+      return await redis.getDel(key);
+    } catch (err) {
+      const message = String(err?.message || '');
+      if (!/unknown command\s*`?getdel`?/i.test(message)) {
+        throw err;
+      }
+    }
+  }
+
+  const lua = `
+    local value = redis.call('GET', KEYS[1])
+    if value then
+      redis.call('DEL', KEYS[1])
+    end
+    return value
+  `;
+
+  if (typeof redis.eval === 'function') {
+    return redis.eval(lua, { keys: [key] });
+  }
+
+  const value = await redis.get(key);
+  if (value !== null && value !== undefined) {
+    await redis.del(key);
+  }
+  return value;
+}
+
+function getClaimRecoveryBaseUrl() {
+  return (
+    process.env.CLAIM_PASSWORD_RESET_URL ||
+    'https://claim.papiqo.com/claim'
+  ).trim();
+}
+
+async function emailBelongsToAnotherUser(email, userId) {
+  const existing = await userModel.findUserByEmail(email);
+  return Boolean(existing && String(existing.user_id) !== String(userId));
+}
+
+async function consumeClaimEmailOtp(requestId, otp, expectedPurpose, userId) {
+  const key = `claim_email_otp:${requestId}`;
+  const raw = await redis.get(key);
+  if (!raw) return null;
+  const payload = JSON.parse(raw);
+  if (
+    payload.purpose !== expectedPurpose ||
+    (userId && String(payload.user_id) !== String(userId))
+  ) {
+    return null;
+  }
+  if (payload.otp_hash !== hashClaimOtp(otp)) {
+    const failedAttempts = Number(payload.failed_attempts || 0) + 1;
+    if (failedAttempts >= CLAIM_EMAIL_OTP_MAX_ATTEMPTS) {
+      await redis.del(key);
+    } else {
+      const ttl = await redis.ttl(key);
+      await redis.set(key, JSON.stringify({ ...payload, failed_attempts: failedAttempts }), {
+        EX: ttl > 0 ? ttl : CLAIM_EMAIL_OTP_TTL_SECONDS,
+      });
+    }
+    return null;
+  }
+  await redis.del(key);
+  return payload;
+}
 
 function getClaimResetSecret() {
   if (!process.env.JWT_SECRET) {
@@ -258,21 +344,33 @@ function findBlockedSocialUsername(usernames = [], platform) {
 }
 
 async function verifyClaimCredentials(nrp, password) {
+  const plainPassword = typeof password === 'string' ? password.trim() : '';
+  if (!plainPassword) return null;
   const user = await userModel.findUserById(nrp);
   if (!user || !user.password_hash) return null;
-  const ok = await bcrypt.compare(password, user.password_hash);
+  const ok = await bcrypt.compare(plainPassword, user.password_hash);
   return ok ? user : null;
 }
 
 export async function registerClaimCredentials(req, res, next) {
   try {
-    const { nrp: rawNrp, password } = req.body;
+    const { nrp: rawNrp, password: rawPassword, email: rawEmail } = req.body;
     const nrp = normalizeUserId(rawNrp);
+    const password = typeof rawPassword === 'string' ? rawPassword.trim() : '';
+    const email = normalizeEmail(rawEmail || '');
 
-    if (!nrp || !password) {
+    if (!nrp || !password || !email) {
       return res.status(400).json({
         success: false,
-        message: 'nrp dan password wajib diisi',
+        message: 'NRP, email, dan password wajib diisi.',
+      });
+    }
+
+    if (!isValidEmailFormat(email)) {
+      return sendValidationError(res, {
+        errorCode: validationErrorCodes.invalidEmailFormat,
+        field: 'email',
+        message: 'Format email tidak valid.',
       });
     }
 
@@ -302,31 +400,136 @@ export async function registerClaimCredentials(req, res, next) {
         .json({ success: false, message: 'NRP anda tidak terdaftar' });
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
-    const updatedUser = await userModel.setClaimCredentials(nrp, {
-      passwordHash,
-    });
-
-    if (!updatedUser) {
-      return res
-        .status(404)
-        .json({ success: false, message: 'NRP anda tidak terdaftar' });
+    if (user.password_hash) {
+      return res.status(409).json({
+        success: false,
+        message: 'Kredensial NRP sudah terdaftar. Silakan login atau gunakan lupa password.',
+      });
     }
 
-    sendSuccess(res, {
-      message:
-        'Registrasi kredensial berhasil. Silakan login menggunakan NRP dan password.',
-      user_id: updatedUser.user_id,
+    if (await emailBelongsToAnotherUser(email, nrp)) {
+      return res.status(409).json({ success: false, message: 'Email sudah digunakan akun lain.' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const requestId = crypto.randomUUID();
+    const otp = createClaimOtp();
+    await redis.set(
+      `claim_email_otp:${requestId}`,
+      JSON.stringify({
+        purpose: 'registration',
+        user_id: nrp,
+        email,
+        password_hash: passwordHash,
+        otp_hash: hashClaimOtp(otp),
+        failed_attempts: 0,
+      }),
+      { EX: CLAIM_EMAIL_OTP_TTL_SECONDS }
+    );
+    await sendOtpEmail(email, otp);
+
+    return sendSuccess(res, {
+      message: 'OTP aktivasi telah dikirim ke email. Akun aktif setelah OTP terverifikasi.',
+      request_id: requestId,
+      email,
+      otp_ttl_seconds: CLAIM_EMAIL_OTP_TTL_SECONDS,
     });
   } catch (err) {
     next(err);
   }
 }
 
+export async function verifyClaimRegistrationOtp(req, res, next) {
+  try {
+    const { request_id: requestId, otp } = req.body || {};
+    if (!requestId || !otp) {
+      return res.status(400).json({ success: false, message: 'request_id dan otp wajib diisi' });
+    }
+    const payload = await consumeClaimEmailOtp(requestId, otp, 'registration');
+    if (!payload) {
+      return res.status(400).json({ success: false, message: 'OTP tidak valid atau sudah kedaluwarsa.' });
+    }
+    const current = await userModel.findUserById(payload.user_id);
+    if (!current || current.password_hash || await emailBelongsToAnotherUser(payload.email, payload.user_id)) {
+      return res.status(409).json({ success: false, message: 'Registrasi tidak dapat diaktifkan.' });
+    }
+    const user = await userModel.activateClaimCredentials(payload.user_id, {
+      passwordHash: payload.password_hash,
+      email: payload.email,
+    });
+    return sendSuccess(res, {
+      message: 'Email terverifikasi dan akun claim telah aktif. Silakan login.',
+      user_id: user.user_id,
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function requestClaimEmailUpdate(req, res, next) {
+  try {
+    const userId = normalizeUserId(req.user?.user_id);
+    const email = normalizeEmail(req.body?.email || '');
+    const password = req.body?.password;
+    if (!userId || !email || !password || !isValidEmailFormat(email)) {
+      return res.status(400).json({ success: false, message: 'Email valid dan password aktif wajib diisi.' });
+    }
+    const user = await verifyClaimCredentials(userId, password);
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Password tidak valid.' });
+    }
+    if (await emailBelongsToAnotherUser(email, userId)) {
+      return res.status(409).json({ success: false, message: 'Email sudah digunakan akun lain.' });
+    }
+    const requestId = crypto.randomUUID();
+    const otp = createClaimOtp();
+    await redis.set(
+      `claim_email_otp:${requestId}`,
+      JSON.stringify({
+        purpose: 'email_update', user_id: userId, email,
+        otp_hash: hashClaimOtp(otp), failed_attempts: 0,
+      }),
+      { EX: CLAIM_EMAIL_OTP_TTL_SECONDS }
+    );
+    await sendOtpEmail(email, otp);
+    return sendSuccess(res, {
+      message: 'OTP konfirmasi telah dikirim ke email baru.', request_id: requestId,
+      email, otp_ttl_seconds: CLAIM_EMAIL_OTP_TTL_SECONDS,
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function verifyClaimEmailUpdate(req, res, next) {
+  try {
+    const userId = normalizeUserId(req.user?.user_id);
+    const { request_id: requestId, otp } = req.body || {};
+    if (!userId || !requestId || !otp) {
+      return res.status(400).json({ success: false, message: 'request_id dan otp wajib diisi.' });
+    }
+    const payload = await consumeClaimEmailOtp(requestId, otp, 'email_update', userId);
+    if (!payload) {
+      return res.status(400).json({ success: false, message: 'OTP tidak valid atau sudah kedaluwarsa.' });
+    }
+    if (await emailBelongsToAnotherUser(payload.email, userId)) {
+      return res.status(409).json({ success: false, message: 'Email sudah digunakan akun lain.' });
+    }
+    const user = await userModel.updateVerifiedEmail(userId, payload.email);
+    return sendSuccess(res, {
+      message: 'Email berhasil diverifikasi dan diperbarui.',
+      email: user.email, email_verified_at: user.email_verified_at,
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 export async function getUserData(req, res, next) {
   try {
-    const { nrp: rawNrp, password } = req.body;
+    const { nrp: rawNrp, password: rawPassword } = req.body;
     const nrp = normalizeUserId(rawNrp);
+    const password = typeof rawPassword === 'string' ? rawPassword.trim() : '';
     if (!nrp || !password) {
       return res.status(400).json({
         success: false,
@@ -399,7 +602,7 @@ async function updateClaimUser(req, res, next, authenticatedUserId = null) {
   try {
     const {
       nrp: rawNrp,
-      password,
+      password: rawPassword,
       nama,
       title,
       divisi,
@@ -413,6 +616,7 @@ async function updateClaimUser(req, res, next, authenticatedUserId = null) {
       email,
     } = req.body;
     const nrp = normalizeUserId(authenticatedUserId || rawNrp);
+    const password = typeof rawPassword === 'string' ? rawPassword.trim() : '';
     if (!nrp || (!authenticatedUserId && !password)) {
       return res.status(400).json({
         success: false,
@@ -527,14 +731,22 @@ async function updateClaimUser(req, res, next, authenticatedUserId = null) {
           });
         }
       }
+
+      const currentUser = await userModel.findUserById(nrp);
+      const currentEmail = normalizeEmail(currentUser?.email || '');
+      if (normalizedEmail !== currentEmail) {
+        return res.status(400).json({
+          success: false,
+          error_code: 'CLAIM_EMAIL_VERIFICATION_REQUIRED',
+          field: 'email',
+          message: 'Perubahan email wajib menggunakan verifikasi password dan OTP.',
+        });
+      }
     }
 
     const data = { nama, title, divisi, jabatan, desa };
     if (whatsapp !== undefined) {
       data.whatsapp = normalizedWhatsapp;
-    }
-    if (email !== undefined) {
-      data.email = normalizedEmail;
     }
     if (insta !== undefined) {
       if (igUsername === 'cicero_devs') {
@@ -819,22 +1031,18 @@ export async function requestClaimPasswordReset(req, res, next) {
     }
 
     const existingEmail = normalizeEmail(user?.email || '');
+    const hasVerifiedEmail = Boolean(user?.email_verified_at);
     const hasRegisteredEmail = Boolean(
       existingEmail && isValidEmailFormat(existingEmail)
     );
 
-    if (
-      !hasRegisteredEmail &&
-      (!inputEmail || !isValidEmailFormat(inputEmail))
-    ) {
+    if (!hasVerifiedEmail && (!inputEmail || !isValidEmailFormat(inputEmail))) {
       return res.status(400).json({
         success: false,
-        message: 'Email aktif wajib diisi dengan format yang valid.',
+        message: 'Email baru yang aktif wajib diisi dengan format yang valid.',
         requires_email: true,
       });
     }
-
-    const deliveryTarget = hasRegisteredEmail ? existingEmail : inputEmail;
 
     const cooldownKey = `claim_reset_req_cooldown:${nrp}`;
     const cooldownExists = await redis.get(cooldownKey);
@@ -842,11 +1050,62 @@ export async function requestClaimPasswordReset(req, res, next) {
       const ttl = await redis.ttl(cooldownKey);
       return res.status(429).json({
         success: false,
-        message: 'Permintaan OTP terlalu sering. Coba beberapa saat lagi.',
+        message: 'Permintaan pemulihan terlalu sering. Coba beberapa saat lagi.',
         retry_after_seconds:
           ttl > 0 ? ttl : CLAIM_RESET_REQUEST_COOLDOWN_SECONDS,
       });
     }
+
+    if (!hasVerifiedEmail) {
+      if (await emailBelongsToAnotherUser(inputEmail, user.user_id)) {
+        return res.status(409).json({
+          success: false,
+          message: 'Email tersebut sudah digunakan oleh akun lain.',
+        });
+      }
+
+      const confirmationId = crypto.randomUUID();
+      const confirmationToken = jwt.sign(
+        {
+          type: 'claim_recovery_email_confirmation',
+          user_id: user.user_id,
+          pending_email: inputEmail,
+          confirmation_id: confirmationId,
+        },
+        getClaimResetSecret(),
+        { expiresIn: CLAIM_RECOVERY_EMAIL_CONFIRM_TTL_SECONDS }
+      );
+
+      await redis.set(
+        `claim_recovery_email_confirmation:${confirmationId}`,
+        JSON.stringify({
+          user_id: user.user_id,
+          pending_email: inputEmail,
+          token_hash: hashClaimRecoveryToken(confirmationToken),
+        }),
+        { EX: CLAIM_RECOVERY_EMAIL_CONFIRM_TTL_SECONDS }
+      );
+      await redis.set(cooldownKey, '1', {
+        EX: CLAIM_RESET_REQUEST_COOLDOWN_SECONDS,
+      });
+
+      await sendClaimRecoveryEmailConfirmation(inputEmail, confirmationToken, {
+        nrp: user.user_id,
+        expiryMinutes: CLAIM_RECOVERY_EMAIL_CONFIRM_TTL_SECONDS / 60,
+        confirmationBaseUrl: getClaimRecoveryBaseUrl(),
+      });
+
+      return sendSuccess(res, {
+        message:
+          'Tautan konfirmasi registrasi telah dikirim ke email baru. Email akun baru akan disimpan setelah tautan dikonfirmasi.',
+        recovery_mode: 'email_confirmation',
+        confirmation_required: true,
+        email: inputEmail,
+        confirmation_ttl_seconds: CLAIM_RECOVERY_EMAIL_CONFIRM_TTL_SECONDS,
+      });
+    }
+
+    const deliveryTarget = hasRegisteredEmail ? existingEmail : inputEmail;
 
     const requestId = crypto.randomUUID();
     const otp = String(Math.floor(100000 + Math.random() * 900000));
@@ -860,7 +1119,6 @@ export async function requestClaimPasswordReset(req, res, next) {
         delivery_target: deliveryTarget,
         otp_hash: otpHash,
         failed_attempts: 0,
-        pending_email: hasRegisteredEmail ? null : inputEmail,
       }),
       { EX: CLAIM_RESET_OTP_TTL_SECONDS }
     );
@@ -874,7 +1132,7 @@ export async function requestClaimPasswordReset(req, res, next) {
       ? inputEmail && inputEmail !== existingEmail
         ? `NRP Anda terhubung dengan email ${existingEmail}. OTP dikirim ke email tersebut.`
         : `OTP berhasil dikirim ke email ${existingEmail}.`
-      : `Email pada NRP belum terdaftar. OTP dikirim ke ${inputEmail}. Setelah verifikasi, email ini akan ditautkan.`;
+      : `OTP dikirim ke ${inputEmail}.`;
 
     return sendSuccess(res, {
       message,
@@ -885,9 +1143,110 @@ export async function requestClaimPasswordReset(req, res, next) {
       otp_ttl_seconds: CLAIM_RESET_OTP_TTL_SECONDS,
     });
   } catch (err) {
-    await sendTelegramAdminMessage(
-      `⚠️ CLAIM reset OTP gagal dikirim: ${err?.message || 'unknown_error'}`
+    next(err);
+  }
+}
+
+export async function confirmClaimRecoveryEmail(req, res, next) {
+  try {
+    const token = String(req.body?.token || '').trim();
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token konfirmasi email wajib diisi.',
+      });
+    }
+
+    let payload;
+    try {
+      payload = jwt.verify(token, getClaimResetSecret());
+    } catch {
+      return res.status(400).json({
+        success: false,
+        message: 'Tautan konfirmasi email tidak valid atau sudah kedaluwarsa.',
+      });
+    }
+
+    if (
+      payload?.type !== 'claim_recovery_email_confirmation' ||
+      !payload?.user_id ||
+      !payload?.pending_email ||
+      !payload?.confirmation_id
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tautan konfirmasi email tidak valid atau sudah kedaluwarsa.',
+      });
+    }
+
+    const key = `claim_recovery_email_confirmation:${payload.confirmation_id}`;
+    const raw = await consumeRedisSingleUse(key);
+    if (!raw) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tautan konfirmasi email tidak valid atau sudah digunakan.',
+      });
+    }
+
+    const stored = JSON.parse(raw);
+    const pendingEmail = normalizeEmail(payload.pending_email);
+    if (
+      String(stored.user_id) !== String(payload.user_id) ||
+      normalizeEmail(stored.pending_email) !== pendingEmail ||
+      stored.token_hash !== hashClaimRecoveryToken(token)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tautan konfirmasi email tidak valid atau sudah digunakan.',
+      });
+    }
+
+    const user = await userModel.findUserById(payload.user_id);
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tautan konfirmasi email tidak valid atau sudah digunakan.',
+      });
+    }
+    if (user.email_verified_at) {
+      return res.status(403).json({
+        success: false,
+        error_code: 'CLAIM_EMAIL_ALREADY_VERIFIED',
+        message:
+          'Email akun sudah terverifikasi. Penggantian email tidak dapat dilakukan melalui pemulihan akun.',
+      });
+    }
+    if (await emailBelongsToAnotherUser(pendingEmail, user.user_id)) {
+      return res.status(409).json({
+        success: false,
+        message: 'Email tersebut sudah digunakan oleh akun lain.',
+      });
+    }
+
+    await userModel.updateVerifiedEmail(user.user_id, pendingEmail);
+
+    const resetToken = jwt.sign(
+      {
+        type: 'claim_password_reset',
+        user_id: user.user_id,
+        recovery: 'confirmed_new_email',
+      },
+      getClaimResetSecret(),
+      { expiresIn: '15m' }
     );
+    await claimPasswordResetModel.createResetRequest({
+      userId: user.user_id,
+      deliveryTarget: pendingEmail,
+      resetToken,
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+    });
+
+    return sendSuccess(res, {
+      message: 'Email baru berhasil dikonfirmasi. Silakan buat password baru.',
+      reset_token: resetToken,
+      email_verified: true,
+    });
+  } catch (err) {
     next(err);
   }
 }
@@ -952,14 +1311,6 @@ export async function verifyClaimPasswordResetOtp(req, res, next) {
       expiresAt,
     });
 
-    if (payload?.pending_email && isValidEmailFormat(payload.pending_email)) {
-      await userModel.updateUserField(
-        payload.user_id,
-        'email',
-        payload.pending_email
-      );
-    }
-
     const resetBaseUrl = (
       process.env.CLAIM_PASSWORD_RESET_URL ||
       process.env.DASHBOARD_PASSWORD_RESET_URL ||
@@ -985,7 +1336,10 @@ export async function verifyClaimPasswordResetOtp(req, res, next) {
 
 export async function confirmClaimPasswordReset(req, res, next) {
   try {
-    const { token, password, confirmPassword } = req.body;
+    const { token, password: rawPassword, confirmPassword: rawConfirmPassword } = req.body;
+    const password = typeof rawPassword === 'string' ? rawPassword.trim() : '';
+    const confirmPassword =
+      typeof rawConfirmPassword === 'string' ? rawConfirmPassword.trim() : '';
 
     if (!token || !password || !confirmPassword) {
       return res.status(400).json({

@@ -20,18 +20,23 @@ describe('claim complaint lifecycle deduplication', () => {
   let records;
   let now;
   let executedSql;
+  let advisoryLockKeys;
 
   beforeEach(async () => {
     jest.resetModules();
     records = [];
     executedSql = [];
+    advisoryLockKeys = [];
     now = Date.parse('2026-08-10T12:00:00.000Z');
     let transactionTail = Promise.resolve();
 
     const client = {
       query: jest.fn(async (sql, params = []) => {
         executedSql.push(sql);
-        if (sql.includes('pg_advisory_xact_lock')) return { rows: [] };
+        if (sql.includes('pg_advisory_xact_lock')) {
+          advisoryLockKeys.push(params[0]);
+          return { rows: [] };
+        }
         if (sql.includes('SELECT * FROM claim_complaints')) {
           const [userId, platform, contentId, windowMs] = params;
           const complaint = records
@@ -104,6 +109,11 @@ describe('claim complaint lifecycle deduplication', () => {
     expect(
       executedSql.filter((sql) => sql.includes('pg_advisory_xact_lock'))
     ).toHaveLength(2);
+    expect(advisoryLockKeys).toEqual([
+      JSON.stringify(['12345', 'instagram', 'ABC123']),
+      JSON.stringify(['12345', 'instagram', 'ABC123']),
+    ]);
+    expect(advisoryLockKeys.every((key) => !key.includes('\u0000'))).toBe(true);
   });
 
   test('creates a fresh complaint after the previous complaint is resolved', async () => {

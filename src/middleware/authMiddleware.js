@@ -1,6 +1,7 @@
 // src/middleware/authMiddleware.js
 import jwt from 'jsonwebtoken';
 import redis from '../config/redis.js';
+import { getAuthToken, getRequestedAuthScope } from '../config/authCookies.js';
 
 const authLogEvent = 'auth.middleware.denied';
 const maxUserAgentLength = 120;
@@ -142,6 +143,7 @@ async function ensureSessionTokenStillActive(token, req, res) {
     if (!exists) {
       return sendAuthError(res, req, 401, 'Login session has been revoked', 'revoked_token');
     }
+    req.authSessionOwner = String(exists);
     return null;
   } catch (err) {
     console.error('auth.middleware.redis_failed', {
@@ -157,6 +159,15 @@ async function ensureSessionTokenStillActive(token, req, res) {
       'auth_backend_unavailable',
     );
   }
+}
+
+function sessionOwnerMatchesScope(owner, scope) {
+  if (!scope) return true;
+  if (scope === 'dashboard') return owner.startsWith('dashboard:');
+  if (scope === 'reposter') return owner.startsWith('user:');
+  if (scope === 'penmas') return owner.startsWith('penmas:');
+  if (scope === 'client') return !owner.includes(':');
+  return false;
 }
 
 function getNumericEnv(name, fallbackValue) {
@@ -214,7 +225,8 @@ export async function authRequired(req, res, next) {
     );
   }
 
-  const token = authorizationHeader?.split(' ')[1] || req.cookies?.token;
+  const requestedScope = getRequestedAuthScope(req);
+  const token = getAuthToken(req, requestedScope);
   if (!token) {
     return sendAuthError(res, req, 401, 'Token required', 'missing_token');
   }
@@ -230,6 +242,9 @@ export async function authRequired(req, res, next) {
     const sessionError = await ensureSessionTokenStillActive(token, req, res);
     if (sessionError) {
       return sessionError;
+    }
+    if (!sessionOwnerMatchesScope(req.authSessionOwner, requestedScope)) {
+      return sendAuthError(res, req, 403, 'Forbidden', 'auth_scope_mismatch');
     }
     req.user = decoded;
     if (decoded.role === 'operator' && !isOperatorAllowedPath(req.method, req.path)) {
@@ -252,6 +267,9 @@ export async function authRequired(req, res, next) {
           const sessionError = await ensureSessionTokenStillActive(token, req, res);
           if (sessionError) {
             return sessionError;
+          }
+          if (!sessionOwnerMatchesScope(req.authSessionOwner, requestedScope)) {
+            return sendAuthError(res, req, 403, 'Forbidden', 'auth_scope_mismatch');
           }
           return next();
         }

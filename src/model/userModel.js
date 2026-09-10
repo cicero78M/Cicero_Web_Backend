@@ -440,7 +440,7 @@ export async function getUsersSocialByClient(clientId, roleFilter = null) {
 export async function findUserById(user_id) {
   const uid = normalizeUserId(user_id);
   const { rows } = await query(
-      `SELECT u.*,\n      bool_or(r.role_name='ditbinmas') AS ditbinmas,\n      bool_or(r.role_name='ditlantas') AS ditlantas,\n      bool_or(r.role_name='bidhumas') AS bidhumas,\n      bool_or(r.role_name='ditsamapta') AS ditsamapta,\n      bool_or(r.role_name='ditintelkam') AS ditintelkam,\n      bool_or(r.role_name='operator') AS operator\n     FROM "user" u\n     LEFT JOIN user_roles ur ON u.user_id = ur.user_id\n     LEFT JOIN roles r ON ur.role_id = r.role_id\n     WHERE u.user_id=$1\n     GROUP BY u.user_id`,
+      `SELECT u.*,\n      (SELECT cev.verified_at FROM claim_email_verifications cev WHERE cev.user_id = u.user_id) AS email_verified_at,\n      bool_or(r.role_name='ditbinmas') AS ditbinmas,\n      bool_or(r.role_name='ditlantas') AS ditlantas,\n      bool_or(r.role_name='bidhumas') AS bidhumas,\n      bool_or(r.role_name='ditsamapta') AS ditsamapta,\n      bool_or(r.role_name='ditintelkam') AS ditintelkam,\n      bool_or(r.role_name='operator') AS operator\n     FROM "user" u\n     LEFT JOIN user_roles ur ON u.user_id = ur.user_id\n     LEFT JOIN roles r ON ur.role_id = r.role_id\n     WHERE u.user_id=$1\n     GROUP BY u.user_id`,
     [uid]
   );
   return rows[0];
@@ -450,7 +450,7 @@ export async function findClaimProfileById(userId) {
   const uid = normalizeUserId(userId);
   const { rows } = await query(
     `SELECT u.user_id, u.nama, u.title, u.divisi, u.jabatan, u.desa,
-            u.client_id, u.whatsapp, u.email, u.insta, u.tiktok,
+            u.client_id, u.whatsapp, u.email, cev.verified_at AS email_verified_at, u.insta, u.tiktok,
             bool_or(r.role_name = 'ditbinmas') AS ditbinmas,
             bool_or(r.role_name = 'ditlantas') AS ditlantas,
             bool_or(r.role_name = 'bidhumas') AS bidhumas,
@@ -460,8 +460,9 @@ export async function findClaimProfileById(userId) {
      FROM "user" u
      LEFT JOIN user_roles ur ON u.user_id = ur.user_id
      LEFT JOIN roles r ON ur.role_id = r.role_id
+     LEFT JOIN claim_email_verifications cev ON cev.user_id = u.user_id
      WHERE u.user_id = $1
-     GROUP BY u.user_id`,
+     GROUP BY u.user_id, cev.verified_at`,
     [uid]
   );
   return rows[0] || null;
@@ -485,6 +486,49 @@ export async function setClaimCredentials(userId, { passwordHash }) {
     [passwordHash, uid]
   );
   return rows[0] || null;
+}
+
+export async function activateClaimCredentials(userId, { passwordHash, email }) {
+  const uid = normalizeUserId(userId);
+  const normalizedEmail = normalizeEmail(email);
+  const { rows } = await query(
+    `UPDATE "user"
+     SET password_hash = $1,
+         email = $2,
+         updated_at = NOW()
+     WHERE user_id = $3
+     RETURNING *`,
+    [passwordHash, normalizedEmail, uid]
+  );
+  await recordClaimEmailVerification(uid, normalizedEmail);
+  return rows[0] || null;
+}
+
+export async function updateVerifiedEmail(userId, email) {
+  const uid = normalizeUserId(userId);
+  const normalizedEmail = normalizeEmail(email);
+  const { rows } = await query(
+    `UPDATE "user"
+     SET email = $1,
+         updated_at = NOW()
+     WHERE user_id = $2
+     RETURNING *`,
+    [normalizedEmail, uid]
+  );
+  await recordClaimEmailVerification(uid, normalizedEmail);
+  return rows[0] ? { ...rows[0], email_verified_at: new Date().toISOString() } : null;
+}
+
+async function recordClaimEmailVerification(userId, email) {
+  await query(
+    `INSERT INTO claim_email_verifications (user_id, verified_email, verified_at, updated_at)
+     VALUES ($1, $2, NOW(), NOW())
+     ON CONFLICT (user_id) DO UPDATE
+     SET verified_email = EXCLUDED.verified_email,
+         verified_at = NOW(),
+         updated_at = NOW()`,
+    [userId, email]
+  );
 }
 
 // Ambil user berdasarkan user_id dan client_id

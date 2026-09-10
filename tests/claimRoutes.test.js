@@ -22,6 +22,7 @@ describe('claim routes credential flow', () => {
         user_id: '1',
         password_hash: 'hashed-password',
         email: 'user1@cicero.id',
+        email_verified_at: '2026-09-01T00:00:00.000Z',
       }),
       findClaimProfileById: jest.fn().mockResolvedValue({
         user_id: '1',
@@ -37,6 +38,8 @@ describe('claim routes credential flow', () => {
         instagram: [],
         tiktok: [],
       }),
+      findUserByEmail: jest.fn().mockResolvedValue(null),
+      updateVerifiedEmail: jest.fn().mockResolvedValue({ user_id: '1' }),
     };
     claimPasswordResetModelMocks = {
       createResetRequest: jest
@@ -47,6 +50,7 @@ describe('claim routes credential flow', () => {
     };
     emailServiceMocks = {
       sendClaimPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
+      sendClaimRecoveryEmailConfirmation: jest.fn().mockResolvedValue(undefined),
       sendOtpEmail: jest.fn().mockResolvedValue(undefined),
     };
     telegramServiceMocks = {
@@ -106,14 +110,18 @@ describe('claim routes credential flow', () => {
   });
 
   test('registers credentials with nrp/password without OTP', async () => {
+    userModelMocks.findUserById.mockResolvedValueOnce({
+      user_id: '1',
+      password_hash: null,
+      email: 'user1@cicero.id',
+    });
     const res = await request(app)
       .post('/api/claim/register')
-      .send({ nrp: '1', password: 'Password1!' });
+      .send({ nrp: '1', email: 'user1@cicero.id', password: 'Password1!' });
 
     expect(res.status).toBe(200);
-    expect(userModelMocks.setClaimCredentials).toHaveBeenCalledWith('1', {
-      passwordHash: 'hashed-password',
-    });
+    expect(emailServiceMocks.sendOtpEmail).toHaveBeenCalledTimes(1);
+    expect(userModelMocks.setClaimCredentials).not.toHaveBeenCalled();
     expect(res.body.data.password_hash).toBeUndefined();
     expect(res.body.data.reset_token).toBeUndefined();
   });
@@ -136,7 +144,7 @@ describe('claim routes credential flow', () => {
   test('rejects weak password for claim register', async () => {
     const res = await request(app)
       .post('/api/claim/register')
-      .send({ nrp: '1', password: 'abcd1234' });
+      .send({ nrp: '1', email: 'user1@cicero.id', password: 'abcd1234' });
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({
@@ -150,7 +158,7 @@ describe('claim routes credential flow', () => {
     userModelMocks.findUserById.mockResolvedValueOnce(null);
     const res = await request(app)
       .post('/api/claim/register')
-      .send({ nrp: '999', password: 'Password1!' });
+      .send({ nrp: '999', email: 'nouser@cicero.id', password: 'Password1!' });
 
     expect(res.status).toBe(404);
     expect(res.body).toEqual({
