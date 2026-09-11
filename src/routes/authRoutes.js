@@ -556,7 +556,10 @@ router.post('/user-register', async (req, res) => {
 });
 
 router.post('/user-login', async (req, res) => {
-  const { user_id, whatsapp, nrp, password } = req.body;
+  const { user_id, whatsapp, nrp, password, login_surface } = req.body;
+  const loginSource = ['claim', 'reposter'].includes(String(login_surface || '').toLowerCase())
+    ? String(login_surface).toLowerCase()
+    : 'reposter';
 
   // Support both new mechanism (user_id + whatsapp) and old mechanism (nrp + password)
   if (user_id && whatsapp) {
@@ -612,7 +615,7 @@ router.post('/user-login', async (req, res) => {
     await insertLoginLog({
       actorId: user.user_id,
       loginType: 'user',
-      loginSource: 'mobile'
+      loginSource
     });
     if (process.env.ADMIN_NOTIFY_LOGIN !== 'false') {
       const time = new Date().toLocaleString('id-ID', {
@@ -672,7 +675,7 @@ router.post('/user-login', async (req, res) => {
     await insertLoginLog({
       actorId: user.user_id,
       loginType: 'user',
-      loginSource: 'mobile'
+      loginSource
     });
     if (process.env.ADMIN_NOTIFY_LOGIN !== 'false') {
       const time = new Date().toLocaleString('id-ID', {

@@ -41,7 +41,7 @@ export const env = cleanEnv(process.env, {
   GOOGLE_CONTACT_SCOPE: str({
     default: 'https://www.googleapis.com/auth/contacts'
   }),
-  DASHBOARD_PREMIUM_ALLOWED_TIERS: str({ default: 'tier1,tier2,premium_1' })
+  DASHBOARD_PREMIUM_ALLOWED_TIERS: str({ default: 'premium_unified,tier1,tier2,premium_1' })
 });
 
 const isProduction = String(process.env.NODE_ENV || '').toLowerCase() === 'production';

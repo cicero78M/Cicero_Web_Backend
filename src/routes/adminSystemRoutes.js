@@ -10,6 +10,11 @@ import redis from '../config/redis.js';
 import { isTelegramAdmin, sendTelegramMessage } from '../service/telegramService.js';
 import { requireSystemAdminRoles, verifySystemAdminToken } from '../middleware/systemAdminAuth.js';
 import {
+  approveDashboardPremiumRequest,
+  findDashboardPremiumRequestById,
+  denyDashboardPremiumRequest,
+} from '../service/dashboardPremiumRequestService.js';
+import {
   ADMIN_SYSTEM_CONFIG_ALLOWLIST,
   analyzeAdminSystemConfig,
   getAdminSystemConfig,
@@ -621,13 +626,18 @@ router.get('/management/config/audit', async (req, res) => {
 
 router.get('/management/overview', async (_req, res) => {
   const hasFundRequests = await tableExists('system_management_fund_request');
-  const [clientResult, dashboardUserResult, premiumRequestResult, pendingFundReqResult] = await Promise.all([
+  const [clientResult, dashboardUserResult, premiumRequestResult, pendingFundReqResult, loginUsersResult] = await Promise.all([
     query('SELECT COUNT(*)::int AS total_clients FROM clients'),
     query('SELECT COUNT(*)::int AS total_dashboard_users FROM dashboard_user'),
     query("SELECT COUNT(*)::int AS total_pending_premium_requests FROM dashboard_premium_request WHERE status = 'pending'"),
     hasFundRequests
       ? query("SELECT COUNT(*)::int AS total_pending_fund_requests FROM system_management_fund_request WHERE status = 'pending'")
       : Promise.resolve({ rows: [{ total_pending_fund_requests: 0 }] }),
+    query(`SELECT
+      COUNT(DISTINCT actor_id) FILTER (WHERE login_source = 'web' AND login_type = 'operator')::int AS dashboard,
+      COUNT(DISTINCT actor_id) FILTER (WHERE login_source = 'claim')::int AS claim,
+      COUNT(DISTINCT actor_id) FILTER (WHERE login_source IN ('reposter', 'mobile') AND login_type = 'user')::int AS reposter
+      FROM login_log`),
   ]);
 
   return res.json({
@@ -637,6 +647,11 @@ router.get('/management/overview', async (_req, res) => {
       total_dashboard_users: dashboardUserResult.rows[0]?.total_dashboard_users || 0,
       total_pending_premium_requests: premiumRequestResult.rows[0]?.total_pending_premium_requests || 0,
       total_pending_fund_requests: pendingFundReqResult.rows[0]?.total_pending_fund_requests || 0,
+      login_users: {
+        dashboard: loginUsersResult.rows[0]?.dashboard || 0,
+        claim: loginUsersResult.rows[0]?.claim || 0,
+        reposter: loginUsersResult.rows[0]?.reposter || 0,
+      },
       note: 'Halaman admin system khusus manajemen global.',
     },
   });
@@ -1040,6 +1055,94 @@ router.get('/management/system-topology', async (_req, res) => {
   });
 });
 
+function normalizeMonitoredSocialUsername(rawValue, platform) {
+  if (rawValue === null || rawValue === undefined) return null;
+  let value = String(rawValue).trim().toLowerCase();
+  if (!value) return null;
+  value = value.replace(/^https?:\/\/(www\.)?/, '');
+  value = value.split(/[?#]/, 1)[0].replace(/\/$/, '');
+  const prefix = platform === 'instagram' ? 'instagram.com/' : 'tiktok.com/';
+  if (value.startsWith(prefix)) value = value.slice(prefix.length);
+  value = value.split('/')[0].replace(/^@/, '').trim();
+  return value || null;
+}
+
+router.get('/management/duplicate-monitoring', async (_req, res) => {
+  const startedAt = Date.now();
+  const checkedAt = new Date().toISOString();
+  try {
+    const tableResult = await query("SELECT to_regclass('public.user_social_accounts') AS table_name");
+    const hasAdditionalAccounts = Boolean(tableResult.rows[0]?.table_name);
+    const usersResult = await query(
+      `SELECT u.user_id, u.nama, u.title, u.jabatan, u.divisi, u.client_id, c.nama AS client_name, u.insta, u.tiktok
+       FROM "user" u
+       LEFT JOIN clients c ON LOWER(c.client_id) = LOWER(u.client_id)
+       WHERE COALESCE(u.status, true) = true`,
+    );
+    const records = [];
+    for (const user of usersResult.rows) {
+      for (const platform of ['instagram', 'tiktok']) {
+        const username = normalizeMonitoredSocialUsername(user[platform === 'instagram' ? 'insta' : 'tiktok'], platform);
+        if (username) records.push({ platform, username, user_id: user.user_id, name: user.nama || user.user_id, title: user.title || null, jabatan: user.jabatan || user.divisi || null, client_id: user.client_id || null, client_name: user.client_name || user.client_id || null, source: 'primary' });
+      }
+    }
+    if (hasAdditionalAccounts) {
+      const additional = await query(
+        `SELECT usa.user_id, usa.platform, usa.username, usa.account_order,
+                u.nama, u.title, u.jabatan, u.divisi, u.client_id, c.nama AS client_name
+         FROM user_social_accounts usa
+         JOIN "user" u ON u.user_id = usa.user_id
+         LEFT JOIN clients c ON LOWER(c.client_id) = LOWER(u.client_id)
+         WHERE COALESCE(usa.is_active, true) = true
+           AND LOWER(usa.platform) IN ('instagram', 'tiktok')`,
+      );
+      for (const account of additional.rows) {
+        const platform = String(account.platform).toLowerCase();
+        const username = normalizeMonitoredSocialUsername(account.username, platform);
+        if (username) records.push({ platform, username, user_id: account.user_id, name: account.nama || account.user_id, title: account.title || null, jabatan: account.jabatan || account.divisi || null, client_id: account.client_id || null, client_name: account.client_name || account.client_id || null, source: 'additional', account_order: account.account_order ?? null });
+      }
+    }
+
+    const groups = new Map();
+    for (const record of records) {
+      const key = `${record.platform}:${record.username}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(record);
+    }
+    const duplicateGroups = [...groups.entries()]
+      .filter(([, entries]) => entries.length > 1)
+      .map(([key, entries]) => {
+        const users = new Set(entries.map((entry) => String(entry.user_id)));
+        const clients = new Set(entries.map((entry) => String(entry.client_id || '')));
+        return {
+          platform: entries[0].platform,
+          username: entries[0].username,
+          occurrences: entries.length,
+          unique_users: users.size,
+          unique_clients: Math.max(0, clients.size - (clients.has('') ? 1 : 0)),
+          classification: users.size === 1 ? 'same_user_format_or_duplicate' : clients.size > 2 || (clients.size === 2 && !clients.has('')) ? 'cross_client' : 'same_client_multi_user',
+          records: entries.slice(0, 20),
+        };
+      })
+      .sort((a, b) => b.unique_users - a.unique_users || b.occurrences - a.occurrences || a.username.localeCompare(b.username));
+
+    const byPlatform = (platform) => {
+      const items = duplicateGroups.filter((item) => item.platform === platform);
+      return { groups: items.length, occurrences: items.reduce((sum, item) => sum + item.occurrences, 0), affected_users: new Set(items.flatMap((item) => item.records.map((record) => String(record.user_id)))).size };
+    };
+    return res.json({ success: true, data: {
+      checked_at: checkedAt,
+      latency_ms: Date.now() - startedAt,
+      source: { active_users: usersResult.rows.length, additional_accounts_table: hasAdditionalAccounts },
+      summary: { total_groups: duplicateGroups.length, total_occurrences: duplicateGroups.reduce((sum, item) => sum + item.occurrences, 0), instagram: byPlatform('instagram'), tiktok: byPlatform('tiktok'), same_user: duplicateGroups.filter((item) => item.classification === 'same_user_format_or_duplicate').length, same_client: duplicateGroups.filter((item) => item.classification === 'same_client_multi_user').length, cross_client: duplicateGroups.filter((item) => item.classification === 'cross_client').length },
+      groups: duplicateGroups.slice(0, 100),
+      truncated: duplicateGroups.length > 100,
+    }});
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Monitoring duplikasi data gagal diperiksa', error_code: 'DUPLICATE_MONITORING_FAILED' });
+  }
+});
+
 router.get('/management/payments/requests', async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(config.paginationMaxLimit, Math.max(1, Number(req.query.limit) || config.paginationDefaultLimit));
@@ -1102,34 +1205,28 @@ router.post('/management/payments/requests/:requestId/decision', requireSystemAd
     return res.status(404).json({ success: false, message: 'Request payment tidak ditemukan' });
   }
 
-  const prevStatus = existing.rows[0].status;
-  const updated = await query(
-    `UPDATE dashboard_premium_request
-     SET status = $2, responded_at = NOW(), admin_whatsapp = $3, updated_at = NOW(),
-         metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('admin_note', $4)
-     WHERE request_id = $1
-     RETURNING *`,
-    [requestId, nextStatus, req.systemAdmin.telegram_chat_id, note],
-  );
+  const request = await findDashboardPremiumRequestById(requestId);
+  if (!request) {
+    return res.status(404).json({ success: false, message: 'Request payment tidak ditemukan' });
+  }
 
-  await query(
-    `INSERT INTO dashboard_premium_request_audit (
-      request_id, dashboard_user_id, action, actor, note, status_from, status_to, admin_whatsapp, metadata
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-    [
-      requestId,
-      existing.rows[0].dashboard_user_id || null,
-      'admin_decision',
-      `system_admin:${req.systemAdmin.telegram_chat_id}`,
-      note,
-      prevStatus,
-      nextStatus,
-      req.systemAdmin.telegram_chat_id,
-      JSON.stringify({ source: 'admin_system' }),
-    ],
-  ).catch(() => null);
+  if (nextStatus === 'approved') {
+    const result = await approveDashboardPremiumRequest(request.request_token, {
+      actor: `system_admin:${req.systemAdmin.telegram_chat_id}`,
+      admin_whatsapp: req.systemAdmin.telegram_chat_id,
+      premium_tier: 'premium_unified',
+    });
+    return res.json({ success: true, data: result.request, subscription: result.subscription });
+  }
 
-  return res.json({ success: true, data: updated.rows[0] });
+  const rejected = await denyDashboardPremiumRequest(request.request_token, {
+    actor: `system_admin:${req.systemAdmin.telegram_chat_id}`,
+    admin_whatsapp: req.systemAdmin.telegram_chat_id,
+    note,
+    status: 'rejected',
+    metadata: { source: 'admin_system', admin_note: note },
+  });
+  return res.json({ success: true, data: rejected });
 });
 
 router.get('/management/funds', async (req, res) => {

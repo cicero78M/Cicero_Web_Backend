@@ -1,6 +1,6 @@
 import { env } from './env.js';
 
-const DEFAULT_ALLOWED_TIERS = ['tier1', 'tier2', 'premium_1'];
+const DEFAULT_ALLOWED_TIERS = ['premium_unified', 'tier1', 'tier2', 'premium_1'];
 
 function normalizeTier(tier) {
   return typeof tier === 'string' ? tier.trim().toLowerCase() : null;

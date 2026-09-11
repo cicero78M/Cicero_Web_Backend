@@ -39,6 +39,22 @@ export function dashboardPremiumGuard(allowedTiers = []) {
         return res.status(401).json({ success: false, message: 'Unauthorized' });
       }
 
+      // Dashboard operators for client-scoped accounts receive Premium automatically.
+      // Do this before subscription lookup so operator access does not depend on a paid row.
+      const automaticPremium =
+        String(userContext.role || '').trim().toLowerCase() === 'operator' ||
+        (String(userContext.role || '').trim().toLowerCase() === 'ditbinmas' &&
+          String(userContext.client_id || '').trim().toLowerCase() === 'ditbinmas');
+      if (automaticPremium) {
+        req.premiumGuard = {
+          premiumStatus: true,
+          premiumTier: 'premium_unified',
+          premiumExpiresAt: null,
+          automatic: true,
+        };
+        return next();
+      }
+
       let premiumStatus = userContext.premium_status;
       let premiumTier = userContext.premium_tier;
       let premiumExpiresAt = userContext.premium_expires_at;

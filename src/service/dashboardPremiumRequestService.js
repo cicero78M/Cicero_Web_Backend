@@ -49,6 +49,13 @@ function isPremiumSnapshotActive(dashboardUser = {}) {
   return expiryTime > Date.now();
 }
 
+function isDitbinmasDashboardUser(dashboardUser = {}, clientId = '') {
+  // Any dashboard user with the Ditbinmas role may request the paid Premium
+  // service. The automatic/no-CTA exception for free access remains limited
+  // to the exact DITBINMAS client + DITBINMAS role pair in the premium guard.
+  return String(dashboardUser?.role || '').trim().toLowerCase() === 'ditbinmas';
+}
+
 async function assertNoActivePremiumForRequest(dashboardUserId, dashboardUser = {}, dbClient) {
   const activeSubscription = await dashboardSubscriptionModel.findActiveByUser(
     dashboardUserId,
@@ -167,6 +174,9 @@ export async function createDashboardPremiumRequest(dashboardUser, payload = {})
     throw createServiceError('Dashboard user tidak valid', 401, 'unauthorized');
   }
   const resolvedClientId = resolveAuthorizedClientId(resolvedDashboardUser, payload.client_id);
+  if (!isDitbinmasDashboardUser(resolvedDashboardUser, resolvedClientId)) {
+    throw createServiceError('Pengajuan Premium hanya tersedia untuk client_id dan role Ditbinmas', 403, 'premium_audience');
+  }
   const requiredFields = ['bank_name', 'account_number', 'sender_name'];
   const missingField = requiredFields.find(field => !payload[field]);
   if (missingField) {
@@ -366,10 +376,11 @@ export async function denyDashboardPremiumRequest(token, adminContext = {}) {
     }
     assertPendingStatus(request, ['pending', 'confirmed']);
 
+    const deniedStatus = adminContext.status === 'rejected' ? 'rejected' : 'denied';
     const deniedRequest = await dashboardPremiumRequestModel.updateRequest(
       request.request_id,
       {
-        status: 'denied',
+        status: deniedStatus,
         responded_at: new Date(),
         admin_whatsapp: adminContext.admin_whatsapp || adminContext.adminWhatsapp || null,
         metadata: adminContext.metadata
@@ -389,7 +400,7 @@ export async function denyDashboardPremiumRequest(token, adminContext = {}) {
           whatsapp: adminContext.admin_whatsapp || adminContext.adminWhatsapp,
         }),
         status_from: request.status,
-        status_to: 'denied',
+        status_to: deniedStatus,
         admin_whatsapp: adminContext.admin_whatsapp || adminContext.adminWhatsapp || null,
         note: adminContext.note || null,
         metadata: buildAuditMetadata(deniedRequest),
