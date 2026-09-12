@@ -133,6 +133,7 @@ const createIoRedisClient = async () => {
       return ioRedis.set(key, value, ...setArgs);
     },
     del: (...args) => ioRedis.del(...args),
+    incr: (...args) => ioRedis.incr(...args),
     ttl: (...args) => ioRedis.ttl(...args),
     exists: (...args) => ioRedis.exists(...args),
     expire: (...args) => ioRedis.expire(...args),

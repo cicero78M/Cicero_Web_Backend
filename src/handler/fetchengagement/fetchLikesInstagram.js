@@ -5,6 +5,7 @@ import { sendDebug } from "../../middleware/debugHandler.js";
 import { fetchAllInstagramLikes } from "../../service/instagramApi.js";
 import { getAllExceptionUsers } from "../../model/userModel.js";
 import { saveLikeSnapshotAudit } from "../../model/instaLikeModel.js";
+import { randomUUID } from "node:crypto";
 
 const SNAPSHOT_INTERVAL_MS = 30 * 60 * 1000;
 
@@ -19,8 +20,15 @@ function normalizeDateInput(value) {
 
 function resolveSnapshotWindow(windowOverrides = {}) {
   const now = new Date();
-  const snapshotWindowEnd =
-    normalizeDateInput(windowOverrides.snapshotWindowEnd || windowOverrides.end) || now;
+  const explicitEnd = normalizeDateInput(
+    windowOverrides.snapshotWindowEnd || windowOverrides.end
+  );
+  // Default fetch harus masuk ke slot tetap (00/30 menit), bukan window
+  // bergeser dari waktu request. Dengan demikian dua fetch pada slot yang
+  // sama tidak membuat rentang timestamp yang saling tumpang tindih.
+  const snapshotWindowEnd = explicitEnd || new Date(
+    Math.floor(now.getTime() / SNAPSHOT_INTERVAL_MS) * SNAPSHOT_INTERVAL_MS
+  );
   const defaultStart = new Date(snapshotWindowEnd.getTime() - SNAPSHOT_INTERVAL_MS);
   const snapshotWindowStart =
     normalizeDateInput(windowOverrides.snapshotWindowStart || windowOverrides.start) || defaultStart;
@@ -66,7 +74,7 @@ async function getExistingLikes(shortcode) {
  * @param {string} shortcode
  * @param {string|null} client_id
  */
-async function fetchAndStoreLikes(shortcode, client_id = null, snapshotWindow = {}) {
+async function fetchAndStoreLikes(shortcode, client_id = null, snapshotWindow = {}, fetchRunId = null) {
   const allLikes = await fetchAllInstagramLikes(shortcode);
   const uniqueLikes = [...new Set(allLikes.map(normalizeUsername))];
   const exceptionUsers = await getAllExceptionUsers();
@@ -109,6 +117,8 @@ async function fetchAndStoreLikes(shortcode, client_id = null, snapshotWindow = 
     await saveLikeSnapshotAudit({
       shortcode,
       usernames: mergedLikes,
+      observedUsernames: uniqueLikes,
+      fetchRunId,
       snapshotWindowStart,
       snapshotWindowEnd,
       capturedAt,
@@ -171,11 +181,12 @@ export async function handleFetchLikesInstagram(waClient, chatId, client_id, opt
         options.snapshotWindow?.end,
       capturedAt: options.capturedAt || options.snapshotWindow?.capturedAt,
     });
+    const fetchRunId = options.fetchRunId || randomUUID();
 
     let sukses = 0, gagal = 0;
     for (const r of rows) {
       try {
-        await fetchAndStoreLikes(r.shortcode, client_id, snapshotWindow);
+        await fetchAndStoreLikes(r.shortcode, client_id, snapshotWindow, fetchRunId);
         sukses++;
       } catch (err) {
         sendDebug({

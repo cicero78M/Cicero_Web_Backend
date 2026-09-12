@@ -1074,22 +1074,60 @@ router.get('/management/duplicate-monitoring', async (_req, res) => {
     const tableResult = await query("SELECT to_regclass('public.user_social_accounts') AS table_name");
     const hasAdditionalAccounts = Boolean(tableResult.rows[0]?.table_name);
     const usersResult = await query(
-      `SELECT u.user_id, u.nama, u.title, u.jabatan, u.divisi, u.client_id, c.nama AS client_name, u.insta, u.tiktok
+      `SELECT u.user_id, u.nama, u.title, u.jabatan, u.divisi, u.desa, u.client_id, c.nama AS client_name,
+              u.email, u.whatsapp, u.insta, u.tiktok,
+              (SELECT STRING_AGG(DISTINCT r.role_name, ', ' ORDER BY r.role_name)
+               FROM user_roles ur JOIN roles r ON r.role_id = ur.role_id
+               WHERE ur.user_id = u.user_id) AS roles
        FROM "user" u
        LEFT JOIN clients c ON LOWER(c.client_id) = LOWER(u.client_id)
        WHERE COALESCE(u.status, true) = true`,
     );
     const records = [];
+    const dashboardUsersResult = await query(
+      `SELECT du.dashboard_user_id, du.username, du.nama, du.nrp, du.email, du.whatsapp,
+              r.role_name, duc.client_id
+       FROM dashboard_user du
+       LEFT JOIN roles r ON r.role_id = du.role_id
+       LEFT JOIN dashboard_user_clients duc ON duc.dashboard_user_id = du.dashboard_user_id
+       WHERE COALESCE(du.status, true) = true
+         AND COALESCE(du.approval_status, 'approved') = 'approved'
+         AND NULLIF(TRIM(du.nrp), '') IS NOT NULL`,
+    );
+    for (const user of dashboardUsersResult.rows) {
+      records.push({
+        platform: 'nrp',
+        username: String(user.nrp).trim().toLowerCase(),
+        user_id: user.dashboard_user_id,
+        login_username: user.username,
+        nrp: String(user.nrp).trim(),
+        name: user.nama || user.username || user.dashboard_user_id,
+        title: null,
+        jabatan: user.role_name || null,
+        divisi: null,
+        desa: null,
+        roles: user.role_name || null,
+        email: user.email || null,
+        whatsapp: user.whatsapp || null,
+        client_id: user.client_id || null,
+        client_name: user.client_id || null,
+        source: 'dashboard',
+      });
+    }
     for (const user of usersResult.rows) {
       for (const platform of ['instagram', 'tiktok']) {
         const username = normalizeMonitoredSocialUsername(user[platform === 'instagram' ? 'insta' : 'tiktok'], platform);
-        if (username) records.push({ platform, username, user_id: user.user_id, name: user.nama || user.user_id, title: user.title || null, jabatan: user.jabatan || user.divisi || null, client_id: user.client_id || null, client_name: user.client_name || user.client_id || null, source: 'primary' });
+        if (username) records.push({ platform, username, nrp: user.user_id, user_id: user.user_id, login_username: user.user_id, name: user.nama || user.user_id, title: user.title || null, jabatan: user.jabatan || null, divisi: user.divisi || null, desa: user.desa || null, roles: user.roles || null, email: user.email || null, whatsapp: user.whatsapp || null, client_id: user.client_id || null, client_name: user.client_name || user.client_id || null, source: 'primary' });
       }
     }
     if (hasAdditionalAccounts) {
       const additional = await query(
         `SELECT usa.user_id, usa.platform, usa.username, usa.account_order,
-                u.nama, u.title, u.jabatan, u.divisi, u.client_id, c.nama AS client_name
+                u.nama, u.title, u.jabatan, u.divisi, u.desa, u.client_id, c.nama AS client_name,
+                u.email, u.whatsapp,
+                (SELECT STRING_AGG(DISTINCT r.role_name, ', ' ORDER BY r.role_name)
+                 FROM user_roles ur JOIN roles r ON r.role_id = ur.role_id
+                 WHERE ur.user_id = u.user_id) AS roles
          FROM user_social_accounts usa
          JOIN "user" u ON u.user_id = usa.user_id
          LEFT JOIN clients c ON LOWER(c.client_id) = LOWER(u.client_id)
@@ -1099,7 +1137,7 @@ router.get('/management/duplicate-monitoring', async (_req, res) => {
       for (const account of additional.rows) {
         const platform = String(account.platform).toLowerCase();
         const username = normalizeMonitoredSocialUsername(account.username, platform);
-        if (username) records.push({ platform, username, user_id: account.user_id, name: account.nama || account.user_id, title: account.title || null, jabatan: account.jabatan || account.divisi || null, client_id: account.client_id || null, client_name: account.client_name || account.client_id || null, source: 'additional', account_order: account.account_order ?? null });
+        if (username) records.push({ platform, username, nrp: account.user_id, user_id: account.user_id, login_username: account.user_id, name: account.nama || account.user_id, title: account.title || null, jabatan: account.jabatan || null, divisi: account.divisi || null, desa: account.desa || null, roles: account.roles || null, email: account.email || null, whatsapp: account.whatsapp || null, client_id: account.client_id || null, client_name: account.client_name || account.client_id || null, source: 'additional', account_order: account.account_order ?? null });
       }
     }
 
@@ -1133,8 +1171,8 @@ router.get('/management/duplicate-monitoring', async (_req, res) => {
     return res.json({ success: true, data: {
       checked_at: checkedAt,
       latency_ms: Date.now() - startedAt,
-      source: { active_users: usersResult.rows.length, additional_accounts_table: hasAdditionalAccounts },
-      summary: { total_groups: duplicateGroups.length, total_occurrences: duplicateGroups.reduce((sum, item) => sum + item.occurrences, 0), instagram: byPlatform('instagram'), tiktok: byPlatform('tiktok'), same_user: duplicateGroups.filter((item) => item.classification === 'same_user_format_or_duplicate').length, same_client: duplicateGroups.filter((item) => item.classification === 'same_client_multi_user').length, cross_client: duplicateGroups.filter((item) => item.classification === 'cross_client').length },
+      source: { active_users: usersResult.rows.length, active_dashboard_users: dashboardUsersResult.rows.length, additional_accounts_table: hasAdditionalAccounts },
+      summary: { total_groups: duplicateGroups.length, total_occurrences: duplicateGroups.reduce((sum, item) => sum + item.occurrences, 0), nrp: byPlatform('nrp'), instagram: byPlatform('instagram'), tiktok: byPlatform('tiktok'), same_user: duplicateGroups.filter((item) => item.classification === 'same_user_format_or_duplicate').length, same_client: duplicateGroups.filter((item) => item.classification === 'same_client_multi_user').length, cross_client: duplicateGroups.filter((item) => item.classification === 'cross_client').length },
       groups: duplicateGroups.slice(0, 100),
       truncated: duplicateGroups.length > 100,
     }});

@@ -488,9 +488,8 @@ export async function fetchSinglePostKhusus(linkOrCode, clientId) {
       ? info.carousel_media.map(i => i.image_versions?.items?.[0]?.url).filter(Boolean)
       : null,
     is_carousel: Array.isArray(info.carousel_media) && info.carousel_media.length > 1,
-    // Untuk post tugas khusus, created_at merepresentasikan waktu input tugas
-    // agar alur pelaporan mengikuti assignment terbaru, bukan waktu publish asli.
-    created_at: new Date().toISOString()
+    // Untuk post tugas khusus, created_at diisi oleh database menggunakan jam
+    // Asia/Jakarta. Jangan mengirim ISO UTC ke kolom timestamp without time zone.
   };
   await upsertInstaPostKhusus(data);
   try {

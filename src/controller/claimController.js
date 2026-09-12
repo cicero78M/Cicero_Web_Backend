@@ -21,6 +21,7 @@ import {
 } from '../utils/dateFilterValidation.js';
 import { getPendingContentForUser } from '../service/claimPendingContentService.js';
 import { fetchClaimSocialProfile } from '../service/claimSocialProfileService.js';
+import { issueDashboardOtp, verifyDashboardOtp } from '../service/dashboardVerificationService.js';
 import {
   extractInstagramUsername,
   extractTiktokUsername,
@@ -140,6 +141,8 @@ const claimProfileFields = [
   'desa',
   'client_id',
   'whatsapp',
+  'whatsapp_verified',
+  'whatsapp_verified_at',
   'email',
   'email_verified_at',
   'insta',
@@ -313,7 +316,7 @@ function normalizeSocialAccounts(rawValue, platform) {
     const username = extractor(String(item));
     if (!username) return null;
     const dedupeKey =
-      platform === 'tiktok' ? username.replace(/^@/, '') : username;
+      platform === 'tiktok' ? username.replace(/^@/, '').toLowerCase() : username.toLowerCase();
     if (!seen.has(dedupeKey)) {
       seen.add(dedupeKey);
       normalized.push(username);
@@ -327,7 +330,7 @@ function findDuplicateSocialUsername(usernames = [], platform) {
   const seen = new Set();
   for (const username of usernames) {
     const dedupeKey =
-      platform === 'tiktok' ? username.replace(/^@/, '') : username;
+      platform === 'tiktok' ? username.replace(/^@/, '').toLowerCase() : username.toLowerCase();
     if (seen.has(dedupeKey)) return username;
     seen.add(dedupeKey);
   }
@@ -337,7 +340,7 @@ function findDuplicateSocialUsername(usernames = [], platform) {
 function findBlockedSocialUsername(usernames = [], platform) {
   for (const username of usernames) {
     const dedupeKey =
-      platform === 'tiktok' ? username.replace(/^@/, '') : username;
+      platform === 'tiktok' ? username.replace(/^@/, '').toLowerCase() : username.toLowerCase();
     if (dedupeKey === 'cicero_devs') return username;
   }
   return null;
@@ -523,6 +526,28 @@ export async function verifyClaimEmailUpdate(req, res, next) {
   } catch (err) {
     return next(err);
   }
+}
+
+export async function requestClaimWhatsappOtp(req, res, next) {
+  try {
+    const userId = normalizeUserId(req.user?.user_id);
+    const user = userId ? await userModel.findUserById(userId) : null;
+    if (!user?.whatsapp) return res.status(400).json({ success: false, message: 'Nomor WhatsApp belum diisi.' });
+    const result = await issueDashboardOtp({ dashboardUserId: userId, channel: 'whatsapp', target: user.whatsapp });
+    return sendSuccess(res, { ...result, message: 'OTP verifikasi WhatsApp telah dikirim.' });
+  } catch (err) { return next(err); }
+}
+
+export async function verifyClaimWhatsappOtp(req, res, next) {
+  try {
+    const userId = normalizeUserId(req.user?.user_id);
+    const user = userId ? await userModel.findUserById(userId) : null;
+    const otp = String(req.body?.otp || '').trim();
+    if (!user?.whatsapp || !otp) return res.status(400).json({ success: false, message: 'OTP dan nomor WhatsApp wajib tersedia.' });
+    await verifyDashboardOtp({ dashboardUserId: userId, channel: 'whatsapp', target: user.whatsapp, otp });
+    const updated = await userModel.markWhatsappVerified(userId);
+    return sendSuccess(res, { message: 'WhatsApp berhasil diverifikasi.', whatsapp_verified: true, whatsapp_verified_at: updated?.whatsapp_verified_at || new Date().toISOString() });
+  } catch (err) { return next(err); }
 }
 
 export async function getUserData(req, res, next) {
@@ -717,6 +742,27 @@ async function updateClaimUser(req, res, next, authenticatedUserId = null) {
       }
     }
 
+    if (whatsapp !== undefined && normalizedWhatsapp) {
+      const whatsappConflict = await userModel.findWhatsappConflict(
+        nrp,
+        normalizedWhatsapp
+      );
+      if (whatsappConflict) {
+        return res.status(409).json({
+          success: false,
+          error_code: 'CLAIM_WHATSAPP_CONFLICT',
+          field: 'whatsapp',
+          message: 'Nomor WhatsApp sudah digunakan akun lain.',
+        });
+      }
+    }
+
+    let whatsappChanged = false;
+    if (whatsapp !== undefined) {
+      const currentUser = await userModel.findUserById(nrp);
+      whatsappChanged = normalizedWhatsapp !== normalizeWhatsappNumber(currentUser?.whatsapp || '');
+    }
+
     let normalizedEmail;
     if (email !== undefined) {
       if (email === null || email === '') {
@@ -747,6 +793,10 @@ async function updateClaimUser(req, res, next, authenticatedUserId = null) {
     const data = { nama, title, divisi, jabatan, desa };
     if (whatsapp !== undefined) {
       data.whatsapp = normalizedWhatsapp;
+      if (whatsappChanged) {
+        data.whatsapp_verified = false;
+        data.whatsapp_verified_at = null;
+      }
     }
     if (insta !== undefined) {
       if (igUsername === 'cicero_devs') {
@@ -798,9 +848,8 @@ async function updateClaimUser(req, res, next, authenticatedUserId = null) {
           'Terdeteksi duplikasi username Instagram pada input username 1/2. Gunakan username yang berbeda.',
       });
     }
-    if (instagramAccountsPayload?.length && insta === undefined) {
-      data.insta = instagramAccountsPayload[0];
-    }
+    // Saat profile memakai instagram_accounts, tabel multi-akun menjadi sumber utama.
+    // Jangan menulis ulang kolom legacy `user.insta` pada save biasa.
 
     let tiktokAccountsPayload = normalizedTiktokAccounts;
     if (tiktok !== undefined) {
@@ -831,9 +880,8 @@ async function updateClaimUser(req, res, next, authenticatedUserId = null) {
           'Terdeteksi duplikasi username TikTok pada input username 1/2. Gunakan username yang berbeda.',
       });
     }
-    if (tiktokAccountsPayload?.length && tiktok === undefined) {
-      data.tiktok = tiktokAccountsPayload[0];
-    }
+    // Saat profile memakai tiktok_accounts, tabel multi-akun menjadi sumber utama.
+    // Jangan menulis ulang kolom legacy `user.tiktok` pada save biasa.
 
     const socialAccountUpdates = [
       {
@@ -910,6 +958,15 @@ async function updateClaimUser(req, res, next, authenticatedUserId = null) {
     sendSuccess(res, responseData);
   } catch (err) {
     if (err?.code === '23505') {
+      const constraint = String(err?.constraint || '').toLowerCase();
+      if (constraint.includes('whatsapp')) {
+        return res.status(409).json({
+          success: false,
+          error_code: 'CLAIM_WHATSAPP_CONFLICT',
+          field: 'whatsapp',
+          message: 'Nomor WhatsApp sudah digunakan akun lain.',
+        });
+      }
       return res.status(409).json({
         success: false,
         message: 'Username Instagram/TikTok sudah digunakan akun lain.',

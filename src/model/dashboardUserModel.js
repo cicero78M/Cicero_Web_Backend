@@ -221,6 +221,9 @@ export async function createUser(data) {
         data.email,
       ]
     );
+    if (data.whatsapp) {
+      await query('UPDATE dashboard_user SET whatsapp=$2 WHERE dashboard_user_id=$1', [data.dashboard_user_id, data.whatsapp]);
+    }
     return res.rows[0];
   } catch (err) {
     if (!isUndefinedApprovalStatusColumnError(err)) {
@@ -243,6 +246,9 @@ export async function createUser(data) {
         data.email,
       ]
     );
+    if (data.whatsapp) {
+      await query('UPDATE dashboard_user SET whatsapp=$2 WHERE dashboard_user_id=$1', [data.dashboard_user_id, data.whatsapp]);
+    }
     return withApprovalStatusFallback(fallbackRes.rows[0], approvalStatus);
   }
 }
@@ -323,5 +329,20 @@ export async function updatePasswordHash(dashboardUserId, passwordHash) {
     'UPDATE dashboard_user SET password_hash=$2, updated_at=NOW() WHERE dashboard_user_id=$1 RETURNING *',
     [dashboardUserId, passwordHash]
   );
+  return res.rows[0] || null;
+}
+
+export async function updateProfile(dashboardUserId, data) {
+  const fields = ['nama', 'pangkat', 'nrp', 'satfung', 'email', 'whatsapp', 'email_verified', 'email_verified_at', 'whatsapp_verified', 'whatsapp_verified_at'];
+  const values = [dashboardUserId];
+  const assignments = [];
+  for (const field of fields) {
+    if (!Object.prototype.hasOwnProperty.call(data, field)) continue;
+    values.push(data[field]);
+    assignments.push(`${field}=$${values.length}`);
+  }
+  if (!assignments.length) return findById(dashboardUserId);
+  assignments.push('updated_at=NOW()');
+  const res = await query(`UPDATE dashboard_user SET ${assignments.join(', ')} WHERE dashboard_user_id=$1 RETURNING *`, values);
   return res.rows[0] || null;
 }

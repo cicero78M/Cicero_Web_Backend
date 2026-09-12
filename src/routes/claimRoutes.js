@@ -9,6 +9,8 @@ import {
   verifyClaimRegistrationOtp,
   requestClaimEmailUpdate,
   verifyClaimEmailUpdate,
+  requestClaimWhatsappOtp,
+  verifyClaimWhatsappOtp,
   getUserData,
   getClaimMe,
   updateUserData,
@@ -24,6 +26,7 @@ import {
   getClaimComplaints,
   resolveClaimComplaint,
 } from '../controller/claimComplaintLifecycleController.js';
+import * as userModel from '../model/userModel.js';
 
 const router = express.Router();
 const claimSocialValidationLimiter = rateLimit({
@@ -49,9 +52,24 @@ router.post('/user-data', getUserData); // body: { nrp, password }
 router.put('/update', updateUserData); // body: { nrp, password, ... }
 router.put('/edit', updateUserData); // backward-compatible alias for /claim/edit
 router.get('/me', authRequired, getClaimMe);
+router.get('/satfung-options', authRequired, async (req, res, next) => {
+  try {
+    const userId = req.user?.user_id;
+    const profile = await userModel.findClaimProfileById(userId);
+    if (!profile?.client_id) {
+      return res.json({ success: true, data: [] });
+    }
+    const options = await userModel.getClaimSatfungOptions(profile.client_id);
+    return res.json({ success: true, data: options });
+  } catch (error) {
+    return next(error);
+  }
+});
 router.put('/me', authRequired, updateClaimMe);
 router.post('/email/request', authRequired, requestClaimEmailUpdate);
 router.post('/email/verify', authRequired, verifyClaimEmailUpdate);
+router.post('/whatsapp/request', authRequired, requestClaimWhatsappOtp);
+router.post('/whatsapp/verify', authRequired, verifyClaimWhatsappOtp);
 router.get('/pending-content', authRequired, getPendingContent);
 router.post(
   '/complaints/triage',

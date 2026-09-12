@@ -9,6 +9,7 @@ import {
   extractUsernamesFromCommentTree,
   normalizeTiktokCommentUsername,
 } from "../../utils/tiktokCommentUsernameExtractor.js";
+import { randomUUID } from "node:crypto";
 
 const MAX_COMMENT_FETCH_ATTEMPTS = 3;
 const COMMENT_FETCH_RETRY_DELAY_MS = 2000;
@@ -35,8 +36,14 @@ function normalizeDateInput(value) {
 
 function resolveSnapshotWindow(windowOverrides = {}) {
   const now = new Date();
-  const snapshotWindowEnd =
-    normalizeDateInput(windowOverrides.snapshotWindowEnd || windowOverrides.end) || now;
+  const explicitEnd = normalizeDateInput(
+    windowOverrides.snapshotWindowEnd || windowOverrides.end
+  );
+  // Gunakan slot waktu tetap 30 menit agar fetch berulang pada periode yang
+  // sama memiliki window identik dan tidak menggeser history ke fetch terakhir.
+  const snapshotWindowEnd = explicitEnd || new Date(
+    Math.floor(now.getTime() / SNAPSHOT_INTERVAL_MS) * SNAPSHOT_INTERVAL_MS
+  );
   const defaultStart = new Date(snapshotWindowEnd.getTime() - SNAPSHOT_INTERVAL_MS);
   const snapshotWindowStart =
     normalizeDateInput(windowOverrides.snapshotWindowStart || windowOverrides.start) || defaultStart;
@@ -143,6 +150,7 @@ export async function handleFetchKomentarTiktokBatch(waClient = null, chatId = n
         options.snapshotWindow?.end,
       capturedAt: options.capturedAt || options.snapshotWindow?.capturedAt,
     });
+    const fetchRunId = options.fetchRunId || randomUUID();
 
     const videoResults = await Promise.all(
       videoIds.map((video_id) =>
@@ -179,6 +187,8 @@ export async function handleFetchKomentarTiktokBatch(waClient = null, chatId = n
             await saveCommentSnapshotAudit({
               video_id,
               usernames: mergedUsernames,
+              observedUsernames: uniqueUsernames,
+              fetchRunId,
               snapshotWindowStart: snapshotWindow.snapshotWindowStart,
               snapshotWindowEnd: snapshotWindow.snapshotWindowEnd,
               capturedAt: snapshotWindow.capturedAt,

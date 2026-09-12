@@ -26,6 +26,21 @@ export function mergeStaticDivisions(divisions = []) {
   return merged;
 }
 
+function filterProfileSatfungOptions(divisions = []) {
+  const allowed = /^(?:POLSEK|SAT\b|SAT[A-Z]|SI\b|SIE\b|BAG\b|BAG[A-Z]|SPKT\b|SUBBID\b|SUB BAG\b|BINMAS\b|SABHARA\b)/i;
+  const excluded = /^(?:BKTM|BHABINKAMTIBMAS|KANIT|KAUR|KBO|KAPOLSEK|WAKAPOLSEK|P\.S\b|P\.S\s)/i;
+  const seen = new Set();
+  return divisions
+    .map((division) => String(division || '').replace(/\s+/g, ' ').trim())
+    .filter((division) => division && allowed.test(division) && !excluded.test(division))
+    .filter((division) => {
+      const key = division.toUpperCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
 function buildNamePriorityCase(alias = 'u') {
   const column = alias ? `${alias}.nama` : 'nama';
   const upperColumn = `UPPER(COALESCE(${column}, ''))`;
@@ -43,6 +58,13 @@ async function hasUserSocialAccountsTable() {
   const { rows } = await query("SELECT to_regclass('public.user_social_accounts') AS table_name");
   hasUserSocialAccountsTableCache = Boolean(rows[0]?.table_name);
   return hasUserSocialAccountsTableCache;
+}
+
+function getSocialUsernameSelect(alias = 'u') {
+  return {
+    insta: `COALESCE((SELECT usa.username FROM user_social_accounts usa WHERE usa.user_id = ${alias}.user_id AND usa.platform = 'instagram' AND usa.is_active = TRUE ORDER BY usa.account_order ASC, usa.created_at ASC LIMIT 1), ${alias}.insta)`,
+    tiktok: `COALESCE((SELECT usa.username FROM user_social_accounts usa WHERE usa.user_id = ${alias}.user_id AND usa.platform = 'tiktok' AND usa.is_active = TRUE ORDER BY usa.account_order ASC, usa.created_at ASC LIMIT 1), ${alias}.tiktok)`,
+  };
 }
 
 async function addRole(userId, roleName) {
@@ -224,8 +246,9 @@ export async function getClientsByRole(roleName, clientId = null) {
 // Ambil semua user aktif (status = true), tanpa filter insta
 export async function getUsersByClient(client_id, roleFilter = null) {
   const { clause, params } = await buildClientFilter(client_id, 'u', 1, roleFilter);
+  const social = await getSocialUsernameSelect('u');
   const res = await query(
-    `SELECT u.user_id, u.nama, u.tiktok, u.insta, u.divisi, u.title, u.status, u.exception, u.jabatan,
+    `SELECT u.user_id, u.nama, ${social.tiktok} AS tiktok, ${social.insta} AS insta, u.divisi, u.title, u.status, u.exception, u.jabatan,
             u.whatsapp, u.email, u.client_id, c.nama AS client_name, c.regional_id AS regional_id
      FROM "user" u
      LEFT JOIN clients c ON LOWER(c.client_id) = LOWER(u.client_id)
@@ -237,8 +260,9 @@ export async function getUsersByClient(client_id, roleFilter = null) {
 
 // Ambil semua user aktif berdasarkan client_id yang spesifik dan role tertentu
 export async function getUsersByClientAndRole(client_id, roleFilter = null) {
+  const social = await getSocialUsernameSelect('u');
   const params = [client_id];
-  let sql = `SELECT u.user_id, u.nama, u.tiktok, u.insta, u.divisi, u.title, u.status, u.exception, u.jabatan,
+  let sql = `SELECT u.user_id, u.nama, ${social.tiktok} AS tiktok, ${social.insta} AS insta, u.divisi, u.title, u.status, u.exception, u.jabatan,
             u.whatsapp, u.email, u.client_id, c.nama AS client_name, c.regional_id AS regional_id
      FROM "user" u
      LEFT JOIN clients c ON LOWER(c.client_id) = LOWER(u.client_id)
@@ -274,8 +298,9 @@ export async function findClientIdByUserId(userId) {
 
 export async function getOperatorsByClient(client_id) {
   const { clause, params } = await buildClientFilter(client_id, 'u', 1);
+  const social = await getSocialUsernameSelect('u');
   const res = await query(
-    `SELECT u.user_id, u.nama, u.tiktok, u.insta, u.divisi, u.title, u.status, u.exception, u.whatsapp
+    `SELECT u.user_id, u.nama, ${social.tiktok} AS tiktok, ${social.insta} AS insta, u.divisi, u.title, u.status, u.exception, u.whatsapp
      FROM "user" u
      JOIN user_roles ur_opr ON ur_opr.user_id = u.user_id
      JOIN roles r_opr ON ur_opr.role_id = r_opr.role_id
@@ -288,8 +313,9 @@ export async function getOperatorsByClient(client_id) {
 // Ambil semua user aktif (status = true/NULL), khusus absensi TikTok
 export async function getUsersByClientFull(client_id, roleFilter = null) {
   const { clause, params } = await buildClientFilter(client_id, 'u', 1, roleFilter);
+  const social = await getSocialUsernameSelect('u');
   const res = await query(
-    `SELECT user_id, nama, tiktok, divisi, title, exception
+    `SELECT user_id, nama, ${social.tiktok} AS tiktok, divisi, title, exception
      FROM "user" u
      WHERE ${clause} AND (status IS TRUE OR status IS NULL)`,
     params
@@ -428,7 +454,7 @@ export async function getUsersSocialByClient(clientId, roleFilter = null) {
   }
 
   const res = await query(
-      `SELECT u.user_id, u.nama, u.title, u.divisi, u.insta, u.tiktok, u.client_id
+      `SELECT u.user_id, u.nama, u.title, u.divisi, ${getSocialUsernameSelect('u').insta} AS insta, ${getSocialUsernameSelect('u').tiktok} AS tiktok, u.client_id
        FROM "user" u
        WHERE ${directorateClause} AND status = true
        ORDER BY u.client_id, u.divisi, u.nama`,
@@ -450,7 +476,7 @@ export async function findClaimProfileById(userId) {
   const uid = normalizeUserId(userId);
   const { rows } = await query(
     `SELECT u.user_id, u.nama, u.title, u.divisi, u.jabatan, u.desa,
-            u.client_id, u.whatsapp, u.email, cev.verified_at AS email_verified_at, u.insta, u.tiktok,
+            u.client_id, u.whatsapp, u.whatsapp_verified, u.whatsapp_verified_at, u.email, cev.verified_at AS email_verified_at, u.insta, u.tiktok,
             bool_or(r.role_name = 'ditbinmas') AS ditbinmas,
             bool_or(r.role_name = 'ditlantas') AS ditlantas,
             bool_or(r.role_name = 'bidhumas') AS bidhumas,
@@ -517,6 +543,16 @@ export async function updateVerifiedEmail(userId, email) {
   );
   await recordClaimEmailVerification(uid, normalizedEmail);
   return rows[0] ? { ...rows[0], email_verified_at: new Date().toISOString() } : null;
+}
+
+export async function markWhatsappVerified(userId) {
+  const uid = normalizeUserId(userId);
+  const { rows } = await query(
+    `UPDATE "user" SET whatsapp_verified = TRUE, whatsapp_verified_at = NOW(), updated_at = NOW()
+     WHERE user_id = $1 RETURNING *`,
+    [uid]
+  );
+  return rows[0] || null;
 }
 
 async function recordClaimEmailVerification(userId, email) {
@@ -654,8 +690,11 @@ export async function getUsersByDirektorat(flag, clientId = null) {
   const params = [flag];
   let p = 2;
 
+  const social = getSocialUsernameSelect('u');
   let sql = `SELECT
       u.*,
+      ${social.insta} AS effective_insta,
+      ${social.tiktok} AS effective_tiktok,
       c.regional_id AS regional_id,
       bool_or(r.role_name='ditbinmas') AS ditbinmas,
       bool_or(r.role_name='ditlantas') AS ditlantas,
@@ -695,7 +734,14 @@ export async function getUsersByDirektorat(flag, clientId = null) {
   console.log('[USER MODEL] getUsersByDirektorat Params:', params);
   const { rows } = await query(sql, params);
   console.log(`[USER MODEL] getUsersByDirektorat returning ${rows.length} users`);
-  return rows;
+  return rows.map((row) => {
+    const { effective_insta, effective_tiktok, ...user } = row;
+    return {
+      ...user,
+      insta: effective_insta ?? user.insta,
+      tiktok: effective_tiktok ?? user.tiktok,
+    };
+  });
 }
 
 
@@ -763,7 +809,43 @@ export async function getAvailableSatfung(clientId = null, roleFilter = null) {
     );
   }
   const divisions = res.rows.map((r) => r.divisi).filter(Boolean);
-  return mergeStaticDivisions(divisions);
+  return mergeStaticDivisions(filterProfileSatfungOptions(divisions));
+}
+
+const CLAIM_PRIMARY_SATFUNG = new Set([
+  'SUBBID MULTIMEDIA', 'SUBBID PENMAS', 'SUBBID PID', 'SUB BAG RENMIN',
+  'BAG LOG', 'BAG SDM', 'BAG REN', 'BAG OPS', 'BAG RENMIN',
+  'SAT SAMAPTA', 'SAT RESKRIM', 'SAT INTEL', 'SAT INTELKAM', 'SAT NARKOBA',
+  'SAT BINMAS', 'SAT LANTAS', 'SAT PPA', 'SAT TAHTI', 'SAT POLAIR',
+  'SI UM', 'SI TIK', 'SI WAS', 'SI PROPAM', 'SI DOKES', 'SPKT',
+  'DITBINMAS', 'SUBBAGRENMIN', 'BAGBINOPSNAL', 'SUBDIT BINPOLMAS',
+  'SUBDIT SATPAMPOLSUS', 'SUBDIT BHABINKAMTIBMAS', 'SUBDIT BINTIBSOS',
+  'SUBDIT DALMAS', 'SUBDIT GASUM', 'SUBDIT I', 'SUBDIT II', 'SUBDIT III',
+  'SUBDIT IV', 'SUBDIT V', 'BAG ANALIS', 'SIE INTELTEK', 'SIE YANMIN',
+  'SIE SANDI', 'SIE HUMAS', 'SIE KEU', 'SIE KUM', 'PAM OBVIT', 'UNIT POLSATWA',
+]);
+
+/** Claim dropdown: only divisions belonging to the user's real client_id. */
+export async function getClaimSatfungOptions(clientId) {
+  const normalizedClientId = String(clientId || '').trim();
+  if (!normalizedClientId) return [];
+  const { rows } = await query(
+    `SELECT DISTINCT REGEXP_REPLACE(TRIM(divisi), '\\s+', ' ', 'g') AS divisi
+     FROM "user"
+     WHERE client_id = $1 AND divisi IS NOT NULL AND TRIM(divisi) <> ''
+     ORDER BY divisi`,
+    [normalizedClientId]
+  );
+  const seen = new Set();
+  return rows
+    .map((row) => String(row.divisi || '').trim())
+    .filter((division) => {
+      const key = division.toUpperCase();
+      const isPolsek = key.startsWith('POLSEK');
+      if ((!isPolsek && !CLAIM_PRIMARY_SATFUNG.has(key)) || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }
 
 // --- Tambahkan fungsi createUser ---
@@ -833,6 +915,8 @@ export async function updateUser(userId, userData) {
     'desa',
     'status',
     'whatsapp',
+    'whatsapp_verified',
+    'whatsapp_verified_at',
     'email',
     'insta',
     'tiktok',
@@ -899,6 +983,17 @@ export async function replaceUserSocialAccounts(userId, platform, usernames = []
     throw new Error('platform tidak valid');
   }
 
+  const uniqueUsernames = [];
+  const seenUsernames = new Set();
+  for (const username of usernames) {
+    if (!username) continue;
+    const value = String(username).trim();
+    const key = value.replace(/^@/, '').toLowerCase();
+    if (!key || seenUsernames.has(key)) continue;
+    seenUsernames.add(key);
+    uniqueUsernames.push(value);
+  }
+
   await query('BEGIN');
   try {
     await query(
@@ -907,9 +1002,8 @@ export async function replaceUserSocialAccounts(userId, platform, usernames = []
       [uid, normalizedPlatform]
     );
 
-    for (let index = 0; index < usernames.length; index += 1) {
-      const username = usernames[index];
-      if (!username) continue;
+    for (let index = 0; index < uniqueUsernames.length; index += 1) {
+      const username = uniqueUsernames[index];
       await query(
         `INSERT INTO user_social_accounts (user_id, platform, username, account_order, is_active)
          VALUES ($1, $2, $3, $4, TRUE)`,
@@ -982,6 +1076,23 @@ export async function findSocialUsernameOwner(platform, usernames = []) {
      ORDER BY created_at ASC
      LIMIT 1`,
     [normalizedPlatform, normalizedUsernames]
+  );
+  return rows[0] || null;
+}
+
+export async function findWhatsappConflict(userId, whatsapp) {
+  const uid = normalizeUserId(userId);
+  const normalized = normalizeWhatsappField(whatsapp);
+  if (!normalized) return null;
+
+  const { rows } = await query(
+    `SELECT user_id, whatsapp
+     FROM "user"
+     WHERE user_id <> $1
+       AND whatsapp IS NOT NULL
+       AND REGEXP_REPLACE(whatsapp, '[^0-9]', '', 'g') = $2
+     LIMIT 1`,
+    [uid, normalized]
   );
   return rows[0] || null;
 }

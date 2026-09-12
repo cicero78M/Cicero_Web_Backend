@@ -43,6 +43,7 @@ import {
   handleDashboardPasswordResetRequest,
 } from './auth/passwordResetHandlers.js';
 import { verifyDashboardOrClientToken } from '../middleware/dashboardAuth.js';
+import { issueDashboardOtp, verifyDashboardOtp } from '../service/dashboardVerificationService.js';
 
 export {
   handleDashboardPasswordResetConfirm,
@@ -64,7 +65,6 @@ router.get('/session', verifyDashboardOrClientToken, (req, res) => {
       dashboard_user_id: user.dashboard_user_id || null,
       user_id: user.user_id || null,
       username: user.username || null,
-      nama: user.nama || null,
       role: user.role || null,
       role_id: user.role_id || null,
       client_id: user.client_id || null,
@@ -72,8 +72,89 @@ router.get('/session', verifyDashboardOrClientToken, (req, res) => {
       premium_status: Boolean(user.premium_status),
       premium_tier: user.premium_tier || null,
       premium_expires_at: user.premium_expires_at || null,
+      email: user.email || null,
+      whatsapp: user.whatsapp || null,
+      nama: user.nama || null,
+      pangkat: user.pangkat || null,
+      nrp: user.nrp || null,
+      satfung: user.satfung || null,
+      email_verified: Boolean(user.email_verified),
+      email_verified_at: user.email_verified_at || null,
+      whatsapp_verified: Boolean(user.whatsapp_verified),
+      whatsapp_verified_at: user.whatsapp_verified_at || null,
     },
   });
+});
+
+router.get('/dashboard-satfung', verifyDashboardOrClientToken, async (req, res) => {
+  const user = req.user || {};
+  const clientId = user.client_id || user.client_ids?.[0] || null;
+  // Gunakan client_id dari token, bukan query dari browser. Logika ini sama
+  // dengan Claim: satfung utama dan POLSEK yang benar-benar milik client akun.
+  const options = clientId ? await userModel.getClaimSatfungOptions(clientId) : [];
+  return res.json({ success: true, data: options });
+});
+
+router.put('/dashboard-profile', verifyDashboardOrClientToken, async (req, res) => {
+  const user = req.user || {};
+  const allowed = ['nama', 'pangkat', 'nrp', 'satfung', 'email', 'whatsapp'];
+  const update = {};
+  for (const field of allowed) {
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, field)) update[field] = String(req.body[field] ?? '').trim() || null;
+  }
+  if (update.nrp && !/^[A-Za-z0-9./-]{3,50}$/.test(update.nrp)) {
+    return res.status(400).json({ success: false, message: 'NRP tidak valid' });
+  }
+  if (update.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(update.email)) {
+    return res.status(400).json({ success: false, message: 'Format email tidak valid' });
+  }
+  if (update.whatsapp && !/^\+?[0-9\s().-]{8,20}$/.test(update.whatsapp)) {
+    return res.status(400).json({ success: false, message: 'Format WhatsApp tidak valid' });
+  }
+  if (update.whatsapp) update.whatsapp = normalizeWhatsappNumber(update.whatsapp);
+  if (Object.prototype.hasOwnProperty.call(update, 'whatsapp') && !update.whatsapp) {
+    return res.status(400).json({ success: false, message: 'Nomor WhatsApp tidak valid' });
+  }
+  const changedEmail = Object.prototype.hasOwnProperty.call(update, 'email') && update.email !== (user.email || null);
+  const changedWhatsapp = Object.prototype.hasOwnProperty.call(update, 'whatsapp') && update.whatsapp !== (user.whatsapp || null);
+  if (changedEmail) Object.assign(update, { email_verified: false, email_verified_at: null });
+  if (changedWhatsapp) Object.assign(update, { whatsapp_verified: false, whatsapp_verified_at: null });
+  const updated = await dashboardUserModel.updateProfile(user.dashboard_user_id, update);
+  const safeUpdated = { ...updated };
+  delete safeUpdated.password_hash;
+  return res.json({ success: true, data: safeUpdated });
+});
+
+router.post('/dashboard-verification/request', verifyDashboardOrClientToken, async (req, res) => {
+  try {
+    const user = req.user || {};
+    const channel = String(req.body?.channel || '').toLowerCase();
+    const target = channel === 'email' ? user.email : user.whatsapp;
+    if (!target) return res.status(400).json({ success: false, message: `Data ${channel} belum diisi` });
+    const result = await issueDashboardOtp({ dashboardUserId: user.dashboard_user_id, channel, target });
+    return res.json({ success: true, data: result, message: `OTP ${channel} telah dikirim` });
+  } catch (err) {
+    return res.status(err.statusCode || 500).json({ success: false, message: err.message || 'Gagal mengirim OTP' });
+  }
+});
+
+router.post('/dashboard-verification/confirm', verifyDashboardOrClientToken, async (req, res) => {
+  try {
+    const user = req.user || {};
+    const channel = String(req.body?.channel || '').toLowerCase();
+    const target = channel === 'email' ? user.email : user.whatsapp;
+    await verifyDashboardOtp({ dashboardUserId: user.dashboard_user_id, channel, target, otp: req.body?.otp });
+    const verifiedAt = new Date().toISOString();
+    const update = channel === 'email'
+      ? { email_verified: true, email_verified_at: verifiedAt }
+      : { whatsapp_verified: true, whatsapp_verified_at: verifiedAt };
+    const updated = await dashboardUserModel.updateProfile(user.dashboard_user_id, update);
+    const safeUpdated = { ...updated };
+    delete safeUpdated.password_hash;
+    return res.json({ success: true, data: safeUpdated, message: `Validasi ${channel} berhasil` });
+  } catch (err) {
+    return res.status(err.statusCode || 500).json({ success: false, message: err.message || 'OTP tidak dapat diverifikasi' });
+  }
 });
 
 function getApprovalNotificationStatus(results) {
@@ -174,7 +255,7 @@ router.post('/penmas-login', async (req, res) => {
 router.post('/dashboard-register', async (req, res) => {
   // telegram_chat_id is intentionally not accepted from public registration.
   // Admin/operator must populate it only after verifying ownership of the Telegram chat.
-  let { username, password, role_id, role, client_ids, client_id, email } = req.body;
+  let { username, password, role_id, role, client_ids, client_id, email, whatsapp } = req.body;
   const status = false;
   const clientIds = client_ids || (client_id ? [client_id] : []);
   if (!username || !password || !email) {
@@ -188,6 +269,10 @@ router.post('/dashboard-register', async (req, res) => {
     return res
       .status(400)
       .json({ success: false, message: 'email tidak valid' });
+  }
+  const normalizedWhatsapp = whatsapp ? normalizeWhatsappNumber(whatsapp) : null;
+  if (whatsapp && !normalizedWhatsapp) {
+    return res.status(400).json({ success: false, message: 'whatsapp tidak valid' });
   }
   const existing = await dashboardUserModel.findByUsername(username);
   if (existing) {
@@ -245,6 +330,7 @@ router.post('/dashboard-register', async (req, res) => {
     status,
     approval_status: 'pending',
     email,
+    whatsapp: normalizedWhatsapp,
   });
   if (clientIds.length > 0) {
     await dashboardUserModel.addClients(dashboard_user_id, clientIds);

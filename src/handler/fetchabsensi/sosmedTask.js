@@ -118,8 +118,13 @@ async function fetchLikesWithAudit(shortcodes, snapshotWindow) {
     snapshotWindow.start,
     snapshotWindow.end
   );
+  // Gunakan hasil observasi mentah dari fetch ini. `usernames` berisi merge
+  // historis dan dapat membuat pelaksanaan lama terbaca pada fetch terbaru.
   const auditMap = new Map(
-    auditRows.map((row) => [row.shortcode, normalizeUsernamesArray(row.usernames)])
+    auditRows.map((row) => [
+      row.shortcode,
+      normalizeUsernamesArray(row.observed_usernames),
+    ])
   );
   const likesList = [];
   for (const sc of shortcodes) {
@@ -127,8 +132,9 @@ async function fetchLikesWithAudit(shortcodes, snapshotWindow) {
       likesList.push(auditMap.get(sc));
       continue;
     }
-    const fallback = await getLikesByShortcode(sc).catch(() => []);
-    likesList.push(normalizeUsernamesArray(fallback));
+    // Bila window fetch diminta tetapi audit belum tersedia, jangan membaca
+    // tabel merge karena itu akan mencampurkan aktivitas lintas window.
+    likesList.push([]);
   }
   return { likesList, auditUsed: auditMap.size > 0 };
 }
@@ -157,7 +163,10 @@ async function fetchCommentsWithAudit(posts, snapshotWindow) {
     snapshotWindow.end
   );
   const auditMap = new Map(
-    auditRows.map((row) => [row.video_id, normalizeUsernamesArray(row.usernames)])
+    auditRows.map((row) => [
+      row.video_id,
+      normalizeUsernamesArray(row.observed_usernames),
+    ])
   );
   const commentList = [];
   for (const vid of videoIds) {
@@ -165,8 +174,8 @@ async function fetchCommentsWithAudit(posts, snapshotWindow) {
       commentList.push(auditMap.get(vid));
       continue;
     }
-    const fallback = await getCommentsByVideoId(vid).catch(() => ({ comments: [] }));
-    commentList.push(normalizeUsernamesArray(fallback?.comments || []));
+    // Jangan fallback ke komentar merge ketika window fetch ditentukan.
+    commentList.push([]);
   }
   return { commentList, auditUsed: auditMap.size > 0 };
 }

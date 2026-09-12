@@ -216,6 +216,8 @@ export const findByVideoId = getCommentsByVideoId;
 export async function saveCommentSnapshotAudit({
   video_id,
   usernames = [],
+  observedUsernames = usernames,
+  fetchRunId = null,
   snapshotWindowStart,
   snapshotWindowEnd,
   capturedAt = new Date(),
@@ -229,10 +231,15 @@ export async function saveCommentSnapshotAudit({
   const normalizedUsernames = Array.isArray(usernames)
     ? usernames.filter(Boolean)
     : [];
+  const normalizedObservedUsernames = Array.isArray(observedUsernames)
+    ? observedUsernames.filter(Boolean)
+    : [];
   const result = await query(
-    `INSERT INTO tiktok_comment_audit (video_id, usernames, snapshot_window_start, snapshot_window_end, captured_at)
-     VALUES ($1, $2, $3::timestamptz, $4::timestamptz, $5::timestamptz)`,
-    [video_id, JSON.stringify(normalizedUsernames), startParam, endParam, capturedParam]
+    `INSERT INTO tiktok_comment_audit
+       (video_id, usernames, observed_usernames, fetch_run_id,
+        snapshot_window_start, snapshot_window_end, captured_at)
+     VALUES ($1, $2, $3, $4::uuid, $5::timestamptz, $6::timestamptz, $7::timestamptz)`,
+    [video_id, JSON.stringify(normalizedUsernames), JSON.stringify(normalizedObservedUsernames), fetchRunId, startParam, endParam, capturedParam]
   );
   return result.rowCount || 0;
 }
@@ -260,6 +267,7 @@ export async function getLatestCommentAuditByWindow(
     SELECT DISTINCT ON (video_id)
       video_id,
       usernames,
+      observed_usernames,
       snapshot_window_start,
       snapshot_window_end,
       captured_at
@@ -275,6 +283,9 @@ export async function getLatestCommentAuditByWindow(
   return rows.map((row) => ({
     video_id: row.video_id,
     usernames: normalizeUsernamePayload(row.usernames),
+    observed_usernames: normalizeUsernamePayload(
+      row.observed_usernames ?? row.usernames
+    ),
     snapshot_window_start: row.snapshot_window_start,
     snapshot_window_end: row.snapshot_window_end,
     captured_at: row.captured_at,

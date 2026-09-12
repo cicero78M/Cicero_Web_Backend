@@ -7,10 +7,14 @@ jest.unstable_mockModule('../src/repository/db.js', () => ({
 
 let findByClientId;
 let getPostsByClientAndDateRange;
+let getPostsTodayByClient;
+let upsertInstaPost;
 beforeAll(async () => {
   ({
     findByClientId,
     getPostsByClientAndDateRange,
+    getPostsTodayByClient,
+    upsertInstaPost,
   } = await import('../src/model/instaPostKhususModel.js'));
 });
 
@@ -31,8 +35,25 @@ test('getPostsByClientAndDateRange supports days option', async () => {
   mockQuery.mockResolvedValueOnce({ rows: [] });
   await getPostsByClientAndDateRange('c1', { days: 7 });
   const sql = mockQuery.mock.calls[0][0];
-  expect(sql).toContain("created_at >= NOW() - ($2 * INTERVAL '1 day')");
+  expect(sql).toContain("created_at >= (NOW() AT TIME ZONE 'Asia/Jakarta') - ($2 * INTERVAL '1 day')");
   expect(mockQuery.mock.calls[0][1]).toEqual(['c1', 7]);
+});
+
+test('upsertInstaPost records assignment time using Jakarta database clock', async () => {
+  mockQuery.mockResolvedValueOnce({ rows: [] });
+  await upsertInstaPost({ client_id: 'KEDIRI', shortcode: 'abc123' });
+  const [sql, params] = mockQuery.mock.calls[0];
+  expect(sql).toContain("NOW() AT TIME ZONE 'Asia/Jakarta'");
+  expect(sql).not.toContain('COALESCE($11');
+  expect(params).toHaveLength(10);
+});
+
+test('getPostsTodayByClient compares against Jakarta calendar date', async () => {
+  mockQuery.mockResolvedValueOnce({ rows: [] });
+  await getPostsTodayByClient('KEDIRI');
+  const [sql, params] = mockQuery.mock.calls[0];
+  expect(sql).toContain("created_at::date = (NOW() AT TIME ZONE 'Asia/Jakarta')::date");
+  expect(params).toEqual(['KEDIRI']);
 });
 
 test('getPostsByClientAndDateRange supports start and end dates', async () => {

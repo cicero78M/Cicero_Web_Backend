@@ -511,7 +511,7 @@ export async function getRekapLinkByClient(
       u.user_id,
       u.title,
       u.nama,
-      u.insta AS username,
+      COALESCE((SELECT usa.username FROM user_social_accounts usa WHERE usa.user_id = u.user_id AND usa.platform = 'instagram' AND usa.is_active = TRUE ORDER BY usa.account_order ASC, usa.created_at ASC LIMIT 1), u.insta) AS username,
      u.divisi,
      u.exception,
       COALESCE(ls.jumlah_link, 0) AS jumlah_link,
@@ -525,7 +525,7 @@ export async function getRekapLinkByClient(
      LEFT JOIN link_sum ls ON ls.user_id = u.user_id
      WHERE u.status = true
      AND ${userWhere}
-    GROUP BY u.client_id,  u.user_id, u.title, u.nama, u.insta, u.divisi, u.exception, ls.jumlah_link, ls.instagram_link, ls.facebook_link, ls.twitter_link, ls.tiktok_link, ls.youtube_link
+    GROUP BY u.client_id, u.user_id, u.title, u.nama, u.insta, u.divisi, u.exception, ls.jumlah_link, ls.instagram_link, ls.facebook_link, ls.twitter_link, ls.tiktok_link, ls.youtube_link
     ORDER BY
       ${priorityExpr} ASC,
       CASE WHEN ${priorityExpr} = ${fallbackRank} THEN UPPER(u.nama) END ASC,
