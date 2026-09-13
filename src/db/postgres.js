@@ -23,8 +23,10 @@ const pool = new Pool({
   // Never let a saturated or stale pool leave HTTP requests hanging forever.
   // These are client-side pool/query limits; they do not change PostgreSQL
   // configuration or data.
-  connectionTimeoutMillis: 5000,
-  query_timeout: 12000,
+  max: env.DB_POOL_MAX,
+  idleTimeoutMillis: env.DB_IDLE_TIMEOUT_MS,
+  connectionTimeoutMillis: env.DB_CONNECT_TIMEOUT_MS,
+  query_timeout: env.DB_QUERY_TIMEOUT_MS,
 });
 
 export const query = (text, params) => {
