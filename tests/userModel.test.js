@@ -56,7 +56,8 @@ test('findClaimProfileById selects only claim-safe profile columns', async () =>
   const [sql, params] = mockQuery.mock.calls[0];
   expect(sql).not.toContain('u.*');
   expect(sql).not.toContain('password_hash');
-  expect(sql).toContain('u.whatsapp, u.email, u.insta, u.tiktok');
+  expect(sql).toContain('u.whatsapp, u.whatsapp_verified');
+  expect(sql).toContain('u.email, cev.verified_at AS email_verified_at, u.insta, u.tiktok');
   expect(params).toEqual(['1']);
 });
 

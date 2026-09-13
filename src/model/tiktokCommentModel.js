@@ -617,35 +617,70 @@ export async function getRekapKomentarByClient(
       JOIN LATERAL jsonb_array_elements_text(c.comments) cmt ON TRUE
       WHERE ${commentTanggalFilter}
     ),
+    user_accounts AS (
+      SELECT
+        u.user_id,
+        lower(replace(trim(coalesce(usa.username, '')), '@', '')) AS username
+      FROM "user" u
+      JOIN user_social_accounts usa ON usa.user_id = u.user_id
+      WHERE LOWER(usa.platform) = 'tiktok'
+        AND usa.is_active = TRUE
+        AND trim(coalesce(usa.username, '')) <> ''
+
+      UNION ALL
+
+      -- Keep u.tiktok only when no active TikTok account has been migrated.
+      SELECT
+        u.user_id,
+        lower(replace(trim(coalesce(u.tiktok, '')), '@', '')) AS username
+      FROM "user" u
+      WHERE trim(coalesce(u.tiktok, '')) <> ''
+        AND NOT EXISTS (
+          SELECT 1
+          FROM user_social_accounts usa
+          WHERE usa.user_id = u.user_id
+            AND LOWER(usa.platform) = 'tiktok'
+            AND usa.is_active = TRUE
+            AND trim(coalesce(usa.username, '')) <> ''
+        )
+    ),
     total_posts AS (
       SELECT COUNT(*) AS total_konten
       FROM scoped_posts
     ),
-    comment_counts AS (
+    user_comment_counts AS (
       SELECT
-        username,
-        COUNT(DISTINCT video_id) AS jumlah_komentar,
-        ARRAY_AGG(DISTINCT video_id ORDER BY video_id)
-          FILTER (WHERE video_id IS NOT NULL) AS completed_video_ids
-      FROM valid_comments
-      GROUP BY username
+        ua.user_id,
+        COUNT(DISTINCT vc.video_id) AS jumlah_komentar,
+        ARRAY_AGG(DISTINCT vc.video_id ORDER BY vc.video_id)
+          FILTER (WHERE vc.video_id IS NOT NULL) AS completed_video_ids
+      FROM user_accounts ua
+      JOIN valid_comments vc ON ua.username = vc.username
+      GROUP BY ua.user_id
     )
     SELECT
       u.client_id,
       u.user_id,
       u.title,
       u.nama,
-      u.tiktok AS username,
+      COALESCE((
+        SELECT usa.username
+        FROM user_social_accounts usa
+        WHERE usa.user_id = u.user_id
+          AND LOWER(usa.platform) = 'tiktok'
+          AND usa.is_active = TRUE
+        ORDER BY usa.account_order ASC, usa.created_at ASC
+        LIMIT 1
+      ), u.tiktok) AS username,
       u.divisi,
       cl.nama AS client_name,
       cl.regional_id,
-      COALESCE(cc.jumlah_komentar, 0) AS jumlah_komentar,
-      COALESCE(cc.completed_video_ids, ARRAY[]::text[]) AS completed_video_ids,
+      COALESCE(ucc.jumlah_komentar, 0) AS jumlah_komentar,
+      COALESCE(ucc.completed_video_ids, ARRAY[]::text[]) AS completed_video_ids,
       tp.total_konten
     FROM "user" u
     JOIN clients cl ON cl.client_id = u.client_id
-    LEFT JOIN comment_counts cc
-      ON lower(replace(trim(coalesce(u.tiktok, '')), '@', '')) = cc.username
+    LEFT JOIN user_comment_counts ucc ON ucc.user_id = u.user_id
     CROSS JOIN total_posts tp
     WHERE u.status = true
       AND ${userWhere}

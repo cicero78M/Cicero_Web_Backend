@@ -103,6 +103,29 @@ test('query normalizes instagram usernames', async () => {
   expectPriorityParams(mockQuery.mock.calls[0][1], ['1']);
 });
 
+test('keeps legacy instagram field as fallback while preferring active social accounts', async () => {
+  mockQuery.mockResolvedValueOnce({ rows: [] });
+  mockQuery.mockResolvedValueOnce({ rows: [{ total_post: 0 }] });
+  await getRekapLikesByClient('1');
+  const sql = mockQuery.mock.calls[0][0];
+  expect(sql).toContain('user_social_accounts');
+  expect(sql).toContain('usa.is_active = TRUE');
+  expect(sql).toContain("trim(coalesce(u.insta, '')) <> ''");
+  expect(sql).toContain('AND NOT EXISTS (');
+  expect(sql).toContain('COALESCE((');
+});
+
+test('aggregates all active instagram accounts into one row per user', async () => {
+  mockQuery.mockResolvedValueOnce({ rows: [] });
+  mockQuery.mockResolvedValueOnce({ rows: [{ total_post: 0 }] });
+  await getRekapLikesByClient('1');
+  const sql = mockQuery.mock.calls[0][0];
+  expect(sql).toContain('user_like_counts AS (');
+  expect(sql).toContain('COUNT(DISTINCT vl.shortcode) AS jumlah_like');
+  expect(sql).toContain('GROUP BY ua.user_id');
+  expect(sql).toContain('LEFT JOIN user_like_counts ulc ON ulc.user_id = u.user_id');
+});
+
 test('parses jumlah_like as integer', async () => {
   mockQuery.mockResolvedValueOnce({
     rows: [{

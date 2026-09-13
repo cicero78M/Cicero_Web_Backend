@@ -155,13 +155,68 @@ const createIoRedisClient = async () => {
   };
 };
 
-const redis = await (async () => {
-  try {
-    return await createNodeRedisClient();
-  } catch (err) {
-    console.error('[Redis] Failed to initialize node-redis client, falling back to ioredis', err);
-    return createIoRedisClient();
-  }
-})();
+const createInMemoryTestClient = () => {
+  const values = new Map();
+  const sets = new Map();
+  return {
+    get: async (key) => values.get(key) ?? null,
+    set: async (key, value) => {
+      values.set(key, value);
+      return 'OK';
+    },
+    del: async (...keys) => {
+      let deleted = 0;
+      for (const key of keys) {
+        deleted += Number(values.delete(key));
+        deleted += Number(sets.delete(key));
+      }
+      return deleted;
+    },
+    incr: async (key) => {
+      const next = Number(values.get(key) || 0) + 1;
+      values.set(key, String(next));
+      return next;
+    },
+    ttl: async () => -1,
+    exists: async (key) => Number(values.has(key) || sets.has(key)),
+    expire: async (key) => Number(values.has(key) || sets.has(key)),
+    ping: async () => 'PONG',
+    sAdd: async (key, ...members) => {
+      const set = sets.get(key) || new Set();
+      const previousSize = set.size;
+      members.flat().forEach((member) => set.add(member));
+      sets.set(key, set);
+      return set.size - previousSize;
+    },
+    sMembers: async (key) => [...(sets.get(key) || [])],
+    sRem: async (key, ...members) => {
+      const set = sets.get(key);
+      if (!set) return 0;
+      let removed = 0;
+      members.flat().forEach((member) => {
+        removed += Number(set.delete(member));
+      });
+      return removed;
+    },
+    on: () => undefined,
+    connect: async () => undefined,
+    quit: async () => 'OK',
+    disconnect: async () => undefined,
+  };
+};
+
+const redis = process.env.NODE_ENV === 'test'
+  ? createInMemoryTestClient()
+  : await (async () => {
+      try {
+        return await createNodeRedisClient();
+      } catch (err) {
+        console.error(
+          '[Redis] Failed to initialize node-redis client, falling back to ioredis',
+          err,
+        );
+        return createIoRedisClient();
+      }
+    })();
 
 export default redis;

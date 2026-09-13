@@ -19,6 +19,7 @@ jest.unstable_mockModule('../src/config/redis.js', () => ({
 }));
 jest.unstable_mockModule('../src/model/claimPasswordResetModel.js', () => ({}));
 jest.unstable_mockModule('../src/service/emailService.js', () => ({
+  sendClaimRecoveryEmailConfirmation: jest.fn(),
   sendClaimPasswordResetEmail: jest.fn(),
   sendOtpEmail: jest.fn(),
 }));

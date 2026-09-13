@@ -20,6 +20,9 @@ describe('dedupRequest middleware', () => {
     jest.unstable_mockModule('../src/config/redis.js', () => ({
       default: redisMock
     }));
+    jest.unstable_mockModule('../src/config/env.js', () => ({
+      env: { ALLOW_DUPLICATE_REQUESTS: false }
+    }));
 
     const { dedupRequest } = await import('../src/middleware/dedupRequestMiddleware.js');
 

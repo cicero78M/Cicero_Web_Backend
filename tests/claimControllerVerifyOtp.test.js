@@ -18,8 +18,13 @@ beforeEach(async () => {
     setClaimCredentials: jest.fn(),
   }));
   jest.unstable_mockModule('../src/model/claimPasswordResetModel.js', () => ({}));
+  jest.unstable_mockModule('../src/config/redis.js', () => ({
+    default: {},
+  }));
   jest.unstable_mockModule('../src/service/emailService.js', () => ({
+    sendClaimRecoveryEmailConfirmation: jest.fn(),
     sendClaimPasswordResetEmail: jest.fn(),
+    sendOtpEmail: jest.fn(),
   }));
   jest.unstable_mockModule('../src/service/telegramService.js', () => ({
     sendTelegramAdminMessage: jest.fn(),
@@ -38,13 +43,13 @@ test('returns 400 when nrp or password is missing', async () => {
   expect(res.status).toHaveBeenCalledWith(400);
   expect(res.json).toHaveBeenCalledWith({
     success: false,
-    message: 'nrp dan password wajib diisi',
+    message: 'NRP, email, dan password wajib diisi.',
   });
 });
 
 test('returns 404 when user is not found', async () => {
   userModel.findUserById.mockResolvedValue(null);
-  const req = { body: { nrp: '1', password: 'Password1!' } };
+  const req = { body: { nrp: '1', email: 'user@example.com', password: 'Password1!' } };
   const res = createRes();
 
   await registerClaimCredentials(req, res, () => {});

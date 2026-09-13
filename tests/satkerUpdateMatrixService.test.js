@@ -17,7 +17,7 @@ jest.unstable_mockModule('../src/service/clientService.js', () => ({
   findClientById: mockFindClientById,
 }));
 
-jest.unstable_mockModule('xlsx', () => ({
+jest.unstable_mockModule('../src/utils/xlsxCompat.js', () => ({
   default: {
     utils: {
       aoa_to_sheet: mockAoAToSheet,

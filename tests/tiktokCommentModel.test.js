@@ -89,7 +89,7 @@ test('getRekapKomentarByClient filters directorate users by ditbinmas role only'
   expect(sql).toContain('LEFT JOIN tiktok_post_roles pr');
   expect(sql).toMatch(/LOWER\(pr\.role_name\) = LOWER\(\$\d+\)/);
   expect(sql).toContain('pr.video_id IS NOT NULL');
-  expect(sql).not.toContain('NOT EXISTS (');
+  expect(sql).not.toContain('FROM tiktok_post_roles pr_all');
   expect(sql).not.toContain('LOWER(u.client_id) = ANY');
   const params = mockQuery.mock.calls[1][1];
   expect(params).toEqual(expect.arrayContaining(['ditbinmas']));
@@ -125,6 +125,31 @@ test('getRekapKomentarByClient orders nama by priority list', async () => {
   expect(matches.length).toBeGreaterThanOrEqual(PRIORITY_UPPER.length);
   expect(sql).toContain('CASE WHEN');
   expect(sql).toContain('UPPER(u.nama)');
+});
+
+test('keeps legacy tiktok field as fallback while preferring active social accounts', async () => {
+  mockClientType();
+  mockQuery.mockResolvedValueOnce({ rows: [] });
+  mockQuery.mockResolvedValueOnce({ rows: [] });
+  await getRekapKomentarByClient('POLRES');
+  const sql = mockQuery.mock.calls[1][0];
+  expect(sql).toContain('user_social_accounts');
+  expect(sql).toContain('usa.is_active = TRUE');
+  expect(sql).toContain("trim(coalesce(u.tiktok, '')) <> ''");
+  expect(sql).toContain('AND NOT EXISTS (');
+  expect(sql).toContain('COALESCE((');
+});
+
+test('aggregates all active tiktok accounts into one row per user', async () => {
+  mockClientType();
+  mockQuery.mockResolvedValueOnce({ rows: [] });
+  mockQuery.mockResolvedValueOnce({ rows: [] });
+  await getRekapKomentarByClient('POLRES');
+  const sql = mockQuery.mock.calls[1][0];
+  expect(sql).toContain('user_comment_counts AS (');
+  expect(sql).toContain('COUNT(DISTINCT vc.video_id) AS jumlah_komentar');
+  expect(sql).toContain('GROUP BY ua.user_id');
+  expect(sql).toContain('LEFT JOIN user_comment_counts ucc ON ucc.user_id = u.user_id');
 });
 
 

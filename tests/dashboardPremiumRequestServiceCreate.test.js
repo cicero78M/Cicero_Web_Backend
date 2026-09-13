@@ -47,6 +47,7 @@ beforeEach(() => {
     dashboard_user_id: 'user-1',
     username: 'tester',
     whatsapp: '12345',
+    role: 'ditbinmas',
     client_ids: ['client-1'],
   });
   mockFindActiveSubscriptionByUser.mockResolvedValue(null);

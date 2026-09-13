@@ -27,6 +27,7 @@ beforeEach(async () => {
     default: {},
   }));
   jest.unstable_mockModule('../src/service/emailService.js', () => ({
+    sendClaimRecoveryEmailConfirmation: jest.fn(),
     sendClaimPasswordResetEmail: jest.fn(),
     sendOtpEmail: jest.fn(),
   }));

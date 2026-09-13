@@ -31,8 +31,13 @@ beforeEach(async () => {
     findActiveByToken: jest.fn(),
     markTokenUsed: jest.fn(),
   }));
+  jest.unstable_mockModule('../src/config/redis.js', () => ({
+    default: {},
+  }));
   jest.unstable_mockModule('../src/service/emailService.js', () => ({
+    sendClaimRecoveryEmailConfirmation: jest.fn(),
     sendClaimPasswordResetEmail: jest.fn(),
+    sendOtpEmail: jest.fn(),
   }));
   jest.unstable_mockModule('../src/service/telegramService.js', () => ({
     sendTelegramAdminMessage: jest.fn(),

@@ -99,8 +99,8 @@ test.each([
         : null
     );
     const req = {
-      body: { user_id: 'new-user', nama: 'New User', [field]: value },
-      user: { role: 'operator' },
+      body: { user_id: 'new-user', nama: 'New User', client_id: 'c1', [field]: value },
+      user: { role: 'operator', client_id: 'c1' },
     };
     const { res, status, json } = createResponse();
 
@@ -129,10 +129,11 @@ test('create allows the same username on a different platform and synchronizes p
     body: {
       user_id: 'new-user',
       nama: 'New User',
+      client_id: 'c1',
       insta: '@shared',
       tiktok: '@shared',
     },
-    user: { role: 'operator' },
+    user: { role: 'operator', client_id: 'c1' },
   };
   const { res } = createResponse();
 
@@ -168,6 +169,10 @@ test.each([
 ])(
   'update rejects duplicate %s without saving other fields',
   async (field, value, platform, normalized) => {
+    mockFindUserById.mockResolvedValue({
+      user_id: 'current-user',
+      client_id: 'c1',
+    });
     mockFindSocialUsernameConflict.mockResolvedValue({
       platform,
       username: normalized,
@@ -195,7 +200,7 @@ test.each([
 test('operator adds user with defaults', async () => {
   mockCreateUser.mockResolvedValue({ user_id: '1' });
   const req = {
-    body: { user_id: '1', nama: 'A' },
+    body: { user_id: '1', nama: 'A', client_id: 'c1' },
     user: { role: 'operator', client_id: 'c1' },
   };
   const json = jest.fn();
@@ -207,6 +212,7 @@ test('operator adds user with defaults', async () => {
   expect(mockCreateUser).toHaveBeenCalledWith({
     user_id: '1',
     nama: 'A',
+    client_id: 'c1',
     ditbinmas: false,
     ditlantas: false,
     bidhumas: false,
@@ -221,7 +227,7 @@ test('operator adds user with defaults', async () => {
 test('operator assigns ditbinmas role when specified', async () => {
   mockCreateUser.mockResolvedValue({ user_id: '3' });
   const req = {
-    body: { user_id: '3', nama: 'C', roles: ['ditbinmas'] },
+    body: { user_id: '3', nama: 'C', client_id: 'c1', roles: ['ditbinmas'] },
     user: { role: 'operator', client_id: 'c1' },
   };
   const json = jest.fn();
@@ -233,6 +239,7 @@ test('operator assigns ditbinmas role when specified', async () => {
   expect(mockCreateUser).toHaveBeenCalledWith({
     user_id: '3',
     nama: 'C',
+    client_id: 'c1',
     ditbinmas: true,
   });
   expect(mockCreateUser.mock.calls[0][0].operator).toBeUndefined();
@@ -243,7 +250,7 @@ test('operator assigns ditbinmas role when specified', async () => {
 test('operator assigns multiple roles simultaneously', async () => {
   mockCreateUser.mockResolvedValue({ user_id: '4' });
   const req = {
-    body: { user_id: '4', nama: 'D', roles: ['operator', 'ditbinmas'] },
+    body: { user_id: '4', nama: 'D', client_id: 'c1', roles: ['operator', 'ditbinmas'] },
     user: { role: 'operator', client_id: 'c1' },
   };
   const json = jest.fn();
@@ -255,6 +262,7 @@ test('operator assigns multiple roles simultaneously', async () => {
   expect(mockCreateUser).toHaveBeenCalledWith({
     user_id: '4',
     nama: 'D',
+    client_id: 'c1',
     operator: true,
     ditbinmas: true,
     ditlantas: false,
@@ -267,7 +275,7 @@ test('operator assigns multiple roles simultaneously', async () => {
 
 test('operator reactivates existing user and attaches operator role', async () => {
   mockFindUserById
-    .mockResolvedValueOnce({ user_id: '1', status: false })
+    .mockResolvedValueOnce({ user_id: '1', status: false, client_id: 'c1' })
     .mockResolvedValueOnce({
       user_id: '1',
       status: true,
@@ -275,7 +283,7 @@ test('operator reactivates existing user and attaches operator role', async () =
       nama: 'A',
     });
   const req = {
-    body: { user_id: '1', nama: 'A' },
+    body: { user_id: '1', nama: 'A', client_id: 'c1' },
     user: { role: 'operator', client_id: 'c1' },
   };
   const json = jest.fn();
@@ -305,7 +313,7 @@ test('operator reactivates existing user and attaches operator role', async () =
 
 test('operator reactivates existing user with multiple roles', async () => {
   mockFindUserById
-    .mockResolvedValueOnce({ user_id: '5', status: false })
+    .mockResolvedValueOnce({ user_id: '5', status: false, client_id: 'c1' })
     .mockResolvedValueOnce({
       user_id: '5',
       status: true,
@@ -314,7 +322,7 @@ test('operator reactivates existing user with multiple roles', async () => {
       nama: 'E',
     });
   const req = {
-    body: { user_id: '5', nama: 'E', roles: ['operator', 'ditbinmas'] },
+    body: { user_id: '5', nama: 'E', client_id: 'c1', roles: ['operator', 'ditbinmas'] },
     user: { role: 'operator', client_id: 'c1' },
   };
   const json = jest.fn();
@@ -349,6 +357,7 @@ test('operator reactivates existing user with multiple roles', async () => {
 });
 
 test('updateUserRoles updates roles based on array', async () => {
+  mockFindUserById.mockResolvedValue({ user_id: '1', client_id: 'c1' });
   mockUpdateUser.mockResolvedValue({
     user_id: '1',
     operator: true,
@@ -453,7 +462,7 @@ test('reactivates existing user and attaches ditbinmas role', async () => {
 
 test('keeps existing roles when adding new role to active user', async () => {
   mockFindUserById
-    .mockResolvedValueOnce({ user_id: '9', status: true, operator: true })
+    .mockResolvedValueOnce({ user_id: '9', status: true, operator: true, client_id: 'c1' })
     .mockResolvedValueOnce({
       user_id: '9',
       status: true,
@@ -461,7 +470,7 @@ test('keeps existing roles when adding new role to active user', async () => {
       ditlantas: true,
     });
   const req = {
-    body: { user_id: '9', nama: 'F', roles: ['ditlantas'] },
+    body: { user_id: '9', nama: 'F', client_id: 'c1', roles: ['ditlantas'] },
     user: { role: 'operator', client_id: 'c1' },
   };
   const json = jest.fn();

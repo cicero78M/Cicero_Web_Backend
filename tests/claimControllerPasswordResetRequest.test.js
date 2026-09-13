@@ -16,11 +16,11 @@ function createRes() {
 beforeEach(async () => {
   jest.resetModules();
   process.env.JWT_SECRET = 'test-secret';
-  delete process.env.SMTP_HOST;
-  delete process.env.SMTP_PORT;
-  delete process.env.SMTP_USER;
-  delete process.env.SMTP_PASS;
-  delete process.env.SMTP_FROM;
+  process.env.SMTP_HOST = 'smtp.test';
+  process.env.SMTP_PORT = '587';
+  process.env.SMTP_USER = 'test-user';
+  process.env.SMTP_PASS = 'test-password';
+  process.env.SMTP_FROM = 'test@example.com';
 
   jest.unstable_mockModule('../src/model/userModel.js', () => ({
     findUserById: jest.fn(),
@@ -30,8 +30,17 @@ beforeEach(async () => {
     findActiveByToken: jest.fn(),
     markTokenUsed: jest.fn(),
   }));
+  jest.unstable_mockModule('../src/config/redis.js', () => ({
+    default: {
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn().mockResolvedValue('OK'),
+      ttl: jest.fn().mockResolvedValue(60),
+    },
+  }));
   jest.unstable_mockModule('../src/service/emailService.js', () => ({
+    sendClaimRecoveryEmailConfirmation: jest.fn(),
     sendClaimPasswordResetEmail: jest.fn(),
+    sendOtpEmail: jest.fn(),
   }));
   jest.unstable_mockModule('../src/service/telegramService.js', () => ({
     sendTelegramAdminMessage: jest.fn().mockResolvedValue(undefined),
@@ -44,9 +53,12 @@ beforeEach(async () => {
   telegramService = await import('../src/service/telegramService.js');
 });
 
-test('sukses request reset menyimpan token dan kirim notifikasi', async () => {
-  userModel.findUserById.mockResolvedValue({ user_id: '1', email: 'user1@cicero.id' });
-  claimPasswordResetModel.createResetRequest.mockResolvedValue({ id: 1 });
+test('sukses request reset mengirim OTP ke email terverifikasi', async () => {
+  userModel.findUserById.mockResolvedValue({
+    user_id: '1',
+    email: 'user1@cicero.id',
+    email_verified_at: '2026-01-01T00:00:00.000Z',
+  });
 
   const req = { body: { nrp: '1', email: 'USER1@CICERO.ID' } };
   const res = createRes();
@@ -54,13 +66,21 @@ test('sukses request reset menyimpan token dan kirim notifikasi', async () => {
   await requestClaimPasswordReset(req, res, () => {});
 
   expect(res.status).toHaveBeenCalledWith(200);
-  expect(claimPasswordResetModel.createResetRequest).toHaveBeenCalledTimes(1);
+  expect(claimPasswordResetModel.createResetRequest).not.toHaveBeenCalled();
   expect(emailService.sendClaimPasswordResetEmail).not.toHaveBeenCalled();
-  expect(telegramService.sendTelegramAdminMessage).toHaveBeenCalledTimes(1);
+  expect(emailService.sendOtpEmail).toHaveBeenCalledWith(
+    'user1@cicero.id',
+    expect.stringMatching(/^\d{6}$/),
+  );
+  expect(telegramService.sendTelegramAdminMessage).not.toHaveBeenCalled();
 });
 
-test('email mismatch tetap respon netral dan tidak membuat token', async () => {
-  userModel.findUserById.mockResolvedValue({ user_id: '1', email: 'user1@cicero.id' });
+test('email input berbeda tetap mengirim OTP hanya ke email terverifikasi', async () => {
+  userModel.findUserById.mockResolvedValue({
+    user_id: '1',
+    email: 'user1@cicero.id',
+    email_verified_at: '2026-01-01T00:00:00.000Z',
+  });
 
   const req = { body: { nrp: '1', email: 'other@cicero.id' } };
   const res = createRes();
@@ -69,6 +89,10 @@ test('email mismatch tetap respon netral dan tidak membuat token', async () => {
 
   expect(res.status).toHaveBeenCalledWith(200);
   expect(claimPasswordResetModel.createResetRequest).not.toHaveBeenCalled();
+  expect(emailService.sendOtpEmail).toHaveBeenCalledWith(
+    'user1@cicero.id',
+    expect.stringMatching(/^\d{6}$/),
+  );
   expect(telegramService.sendTelegramAdminMessage).not.toHaveBeenCalled();
 });
 

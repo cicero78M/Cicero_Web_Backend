@@ -18,7 +18,9 @@ describe('updateUserData', () => {
       findUserById: jest.fn().mockResolvedValue({
         user_id: '1',
         password_hash: 'hashed-password',
+        email: 'user@example.com',
       }),
+      findWhatsappConflict: jest.fn().mockResolvedValue(null),
       findSocialUsernameConflict: jest.fn().mockResolvedValue(null),
       replaceUserSocialAccounts: jest.fn().mockResolvedValue(),
       findUserSocialAccounts: jest.fn().mockResolvedValue({ instagram: [], tiktok: [] }),
@@ -33,6 +35,7 @@ describe('updateUserData', () => {
       default: {},
     }));
     jest.unstable_mockModule('../src/service/emailService.js', () => ({
+      sendClaimRecoveryEmailConfirmation: jest.fn(),
       sendClaimPasswordResetEmail: jest.fn(),
       sendOtpEmail: jest.fn(),
     }));
@@ -113,7 +116,7 @@ describe('updateUserData', () => {
     expect(userModel.updateUser).not.toHaveBeenCalled();
   });
 
-  test('normalizes email and updates user data', async () => {
+  test('accepts an unchanged normalized email without bypassing OTP verification', async () => {
     const req = {
       body: {
         nrp: '1',
@@ -123,7 +126,7 @@ describe('updateUserData', () => {
     };
     const res = createRes();
     await updateUserData(req, res, () => {});
-    expect(userModel.updateUser).toHaveBeenCalledWith('1', expect.objectContaining({ email: 'user@example.com' }));
+    expect(userModel.updateUser).toHaveBeenCalledWith('1', expect.not.objectContaining({ email: expect.anything() }));
     expect(res.status).toHaveBeenCalledWith(200);
   });
 
@@ -180,13 +183,7 @@ describe('updateUserData', () => {
       'tiktok',
       ['@primary.tt', '@secondary.tt']
     );
-    expect(userModel.updateUser).toHaveBeenCalledWith(
-      '1',
-      expect.objectContaining({
-        insta: 'primary.ig',
-        tiktok: '@primary.tt',
-      })
-    );
+    expect(userModel.updateUser).toHaveBeenCalledWith('1', {});
   });
 
   test('rejects a username owned by another user before changing profile data', async () => {

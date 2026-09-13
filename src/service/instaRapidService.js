@@ -6,6 +6,10 @@ const RAPIDAPI_HOST = 'social-api4.p.rapidapi.com';
 const RAPIDAPI_FALLBACK_KEY = env.RAPIDAPI_FALLBACK_KEY;
 const RAPIDAPI_FALLBACK_HOST = env.RAPIDAPI_FALLBACK_HOST;
 const DEBUG_FETCH_IG = env.DEBUG_FETCH_INSTAGRAM;
+const RAPIDAPI_TIMEOUT_MS = Math.max(
+  1000,
+  Number(process.env.RAPIDAPI_TIMEOUT_MS || 12000),
+);
 
 function sendConsoleDebug(...args) {
   if (DEBUG_FETCH_IG) console.log('[DEBUG IG]', ...args);
@@ -39,10 +43,34 @@ function buildRapidApiHeaders(host, key) {
   };
 }
 
+async function fetchWithRapidApiTimeout(url, options = {}) {
+  const startedAt = Date.now();
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: AbortSignal.timeout(RAPIDAPI_TIMEOUT_MS),
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError' || error?.name === 'TimeoutError') {
+      const timeoutError = new Error(
+        `RapidAPI tidak merespons dalam ${RAPIDAPI_TIMEOUT_MS} ms`,
+      );
+      timeoutError.statusCode = 504;
+      timeoutError.code = 'RAPIDAPI_TIMEOUT';
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    sendConsoleDebug('RapidAPI request duration', {
+      duration_ms: Date.now() - startedAt,
+    });
+  }
+}
+
 async function fetchRapidApiResponse(path, params) {
   assertRapidApiKey();
   const url = `https://${RAPIDAPI_HOST}/${path}?${params.toString()}`;
-  const res = await fetch(url, {
+  const res = await fetchWithRapidApiTimeout(url, {
     headers: buildRapidApiHeaders(RAPIDAPI_HOST, RAPIDAPI_KEY),
   });
   if (res.ok || !shouldUseRapidApiFallback(res.status)) return res;
@@ -57,7 +85,7 @@ async function fetchRapidApiResponse(path, params) {
   });
 
   const fallbackUrl = `https://${fallback.host}/${path}?${params.toString()}`;
-  return fetch(fallbackUrl, {
+  return fetchWithRapidApiTimeout(fallbackUrl, {
     headers: buildRapidApiHeaders(fallback.host, fallback.key),
   });
 }
@@ -67,6 +95,7 @@ async function axiosGetRapidApi(path, params, options = {}) {
   try {
     return await axios.get(`https://${RAPIDAPI_HOST}/${path}`, {
       params,
+      timeout: RAPIDAPI_TIMEOUT_MS,
       headers: {
         ...buildRapidApiHeaders(RAPIDAPI_HOST, RAPIDAPI_KEY),
         ...(options.headers || {}),
@@ -90,6 +119,7 @@ async function axiosGetRapidApi(path, params, options = {}) {
         });
         return axios.get(`https://${fallback.host}/${path}`, {
           params,
+          timeout: RAPIDAPI_TIMEOUT_MS,
           headers: {
             ...buildRapidApiHeaders(fallback.host, fallback.key),
             ...(options.headers || {}),

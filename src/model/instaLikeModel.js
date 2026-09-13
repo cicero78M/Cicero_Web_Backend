@@ -517,34 +517,13 @@ export async function getRekapLikesByClient(
   } = buildPostFilters(addPostParam, null, null, officialAccountsOnly);
 
   let userWhere = '1=1';
-  let likeCountsSelect = `
-    SELECT
-      username,
-      client_id,
-      COUNT(DISTINCT shortcode) AS jumlah_like,
-      ARRAY_AGG(DISTINCT shortcode ORDER BY shortcode)
-        FILTER (WHERE shortcode IS NOT NULL) AS completed_task_shortcodes
-    FROM valid_likes
-    GROUP BY username, client_id
-  `;
-  let likeJoin = `
-    lower(replace(trim(u.insta), '@', '')) = lc.username
-    AND LOWER(u.client_id) = LOWER(lc.client_id)
-  `;
+  let likeAccountClientJoin =
+    'AND LOWER(ua.client_id) = LOWER(vl.client_id)';
   if (userClientParamIdx !== null) {
     userWhere = `LOWER(u.client_id) = LOWER($${userClientParamIdx})`;
   }
   if (userClientParamIdx === null || !matchLikeClientId) {
-    likeJoin = "lower(replace(trim(u.insta), '@', '')) = lc.username";
-    likeCountsSelect = `
-      SELECT
-        username,
-        COUNT(DISTINCT shortcode) AS jumlah_like,
-        ARRAY_AGG(DISTINCT shortcode ORDER BY shortcode)
-          FILTER (WHERE shortcode IS NOT NULL) AS completed_task_shortcodes
-      FROM valid_likes
-      GROUP BY username
-    `;
+    likeAccountClientJoin = '';
   }
 
   if (resolvedUserRole || sharedRoleParamIdx) {
@@ -614,25 +593,70 @@ export async function getRekapLikesByClient(
         ${postOfficialFilterLikes}
         AND ${tanggalFilter}
     ),
-    like_counts AS (
-      ${likeCountsSelect}
+    user_accounts AS (
+      SELECT
+        u.user_id,
+        u.client_id,
+        lower(replace(trim(coalesce(usa.username, '')), '@', '')) AS username
+      FROM "user" u
+      JOIN user_social_accounts usa ON usa.user_id = u.user_id
+      WHERE LOWER(usa.platform) = 'instagram'
+        AND usa.is_active = TRUE
+        AND trim(coalesce(usa.username, '')) <> ''
+
+      UNION ALL
+
+      -- Keep u.insta only when no active Instagram account has been migrated.
+      SELECT
+        u.user_id,
+        u.client_id,
+        lower(replace(trim(coalesce(u.insta, '')), '@', '')) AS username
+      FROM "user" u
+      WHERE trim(coalesce(u.insta, '')) <> ''
+        AND NOT EXISTS (
+          SELECT 1
+          FROM user_social_accounts usa
+          WHERE usa.user_id = u.user_id
+            AND LOWER(usa.platform) = 'instagram'
+            AND usa.is_active = TRUE
+            AND trim(coalesce(usa.username, '')) <> ''
+        )
+    ),
+    user_like_counts AS (
+      SELECT
+        ua.user_id,
+        COUNT(DISTINCT vl.shortcode) AS jumlah_like,
+        ARRAY_AGG(DISTINCT vl.shortcode ORDER BY vl.shortcode)
+          FILTER (WHERE vl.shortcode IS NOT NULL) AS completed_task_shortcodes
+      FROM user_accounts ua
+      JOIN valid_likes vl
+        ON ua.username = vl.username
+        ${likeAccountClientJoin}
+      GROUP BY ua.user_id
     )
     SELECT
       u.user_id,
       u.title,
       u.nama,
-      u.insta AS username,
+      COALESCE((
+        SELECT usa.username
+        FROM user_social_accounts usa
+        WHERE usa.user_id = u.user_id
+          AND LOWER(usa.platform) = 'instagram'
+          AND usa.is_active = TRUE
+        ORDER BY usa.account_order ASC, usa.created_at ASC
+        LIMIT 1
+      ), u.insta) AS username,
       u.divisi,
       u.exception,
       u.client_id,
       c.nama AS client_name,
       c.regional_id AS regional_id,
-      COALESCE(lc.jumlah_like, 0) AS jumlah_like,
-      COALESCE(lc.completed_task_shortcodes, ARRAY[]::text[]) AS completed_task_shortcodes
+      COALESCE(ulc.jumlah_like, 0) AS jumlah_like,
+      COALESCE(ulc.completed_task_shortcodes, ARRAY[]::text[]) AS completed_task_shortcodes
     FROM "user" u
     JOIN clients c ON c.client_id = u.client_id
-    LEFT JOIN like_counts lc
-      ON ${likeJoin}
+    LEFT JOIN user_like_counts ulc ON ulc.user_id = u.user_id
     WHERE u.status = true
       AND ${userWhere}
     ORDER BY

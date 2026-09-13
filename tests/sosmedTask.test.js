@@ -195,14 +195,14 @@ test('generateSosmedTaskMessage prefers audit data and labels window when provid
     { shortcode: 'windowed', created_at: '2024-01-01T06:00:00+07:00' },
   ]);
   mockGetLatestLikeAuditByWindow.mockResolvedValue([
-    { shortcode: 'windowed', usernames: ['audit_user'] },
+    { shortcode: 'windowed', observed_usernames: ['audit_user'] },
   ]);
   mockGetLikesByShortcode.mockResolvedValue(['fallback_like']);
   mockGetTiktokPostsToday.mockResolvedValue([
     { video_id: 'vid-window', created_at: '2024-01-01T07:00:00+07:00' },
   ]);
   mockGetLatestCommentAuditByWindow.mockResolvedValue([
-    { video_id: 'vid-window', usernames: ['@audit'] },
+    { video_id: 'vid-window', observed_usernames: ['@audit'] },
   ]);
   mockGetCommentsByVideoId.mockResolvedValue({ comments: ['@fallback'] });
 
