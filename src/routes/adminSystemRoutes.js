@@ -1,3 +1,5 @@
+/* global AbortController, fetch */
+
 import { Router } from 'express';
 import crypto from 'crypto';
 import { sanitizeSpreadsheetCell } from '../utils/spreadsheet.js';
@@ -1149,7 +1151,7 @@ router.get('/management/duplicate-monitoring', async (_req, res) => {
     }
     const duplicateGroups = [...groups.entries()]
       .filter(([, entries]) => entries.length > 1)
-      .map(([key, entries]) => {
+      .map(([, entries]) => {
         const users = new Set(entries.map((entry) => String(entry.user_id)));
         const clients = new Set(entries.map((entry) => String(entry.client_id || '')));
         return {
@@ -1176,7 +1178,7 @@ router.get('/management/duplicate-monitoring', async (_req, res) => {
       groups: duplicateGroups.slice(0, 100),
       truncated: duplicateGroups.length > 100,
     }});
-  } catch (error) {
+  } catch {
     return res.status(500).json({ success: false, message: 'Monitoring duplikasi data gagal diperiksa', error_code: 'DUPLICATE_MONITORING_FAILED' });
   }
 });
