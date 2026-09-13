@@ -406,7 +406,16 @@ router.post('/dashboard-login', async (req, res) => {
       .status(400)
       .json({ success: false, message: 'username dan password wajib diisi' });
   }
-  const user = await dashboardUserModel.findByUsername(username);
+  let user;
+  try {
+    user = await dashboardUserModel.findByUsername(username);
+  } catch (err) {
+    console.error('[AUTH] Dashboard login user lookup failed:', err.message);
+    return res.status(503).json({
+      success: false,
+      message: 'Layanan login sedang tidak tersedia. Coba lagi beberapa saat lagi.',
+    });
+  }
   if (!user) {
     return res
       .status(401)

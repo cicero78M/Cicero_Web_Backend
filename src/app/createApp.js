@@ -47,6 +47,20 @@ async function getDbStatus() {
   }
 }
 
+async function withTimeout(promise, timeoutMs) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('dependency timeout')), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function createApp() {
   const app = express();
   app.disable('etag');
@@ -132,7 +146,10 @@ export function createApp() {
   app.all('/_next/dev/', (_req, res) => res.status(200).json({ status: 'ok' }));
   app.get('/healthz', (_req, res) => res.status(200).json({ status: 'ok' }));
   app.get('/readyz', async (_req, res) => {
-    const [db, redisStatus] = await Promise.all([getDbStatus(), getRedisStatus()]);
+    const [db, redisStatus] = await Promise.all([
+      withTimeout(getDbStatus(), 6000).catch(() => 'error'),
+      withTimeout(getRedisStatus(), 3000).catch(() => 'error'),
+    ]);
     const healthy = db === 'ok' && (redisStatus === 'ok' || redisStatus === 'unknown');
     return res.status(healthy ? 200 : 503).json({
       status: healthy ? 'ok' : 'degraded',
