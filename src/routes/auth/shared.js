@@ -96,6 +96,10 @@ export function clearUserSessions(userId) {
   return clearSessions(userId, 'user_login');
 }
 
+export function clearClaimSessions(userId) {
+  return clearSessions(userId, 'claim_login');
+}
+
 function getNumericEnv(name, fallbackValue) {
   const rawValue = process.env[name];
   if (rawValue === undefined || rawValue === null || rawValue === '') {
@@ -147,6 +151,9 @@ function inferSessionKeyFromDecodedToken(decodedToken) {
     return `dashboard_login:${decodedToken.dashboard_user_id}`;
   }
   if (decodedToken.user_id && decodedToken.role === 'user') {
+    if (decodedToken.auth_scope === 'claim') {
+      return `claim_login:${decodedToken.user_id}`;
+    }
     return `user_login:${decodedToken.user_id}`;
   }
   if (decodedToken.user_id) {
@@ -176,6 +183,8 @@ export async function revokeSessionToken(token) {
       cleanupTargets.push(`penmas_login:${tokenOwner.slice('penmas:'.length)}`);
     } else if (tokenOwner.startsWith('user:')) {
       cleanupTargets.push(`user_login:${tokenOwner.slice('user:'.length)}`);
+    } else if (tokenOwner.startsWith('claim-user:')) {
+      cleanupTargets.push(`claim_login:${tokenOwner.slice('claim-user:'.length)}`);
     } else if (!tokenOwner.includes(':')) {
       cleanupTargets.push(`login:${tokenOwner}`);
     }

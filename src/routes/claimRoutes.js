@@ -18,7 +18,7 @@ import {
   getPendingContent,
   validateClaimSocialProfile,
 } from '../controller/claimController.js';
-import { authRequired } from '../middleware/authMiddleware.js';
+import { claimAuthRequired } from '../middleware/authMiddleware.js';
 import { claimUserRoleRequired } from '../middleware/claimRoleMiddleware.js';
 import { triageClaimComplaint } from '../controller/claimComplaintController.js';
 import {
@@ -51,8 +51,8 @@ router.post('/password-reset/confirm', confirmClaimPasswordReset); // body: { to
 router.post('/user-data', getUserData); // body: { nrp, password }
 router.put('/update', updateUserData); // body: { nrp, password, ... }
 router.put('/edit', updateUserData); // backward-compatible alias for /claim/edit
-router.get('/me', authRequired, getClaimMe);
-router.get('/satfung-options', authRequired, async (req, res, next) => {
+router.get('/me', claimAuthRequired, getClaimMe);
+router.get('/satfung-options', claimAuthRequired, async (req, res, next) => {
   try {
     const userId = req.user?.user_id;
     const profile = await userModel.findClaimProfileById(userId);
@@ -65,45 +65,45 @@ router.get('/satfung-options', authRequired, async (req, res, next) => {
     return next(error);
   }
 });
-router.put('/me', authRequired, updateClaimMe);
-router.post('/email/request', authRequired, requestClaimEmailUpdate);
-router.post('/email/verify', authRequired, verifyClaimEmailUpdate);
-router.post('/whatsapp/request', authRequired, requestClaimWhatsappOtp);
-router.post('/whatsapp/verify', authRequired, verifyClaimWhatsappOtp);
-router.get('/pending-content', authRequired, getPendingContent);
+router.put('/me', claimAuthRequired, updateClaimMe);
+router.post('/email/request', claimAuthRequired, requestClaimEmailUpdate);
+router.post('/email/verify', claimAuthRequired, verifyClaimEmailUpdate);
+router.post('/whatsapp/request', claimAuthRequired, requestClaimWhatsappOtp);
+router.post('/whatsapp/verify', claimAuthRequired, verifyClaimWhatsappOtp);
+router.get('/pending-content', claimAuthRequired, getPendingContent);
 router.post(
   '/complaints/triage',
-  authRequired,
+  claimAuthRequired,
   claimUserRoleRequired,
   triageClaimComplaint
 );
 router.get(
   '/complaints',
-  authRequired,
+  claimAuthRequired,
   claimUserRoleRequired,
   getClaimComplaints
 );
 router.get(
   '/complaints/:complaintId',
-  authRequired,
+  claimAuthRequired,
   claimUserRoleRequired,
   getClaimComplaints
 );
 router.post(
   '/complaints/:complaintId/escalate',
-  authRequired,
+  claimAuthRequired,
   claimUserRoleRequired,
   escalateClaimComplaint
 );
 router.post(
   '/complaints/:complaintId/resolve',
-  authRequired,
+  claimAuthRequired,
   claimUserRoleRequired,
   resolveClaimComplaint
 );
 router.post(
   '/social-profile/validate',
-  authRequired,
+  claimAuthRequired,
   claimSocialValidationLimiter,
   validateClaimSocialProfile
 );

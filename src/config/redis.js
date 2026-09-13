@@ -4,7 +4,13 @@ const redisUrl = env.REDIS_URL;
 const REDIS_CONNECT_TIMEOUT_MS = Number(process.env.REDIS_CONNECT_TIMEOUT_MS || 10000);
 const REDIS_MAX_RETRY_DELAY_MS = Number(process.env.REDIS_MAX_RETRY_DELAY_MS || 3000);
 const LOGIN_SESSION_TTL_SEC = Number(process.env.LOGIN_SESSION_TTL_SEC || 2 * 60 * 60);
-const SESSION_SET_KEY_PREFIXES = ['dashboard_login:', 'penmas_login:', 'login:', 'user_login:'];
+const SESSION_SET_KEY_PREFIXES = [
+  'dashboard_login:',
+  'claim_login:',
+  'penmas_login:',
+  'login:',
+  'user_login:',
+];
 
 const createSetArgs = (options = {}) => {
   if (!options || typeof options !== 'object') {

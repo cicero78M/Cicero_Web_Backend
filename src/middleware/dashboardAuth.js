@@ -158,6 +158,9 @@ export async function verifyDashboardOrClientToken(req, res, next) {
     if (requestedScope === 'dashboard' && !tokenOwner.startsWith('dashboard:')) {
       return res.status(403).json({ success: false, message: 'Forbidden', reason: 'auth_scope_mismatch' });
     }
+    if (requestedScope === 'claim' && !tokenOwner.startsWith('claim-user:')) {
+      return res.status(403).json({ success: false, message: 'Forbidden', reason: 'auth_scope_mismatch' });
+    }
     if (requestedScope === 'reposter' && !tokenOwner.startsWith('user:')) {
       return res.status(403).json({ success: false, message: 'Forbidden', reason: 'auth_scope_mismatch' });
     }
@@ -177,7 +180,7 @@ export async function verifyDashboardOrClientToken(req, res, next) {
       return next();
     }
 
-    if (requestedScope === 'reposter' && (payload.role !== 'user' || !payload.user_id)) {
+    if ((requestedScope === 'claim' || requestedScope === 'reposter') && (payload.role !== 'user' || !payload.user_id)) {
       return res.status(403).json({ success: false, message: 'Forbidden', reason: 'auth_scope_mismatch' });
     }
 

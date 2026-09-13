@@ -164,6 +164,7 @@ async function ensureSessionTokenStillActive(token, req, res) {
 function sessionOwnerMatchesScope(owner, scope) {
   if (!scope) return true;
   if (scope === 'dashboard') return owner.startsWith('dashboard:');
+  if (scope === 'claim') return owner.startsWith('claim-user:');
   if (scope === 'reposter') return owner.startsWith('user:');
   if (scope === 'penmas') return owner.startsWith('penmas:');
   if (scope === 'client') return !owner.includes(':');
@@ -209,7 +210,7 @@ function decodeExpiredTokenWithinGrace(token) {
   return decoded;
 }
 
-export async function authRequired(req, res, next) {
+async function authenticateRequired(req, res, next, fallbackScope = null) {
   if (shouldSkipGlobalAuth(req.path)) {
     return next();
   }
@@ -225,7 +226,7 @@ export async function authRequired(req, res, next) {
     );
   }
 
-  const requestedScope = getRequestedAuthScope(req);
+  const requestedScope = getRequestedAuthScope(req, fallbackScope);
   const token = getAuthToken(req, requestedScope);
   if (!token) {
     return sendAuthError(res, req, 401, 'Token required', 'missing_token');
@@ -298,4 +299,12 @@ export async function authRequired(req, res, next) {
       errorClassification,
     );
   }
+}
+
+export function authRequired(req, res, next) {
+  return authenticateRequired(req, res, next);
+}
+
+export function claimAuthRequired(req, res, next) {
+  return authenticateRequired(req, res, next, 'claim');
 }

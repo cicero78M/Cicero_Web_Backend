@@ -1,5 +1,6 @@
 export const AUTH_COOKIE_NAMES = Object.freeze({
   dashboard: 'cicero_dashboard_session',
+  claim: 'cicero_claim_session',
   reposter: 'cicero_reposter_session',
   penmas: 'cicero_penmas_session',
   client: 'cicero_client_session',
@@ -8,7 +9,7 @@ export const AUTH_COOKIE_NAMES = Object.freeze({
 
 export const AUTH_SCOPE_HEADER = 'x-cicero-auth-scope';
 
-const supportedScopes = new Set(['dashboard', 'reposter', 'penmas', 'client']);
+const supportedScopes = new Set(['dashboard', 'claim', 'reposter', 'penmas', 'client']);
 
 export function getRequestedAuthScope(req, fallback = null) {
   const rawScope = String(req.headers?.[AUTH_SCOPE_HEADER] || '')
@@ -31,6 +32,7 @@ export function getCookieToken(req, scope = null) {
 
   return (
     cookies[AUTH_COOKIE_NAMES.dashboard] ||
+    cookies[AUTH_COOKIE_NAMES.claim] ||
     cookies[AUTH_COOKIE_NAMES.reposter] ||
     cookies[AUTH_COOKIE_NAMES.penmas] ||
     cookies[AUTH_COOKIE_NAMES.client] ||

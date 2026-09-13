@@ -25,6 +25,7 @@ import {
 import {
   clearAuthCookie,
   clearClientSessions,
+  clearClaimSessions,
   clearDashboardSessions,
   clearPenmasSessions,
   clearUserSessions,
@@ -646,6 +647,7 @@ router.post('/user-login', async (req, res) => {
   const loginSource = ['claim', 'reposter'].includes(String(login_surface || '').toLowerCase())
     ? String(login_surface).toLowerCase()
     : 'reposter';
+  const isClaimLogin = loginSource === 'claim';
 
   // Support both new mechanism (user_id + whatsapp) and old mechanism (nrp + password)
   if (user_id && whatsapp) {
@@ -681,23 +683,23 @@ router.post('/user-login', async (req, res) => {
       user_id: user.user_id,
       nama: user.nama,
       role: 'user',
-      client_id: user.client_id
+      client_id: user.client_id,
     };
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
       expiresIn: AUTH_TOKEN_LIFETIME_SECONDS
     });
-    await clearUserSessions(user.user_id);
+    await (isClaimLogin ? clearClaimSessions(user.user_id) : clearUserSessions(user.user_id));
     try {
       await registerSession({
-        sessionKey: `user_login:${user.user_id}`,
+        sessionKey: `${isClaimLogin ? 'claim_login' : 'user_login'}:${user.user_id}`,
         token,
-        tokenOwner: `user:${user.user_id}`,
+        tokenOwner: `${isClaimLogin ? 'claim-user' : 'user'}:${user.user_id}`,
       });
     } catch (err) {
       console.error('[AUTH] Gagal menyimpan token login user:', err.message);
       return sendSessionUnavailable(res);
     }
-    setAuthCookie(res, 'reposter', token);
+    setAuthCookie(res, isClaimLogin ? 'claim' : 'reposter', token);
     await insertLoginLog({
       actorId: user.user_id,
       loginType: 'user',
@@ -741,23 +743,23 @@ router.post('/user-login', async (req, res) => {
       user_id: user.user_id,
       nama: user.nama,
       role: 'user',
-      client_id: user.client_id
+      client_id: user.client_id,
     };
     const token = jwt.sign(payload, process.env.JWT_SECRET, {
       expiresIn: AUTH_TOKEN_LIFETIME_SECONDS
     });
-    await clearUserSessions(user.user_id);
+    await (isClaimLogin ? clearClaimSessions(user.user_id) : clearUserSessions(user.user_id));
     try {
       await registerSession({
-        sessionKey: `user_login:${user.user_id}`,
+        sessionKey: `${isClaimLogin ? 'claim_login' : 'user_login'}:${user.user_id}`,
         token,
-        tokenOwner: `user:${user.user_id}`,
+        tokenOwner: `${isClaimLogin ? 'claim-user' : 'user'}:${user.user_id}`,
       });
     } catch (err) {
       console.error('[AUTH] Gagal menyimpan token login user:', err.message);
       return sendSessionUnavailable(res);
     }
-    setAuthCookie(res, 'reposter', token);
+    setAuthCookie(res, isClaimLogin ? 'claim' : 'reposter', token);
     await insertLoginLog({
       actorId: user.user_id,
       loginType: 'user',

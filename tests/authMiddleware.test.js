@@ -11,7 +11,7 @@ jest.unstable_mockModule('../src/config/redis.js', () => ({
   default: redisMock,
 }));
 
-const { authRequired } = await import('../src/middleware/authMiddleware.js');
+const { authRequired, claimAuthRequired } = await import('../src/middleware/authMiddleware.js');
 
 describe('authRequired middleware', () => {
   let app;
@@ -71,6 +71,33 @@ describe('authRequired middleware', () => {
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(403);
     expect(res.body.success).toBe(false);
+  });
+
+  test('claim middleware accepts only claim-owned user sessions without a scope header', async () => {
+    const token = jwt.sign({ user_id: 'c1', role: 'user' }, process.env.JWT_SECRET);
+    redisMock.get.mockResolvedValueOnce('claim-user:c1');
+    const claimApp = express();
+    claimApp.get('/claim/ok', claimAuthRequired, (_req, res) => res.json({ success: true }));
+
+    const res = await request(claimApp)
+      .get('/claim/ok')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  test('claim middleware rejects a reposter-owned user session', async () => {
+    const token = jwt.sign({ user_id: 'r1', role: 'user' }, process.env.JWT_SECRET);
+    redisMock.get.mockResolvedValueOnce('user:r1');
+    const claimApp = express();
+    claimApp.get('/claim/ok', claimAuthRequired, (_req, res) => res.json({ success: true }));
+
+    const res = await request(claimApp)
+      .get('/claim/ok')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.reason).toBe('auth_scope_mismatch');
   });
 
   test('allows operator role on client profile route', async () => {

@@ -16,7 +16,7 @@ describe('claim complaint route role access', () => {
     };
 
     jest.unstable_mockModule('../src/middleware/authMiddleware.js', () => ({
-      authRequired: (req, _res, next) => {
+      claimAuthRequired: (req, _res, next) => {
         req.user = {
           user_id: req.get('x-test-user-id') || '1001',
           role: req.get('x-test-role') || '',
@@ -26,9 +26,15 @@ describe('claim complaint route role access', () => {
     }));
     jest.unstable_mockModule('../src/controller/claimController.js', () => ({
       confirmClaimPasswordReset: jest.fn(),
+      confirmClaimRecoveryEmail: jest.fn(),
       requestClaimPasswordReset: jest.fn(),
       verifyClaimPasswordResetOtp: jest.fn(),
       registerClaimCredentials: jest.fn(),
+      verifyClaimRegistrationOtp: jest.fn(),
+      requestClaimEmailUpdate: jest.fn(),
+      verifyClaimEmailUpdate: jest.fn(),
+      requestClaimWhatsappOtp: jest.fn(),
+      verifyClaimWhatsappOtp: jest.fn(),
       getUserData: jest.fn(),
       getClaimMe: jest.fn(),
       updateUserData: jest.fn(),

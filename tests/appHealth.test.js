@@ -33,6 +33,7 @@ jest.unstable_mockModule('../src/routes/claimRoutes.js', () => ({
 
 jest.unstable_mockModule('../src/middleware/authMiddleware.js', () => ({
   authRequired: (_req, _res, next) => next(),
+  claimAuthRequired: (_req, _res, next) => next(),
 }));
 
 let createApp;

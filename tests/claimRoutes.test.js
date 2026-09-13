@@ -92,7 +92,7 @@ describe('claim routes credential flow', () => {
         () => telegramServiceMocks
       );
       jest.unstable_mockModule('../src/middleware/authMiddleware.js', () => ({
-        authRequired: (req, res, next) => {
+        claimAuthRequired: (req, res, next) => {
           const userId = req.get('x-test-user-id');
           if (!userId)
             return res

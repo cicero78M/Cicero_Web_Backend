@@ -938,9 +938,39 @@ describe('POST /user-login', () => {
     expect(mockInsertLoginLog).toHaveBeenCalledWith({
       actorId: 'u1',
       loginType: 'user',
-      loginSource: 'mobile'
+      loginSource: 'reposter'
     });
     expect(res.headers['set-cookie'].join(';')).toContain('cicero_reposter_session=');
+    expect(res.headers['set-cookie'].join(';')).not.toContain('cicero_claim_session=');
+  });
+
+  test('isolates claim login from the reposter session', async () => {
+    const passwordHash = await bcrypt.hash('Password1!', 10);
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ user_id: 'u1', nama: 'User', password_hash: passwordHash, client_id: 'CLIENT_DB' }]
+    });
+
+    const res = await request(app)
+      .post('/api/auth/user-login')
+      .send({ nrp: '00123', password: 'Password1!', login_surface: 'claim' });
+
+    expect(res.status).toBe(200);
+    expect(mockRedis.sMembers).toHaveBeenCalledWith('claim_login:u1');
+    expect(mockRedis.del).toHaveBeenCalledWith('claim_login:u1');
+    expect(mockRedis.sAdd).toHaveBeenCalledWith('claim_login:u1', res.body.token);
+    expect(mockRedis.set).toHaveBeenCalledWith(
+      `login_token:${res.body.token}`,
+      'claim-user:u1',
+      { EX: 2 * 60 * 60 }
+    );
+    expect(mockRedis.sMembers).not.toHaveBeenCalledWith('user_login:u1');
+    expect(mockInsertLoginLog).toHaveBeenCalledWith({
+      actorId: 'u1',
+      loginType: 'user',
+      loginSource: 'claim'
+    });
+    expect(res.headers['set-cookie'].join(';')).toContain('cicero_claim_session=');
+    expect(res.headers['set-cookie'].join(';')).not.toContain('cicero_reposter_session=');
   });
 
   test('returns 401 when user has no password_hash', async () => {
@@ -1027,7 +1057,7 @@ describe('POST /user-login', () => {
     expect(mockInsertLoginLog).toHaveBeenCalledWith({
       actorId: 'u1',
       loginType: 'user',
-      loginSource: 'mobile'
+      loginSource: 'reposter'
     });
   });
 
@@ -1085,6 +1115,24 @@ describe('POST /user-login', () => {
       success: false,
       message: 'user_id dan whatsapp atau nrp dan password wajib diisi'
     });
+  });
+});
+
+describe('POST /logout scoped sessions', () => {
+  test('revokes and clears only the claim session', async () => {
+    mockRedis.get.mockResolvedValueOnce('claim-user:u1');
+
+    const res = await request(app)
+      .post('/api/auth/logout')
+      .set('Authorization', 'Bearer claim-token')
+      .set('X-Cicero-Auth-Scope', 'claim');
+
+    expect(res.status).toBe(200);
+    expect(mockRedis.sRem).toHaveBeenCalledWith('claim_login:u1', 'claim-token');
+    expect(mockRedis.sRem).not.toHaveBeenCalledWith('user_login:u1', 'claim-token');
+    const setCookie = res.headers['set-cookie'].join(';');
+    expect(setCookie).toContain('cicero_claim_session=;');
+    expect(setCookie).not.toContain('cicero_reposter_session=;');
   });
 });
 

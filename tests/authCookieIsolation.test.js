@@ -22,11 +22,13 @@ describe('auth cookie isolation', () => {
     const req = requestWith({
       cookies: {
         [AUTH_COOKIE_NAMES.dashboard]: 'dashboard-token',
+        [AUTH_COOKIE_NAMES.claim]: 'claim-token',
         [AUTH_COOKIE_NAMES.reposter]: 'reposter-token',
       },
     });
 
     expect(getCookieToken(req, 'dashboard')).toBe('dashboard-token');
+    expect(getCookieToken(req, 'claim')).toBe('claim-token');
     expect(getCookieToken(req, 'reposter')).toBe('reposter-token');
   });
 
@@ -40,12 +42,23 @@ describe('auth cookie isolation', () => {
     expect(getAuthToken(req)).toBeNull();
   });
 
+  test('never accepts the reposter cookie for an explicitly scoped claim request', () => {
+    const req = requestWith({
+      scope: 'claim',
+      cookies: { [AUTH_COOKIE_NAMES.reposter]: 'reposter-token' },
+    });
+
+    expect(getRequestedAuthScope(req)).toBe('claim');
+    expect(getAuthToken(req)).toBeNull();
+  });
+
   test('keeps the legacy cookie only as a migration fallback', () => {
     const req = requestWith({
       cookies: { [AUTH_COOKIE_NAMES.legacy]: 'legacy-token' },
     });
 
     expect(getCookieToken(req, 'dashboard')).toBe('legacy-token');
+    expect(getCookieToken(req, 'claim')).toBe('legacy-token');
     expect(getCookieToken(req, 'reposter')).toBe('legacy-token');
   });
 
@@ -60,7 +73,7 @@ describe('auth cookie isolation', () => {
   });
 
   test('CSRF detection recognizes every scoped auth cookie', () => {
-    for (const scope of ['dashboard', 'reposter', 'penmas', 'client']) {
+    for (const scope of ['dashboard', 'claim', 'reposter', 'penmas', 'client']) {
       expect(
         hasAuthCookie(
           requestWith({ cookies: { [AUTH_COOKIE_NAMES[scope]]: 'token' } }),
