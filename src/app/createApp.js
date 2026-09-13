@@ -79,6 +79,10 @@ export function createApp() {
   const authRateLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 25,
+    // Session/profile reads must not consume the authentication-attempt budget.
+    // In particular, repeated unauthenticated GET /api/auth/session calls from
+    // the frontend previously exhausted the limiter and blocked a real login.
+    skip: (req) => req.method === 'GET',
     standardHeaders: true,
     legacyHeaders: false,
     skipSuccessfulRequests: true,
