@@ -32,7 +32,6 @@
     "googleapis": "^171.4.0",
     "ioredis": "^5.10.0",
     "jsonwebtoken": "^9.0.0",
-    "md-to-pdf": "^5.2.5",
     "mime-types": "^2.1.35",
     "morgan": "^1.11.0",
     "node-fetch": "^3.3.2",

@@ -17,8 +17,6 @@ import { absensiLoginWeb } from "../fetchabsensi/dashboard/absensiLoginWeb.js";
 import * as linkReportModel from "../../model/linkReportModel.js";
 import fs from "fs/promises";
 import path from "path";
-import os from "os";
-import { mdToPdf } from "md-to-pdf";
 import { query } from "../../db/index.js";
 import { saveContactIfNew } from "../../service/googleContactsService.js";
 import { formatToWhatsAppId } from "../../utils/waHelper.js";
@@ -52,8 +50,6 @@ async function saveLinkReportExcel(...args) {
   const mod = await import("../../service/linkReportExcelService.js");
   return mod.saveLinkReportExcel(...args);
 }
-
-function ignore(..._args) {}
 
 // WhatsApp stubs - functionality removed (using Telegram for notifications)
 function getAdminWAIds() {
@@ -1024,47 +1020,6 @@ async function maybeHandleAutoSolution(session, chatId, waClient) {
   return false;
 }
 
-async function collectMarkdownFiles(dir, files = []) {
-  const entries = await fs.readdir(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
-    const res = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      await collectMarkdownFiles(res, files);
-    } else if (entry.isFile() && entry.name.toLowerCase().endsWith(".md")) {
-      files.push(res);
-    }
-  }
-  return files;
-}
-
-async function buildDocsPdf(rootDir, filename) {
-  const files = await collectMarkdownFiles(rootDir);
-  if (!files.length) throw new Error("Tidak ada file Markdown ditemukan.");
-  files.sort();
-  const parts = [];
-  for (const file of files) {
-    const name = path.basename(file);
-    const content = await fs.readFile(file, "utf8");
-    if (parts.length)
-      parts.push("\n<div style=\"page-break-before: always;\"></div>\n");
-    parts.push(`# ${name}\n\n${content}\n`);
-  }
-  const mdContent = parts.join("\n");
-  const pdf = await mdToPdf({ content: mdContent });
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "docs-"));
-  const pdfPath = path.join(tmpDir, filename);
-  await fs.writeFile(pdfPath, pdf.content);
-  const buffer = await fs.readFile(pdfPath);
-  try {
-    await fs.unlink(pdfPath);
-    await fs.rmdir(tmpDir);
-  } catch (e) {
-    ignore(e);
-  }
-  return buffer;
-}
-
 async function absensiUsernameInsta(client_id, userModel, mode = "all") {
   let sudah = [], belum = [];
   if (mode === "sudah") {
@@ -1603,12 +1558,11 @@ Ketik *angka* sumber data, atau *batal* untuk kembali.
 ┏━━━ *Administratif* ━━━
 1️⃣ Exception Info
 2️⃣ Hapus WA Admin
-3️⃣ Download Docs
 ┗━━━━━━━━━━━━━━━━━━━━━━
 Ketik *angka* menu, atau *batal* untuk kembali.
 `.trim());
 
-    if (!/^[1-3]$/.test(text.trim())) {
+    if (!/^[1-2]$/.test(text.trim())) {
       session.step = "clientMenu_admin";
       await waClient.sendMessage(chatId, msg);
       return;
@@ -1617,7 +1571,6 @@ Ketik *angka* menu, atau *batal* untuk kembali.
     const mapStep = {
       1: "exceptionInfo_chooseClient",
       2: "hapusWAAdmin_confirm",
-      3: "downloadDocs_choose",
     };
 
     session.step = mapStep[text.trim()];
@@ -3839,49 +3792,6 @@ Ketik *angka* menu, atau *batal* untuk kembali.
       await waClient.sendMessage(chatId, msg.trim());
     } catch (err) {
       await waClient.sendMessage(chatId, `❌ Gagal refresh aggregator: ${err.message}`);
-    }
-  },
-
-  // ================== DOWNLOAD DOCS ==================
-  downloadDocs_choose: async (session, chatId, _text, waClient) => {
-    const msg = appendSubmenuBackInstruction(
-      `*Download Dokumentasi*\n1️⃣ Front End\n2️⃣ Back End\nBalas angka menu atau *batal* untuk keluar.`
-    );
-    session.step = "downloadDocs_send";
-    await waClient.sendMessage(chatId, msg);
-  },
-  downloadDocs_send: async (session, chatId, text, waClient) => {
-    const choice = text.trim();
-    let targetDir = "";
-    let filename = "";
-    if (choice === "1") {
-      targetDir = path.join(process.cwd(), "..", "Cicero_Web");
-      filename = "frontend-docs.pdf";
-    } else if (choice === "2") {
-      targetDir = process.cwd();
-      filename = "backend-docs.pdf";
-    } else if (choice.toLowerCase() === "batal") {
-      session.step = "main";
-      await waClient.sendMessage(chatId, "Dibatalkan.");
-      return;
-    } else {
-      await waClient.sendMessage(chatId, "Pilihan tidak valid. Balas *1* atau *2*.");
-      return;
-    }
-    session.step = "main";
-    try {
-      await fs.access(targetDir);
-    } catch (_e) {
-      await waClient.sendMessage(chatId, "❌ Folder tidak ditemukan.");
-      return;
-    }
-    try {
-      await waClient.sendMessage(chatId, "⏳ Menyiapkan dokumen...");
-      const buffer = await buildDocsPdf(targetDir, filename);
-      await sendWAFile(waClient, buffer, filename, chatId, "application/pdf");
-      await waClient.sendMessage(chatId, "✅ Dokumen dikirim.");
-    } catch (err) {
-      await waClient.sendMessage(chatId, `❌ Gagal membuat dokumen: ${err.message}`);
     }
   },
 
