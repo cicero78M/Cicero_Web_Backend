@@ -29,6 +29,10 @@ const pool = new Pool({
   query_timeout: env.DB_QUERY_TIMEOUT_MS,
 });
 
+pool.on('error', (err) => {
+  console.error('[DB POOL ERROR]', err.message);
+});
+
 export const query = (text, params) => {
   assertSafeTestDatabase();
   return pool.query(text, params);
@@ -37,4 +41,9 @@ export const getClient = () => {
   assertSafeTestDatabase();
   return pool.connect();
 };
+export const getPoolStats = () => ({
+  totalCount: pool.totalCount,
+  idleCount: pool.idleCount,
+  waitingCount: pool.waitingCount,
+});
 export const close = () => pool.end();

@@ -111,7 +111,8 @@ test('keeps legacy instagram field as fallback while preferring active social ac
   expect(sql).toContain('user_social_accounts');
   expect(sql).toContain('usa.is_active = TRUE');
   expect(sql).toContain("trim(coalesce(u.insta, '')) <> ''");
-  expect(sql).toContain('AND NOT EXISTS (');
+  expect(sql).toContain('-- contain the legacy value even after an active account is migrated.');
+  expect(sql).not.toContain('AND NOT EXISTS (');
   expect(sql).toContain('COALESCE((');
 });
 

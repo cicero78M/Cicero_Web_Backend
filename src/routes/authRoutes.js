@@ -1,4 +1,5 @@
 import express from "express";
+import { env } from "../config/env.js";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { query } from "../db/index.js";
@@ -400,6 +401,9 @@ router.post('/dashboard-register', async (req, res) => {
 });
 
 router.post('/dashboard-login', async (req, res) => {
+  if (!env.DASHBOARD_LOGIN_ENABLED) {
+    return res.status(503).json({ success: false, message: 'Login dashboard sedang dinonaktifkan.' });
+  }
   const { username, password } = req.body;
   if (!username || !password) {
     return res
@@ -657,6 +661,13 @@ router.post('/user-login', async (req, res) => {
     ? String(login_surface).toLowerCase()
     : 'reposter';
   const isClaimLogin = loginSource === 'claim';
+
+  if (isClaimLogin && !env.CLAIM_LOGIN_ENABLED) {
+    return res.status(503).json({ success: false, message: 'Login claim sedang dinonaktifkan.' });
+  }
+  if (!isClaimLogin && !env.REPOSTER_LOGIN_ENABLED) {
+    return res.status(503).json({ success: false, message: 'Login reposter sedang dinonaktifkan.' });
+  }
 
   // Support both new mechanism (user_id + whatsapp) and old mechanism (nrp + password)
   if (user_id && whatsapp) {

@@ -64,6 +64,23 @@ export function normalizeUsername(username) {
     .toLowerCase();
 }
 
+// Prefer the migrated active account when callers expose both fields.
+export function getEffectiveTikTokUsername(user) {
+  const active = user?.effective_tiktok;
+  if (typeof active === "string" && active.trim() !== "") return active;
+  return user?.tiktok || "";
+}
+
+// Keep historical comments attributable after a handle change. The active
+// handle remains the display value; legacy is only a matching alias.
+export function getTikTokUsernameAliases(user) {
+  return [...new Set(
+    [user?.effective_tiktok, user?.tiktok_legacy, user?.tiktok]
+      .filter((value) => typeof value === "string" && value.trim() !== "")
+      .map(normalizeUsername),
+  )];
+}
+
 // Use the comprehensive sorting function from sortingHelper
 const sortUsersByRankAndName = sortUsersByPositionRankAndName;
 
@@ -135,8 +152,8 @@ export async function collectKomentarRecap(clientId, opts = {}) {
           satfung: div,
         };
         videoIds.forEach((vid, idx) => {
-          const uname = normalizeUsername(u.tiktok);
-          row[vid] = uname && commentSets[idx].has(uname) ? 1 : 0;
+          const usernames = getTikTokUsernameAliases(u);
+          row[vid] = usernames.some((uname) => commentSets[idx].has(uname)) ? 1 : 0;
         });
         rows.push(row);
       });
@@ -146,7 +163,7 @@ export async function collectKomentarRecap(clientId, opts = {}) {
   return { videoIds, recap, failedVideoIds };
 }
 
-// === AKUMULASI (min 50%) ===
+// === AKUMULASI ===
 export async function absensiKomentar(client_id, opts = {}) {
   const { clientFilter } = opts;
   const roleFlag = opts.roleFlag;
@@ -223,11 +240,8 @@ export async function absensiKomentar(client_id, opts = {}) {
 
   commentSets.forEach((commentSet) => {
     users.forEach((u) => {
-      if (
-        u.tiktok &&
-        u.tiktok.trim() !== "" &&
-        commentSet.has(u.tiktok.replace(/^@/, "").toLowerCase())
-      ) {
+      const usernames = getTikTokUsernameAliases(u);
+      if (usernames.some((username) => commentSet.has(username))) {
         userStats[u.user_id].count += 1;
       }
     });
@@ -241,7 +255,10 @@ export async function absensiKomentar(client_id, opts = {}) {
       {
         totalTarget: totalKonten,
         getCount: (u) => u.count || 0,
-        hasUsername: (u) => !!(u.tiktok && u.tiktok.trim() !== ""),
+        hasUsername: (u) => {
+          const username = getEffectiveTikTokUsername(u);
+          return Boolean(username && username.trim() !== "");
+        },
       }
     );
 
@@ -251,7 +268,7 @@ export async function absensiKomentar(client_id, opts = {}) {
     const mode = (opts && opts.mode) ? String(opts.mode).toLowerCase() : "all";
     const divisionKeys = sortDivisionKeys(Object.keys(statusByDivision));
     const formatUserLine = (u) => {
-      const handle = u.tiktok ? u.tiktok : "belum mengisi data tiktok";
+      const handle = getEffectiveTikTokUsername(u) || "belum mengisi data tiktok";
       const progress = `(${u.count || 0}/${totalKonten} konten)`;
       return `- ${u.title ? u.title + " " : ""}${u.nama} : ${handle} ${progress}`.trim();
     };
@@ -332,9 +349,10 @@ export async function absensiKomentar(client_id, opts = {}) {
         };
       const g = groups[cid];
       g.total++;
-      if (!u.tiktok || u.tiktok.trim() === "") {
+      const username = getEffectiveTikTokUsername(u);
+      if (!username || username.trim() === "") {
         g.noUsername++;
-      } else if (u.count >= Math.ceil(totalKonten / 2)) {
+      } else if (u.count === totalKonten) {
         g.sudah++;
       } else if (u.count > 0) {
         g.kurang++;
@@ -454,9 +472,10 @@ export async function absensiKomentar(client_id, opts = {}) {
       maximumFractionDigits: 1,
     });
 
-  const usersWithUsername = users.filter(
-    (u) => u.tiktok && u.tiktok.trim() !== ""
-  );
+  const usersWithUsername = users.filter((u) => {
+    const username = getEffectiveTikTokUsername(u);
+    return username && username.trim() !== "";
+  });
   const targetPerUser = Math.ceil(totalKonten / 2) || 0;
   const totalEligible = usersWithUsername.length;
   const totalInteractions = Object.values(userStats).reduce(
@@ -661,11 +680,12 @@ export async function absensiKomentarDitbinmasSimple(clientId = "DITBINMAS") {
   };
 
   allUsers.forEach((u) => {
-    if (!u.tiktok || u.tiktok.trim() === "") {
+    const tiktokUsername = getEffectiveTikTokUsername(u);
+    if (!tiktokUsername || tiktokUsername.trim() === "") {
       categorizedUsers.tanpaUsername.push(u);
       return;
     }
-    const uname = normalizeUsername(u.tiktok);
+    const uname = normalizeUsername(tiktokUsername);
     let count = 0;
     commentSets.forEach((set) => {
       if (set.has(uname)) count += 1;
@@ -817,20 +837,22 @@ export async function absensiKomentarDitbinmasReport(clientId = "DITBINMAS") {
 
     users.forEach((u) => {
       const baseData = { user: u, commentCount: 0 };
-      if (!u.tiktok || u.tiktok.trim() === "") {
+      const tiktokUsername = getEffectiveTikTokUsername(u);
+      if (!tiktokUsername || tiktokUsername.trim() === "") {
         tanpaUsername.push(baseData);
         return;
       }
-      const uname = normalizeUsername(u.tiktok);
+      const usernames = getTikTokUsernameAliases(u);
       let count = 0;
       commentSets.forEach((set) => {
-        if (set.has(uname)) count += 1;
+        if (usernames.some((username) => set.has(username))) count += 1;
       });
       totalPelaksanaanDivisi += count;
       const payload = { user: u, commentCount: count };
-      const percentage = totalKonten ? (count / totalKonten) * 100 : 0;
-      if (percentage >= 50) sudah.push(payload);
-      else if (percentage > 0) kurang.push(payload);
+      // Daily report semantics: complete means every assigned content was
+      // commented on. A partial result (including 1/2) belongs in Kurang.
+      if (count === totalKonten) sudah.push(payload);
+      else if (count > 0) kurang.push(payload);
       else belum.push(payload);
     });
 
@@ -945,9 +967,10 @@ export async function lapharTiktokDitbinmas(clientId = "DITBINMAS") {
   const filenameBelum = `Absensi_Belum_Engagement_Tiktok_${hari}_${dateSafe}_${timeSafe}.txt`;
 
   const { tiktok: mainUsername, nama: clientName } = await getClientInfo(clientId);
-  const clientNameUpper = String(clientName || clientId || roleName).toUpperCase();
+  const targetClientKey = String(clientId || "DITBINMAS").trim().toUpperCase();
+  const clientNameUpper = String(clientName || targetClientKey || roleName).toUpperCase();
 
-  const posts = await getPostsTodayByClient(roleName);
+  const posts = await getPostsTodayByClient(targetClientKey);
   if (!posts.length)
     return { filename, text: `Tidak ada konten TikTok untuk ${clientNameUpper} hari ini.` };
   const kontenLinks = [];
@@ -991,8 +1014,8 @@ export async function lapharTiktokDitbinmas(clientId = "DITBINMAS") {
     await getClientsByRole(roleName)
   )
     .map((c) => c.toUpperCase())
-    .filter((cid) => cid !== clientNameUpper);
-  const clientIds = [clientNameUpper, ...polresIds];
+    .filter((cid) => cid !== targetClientKey);
+  const clientIds = [targetClientKey, ...polresIds];
   const allUsers = (
     await getUsersByDirektorat(roleName, clientIds)
   ).filter((u) => u.status === true);
@@ -1053,14 +1076,13 @@ export async function lapharTiktokDitbinmas(clientId = "DITBINMAS") {
     let noTiktok = 0;
 
     users.forEach((u) => {
-      if (!u.insta || u.insta.trim() === "") {
+      const tiktokUsername = getEffectiveTikTokUsername(u);
+      if (!tiktokUsername || tiktokUsername.trim() === "") {
         noUname.push(u);
-      }
-      if (!u.tiktok || u.tiktok.trim() === "") {
         noTiktok++;
         return;
       }
-      const uname = normalizeUsername(u.tiktok);
+      const uname = normalizeUsername(tiktokUsername);
       let count = 0;
       commentSets.forEach((set) => {
         if (set.has(uname)) count += 1;
@@ -1113,7 +1135,7 @@ export async function lapharTiktokDitbinmas(clientId = "DITBINMAS") {
     blockLines.push(`Belum Komentar : ${none.length}`);
     if (none.length) {
       blockLines.push("");
-      blockLines.push(...none.map((u) => `- ${formatNama(u)}, ${u.tiktok || "-"}`));
+      blockLines.push(...none.map((u) => `- ${formatNama(u)}, ${getEffectiveTikTokUsername(u) || "-"}`));
     }
 
     blockLines.push("");
@@ -1123,8 +1145,8 @@ export async function lapharTiktokDitbinmas(clientId = "DITBINMAS") {
       blockLines.push(
         ...noUname.map(
           (u) =>
-            `- ${formatNama(u)}, IG ${u.insta ? u.insta : "Kosong"}, Tiktok ${
-              u.tiktok ? u.tiktok : "Kosong"
+              `- ${formatNama(u)}, Tiktok ${
+              getEffectiveTikTokUsername(u) || "Kosong"
             }`
         )
       );
@@ -1159,7 +1181,7 @@ export async function lapharTiktokDitbinmas(clientId = "DITBINMAS") {
       if (none.length) {
         belumLines.push(`Belum Komentar : ${none.length}`);
         belumLines.push(
-          ...none.map((u) => `- ${formatNama(u)}, ${u.tiktok || "-"}`)
+          ...none.map((u) => `- ${formatNama(u)}, ${getEffectiveTikTokUsername(u) || "-"}`)
         );
       }
       if (noUname.length) {
@@ -1168,8 +1190,8 @@ export async function lapharTiktokDitbinmas(clientId = "DITBINMAS") {
         belumLines.push(
           ...noUname.map(
             (u) =>
-              `- ${formatNama(u)}, IG ${u.insta ? u.insta : "Kosong"}, Tiktok ${
-                u.tiktok ? u.tiktok : "Kosong"
+              `- ${formatNama(u)}, Tiktok ${
+                getEffectiveTikTokUsername(u) || "Kosong"
               }`
           )
         );
@@ -1179,14 +1201,14 @@ export async function lapharTiktokDitbinmas(clientId = "DITBINMAS") {
   }
 
   perClientStats.sort((a, b) => {
-    if (a.cid === clientNameUpper) return -1;
-    if (b.cid === clientNameUpper) return 1;
+    if (a.cid === targetClientKey) return -1;
+    if (b.cid === targetClientKey) return 1;
     if (a.comments !== b.comments) return b.comments - a.comments;
     return a.name.localeCompare(b.name);
   });
 
   const perClientBlocks = perClientStats.map((p) => p.block);
-  const satkerStats = perClientStats.filter((p) => p.cid !== clientNameUpper);
+  const satkerStats = perClientStats.filter((p) => p.cid !== targetClientKey);
   const fmtNum = (n) => n.toLocaleString("id-ID");
 
   const contentStats = kontenLinks.map((link, idx) => {
@@ -1342,9 +1364,7 @@ export async function absensiKomentarTiktokPerKonten(client_id, opts = {}) {
       if (u.exception === true) {
         userSudah.push(u);
       } else if (
-        u.tiktok &&
-        u.tiktok.trim() !== "" &&
-        commentSet.has(u.tiktok.replace(/^@/, "").toLowerCase())
+      getTikTokUsernameAliases(u).some((username) => commentSet.has(username))
       ) {
         userSudah.push(u);
       } else {
@@ -1370,7 +1390,7 @@ export async function absensiKomentarTiktokPerKonten(client_id, opts = {}) {
         msg += `*${div}* (${list.length} user):\n`;
         msg += list.length
           ? list.map(u =>
-              `- ${u.title ? u.title + " " : ""}${u.nama} : ${u.tiktok || "-"}`
+              `- ${u.title ? u.title + " " : ""}${u.nama} : ${getEffectiveTikTokUsername(u) || "-"}`
             ).join("\n") + "\n"
           : "-\n";
         if (idx < arr.length - 1) msg += "\n";
@@ -1387,7 +1407,7 @@ export async function absensiKomentarTiktokPerKonten(client_id, opts = {}) {
         msg += list.length
           ? `*${div}* (${list.length} user):\n` +
             list.map(u =>
-              `- ${u.title ? u.title + " " : ""}${u.nama} : ${u.tiktok || "-"}`
+              `- ${u.title ? u.title + " " : ""}${u.nama} : ${getEffectiveTikTokUsername(u) || "-"}`
             ).join("\n") + "\n"
           : "-\n";
         if (idx < arr.length - 1) msg += "\n";

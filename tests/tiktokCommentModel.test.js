@@ -127,7 +127,7 @@ test('getRekapKomentarByClient orders nama by priority list', async () => {
   expect(sql).toContain('UPPER(u.nama)');
 });
 
-test('keeps legacy tiktok field as fallback while preferring active social accounts', async () => {
+test('keeps legacy tiktok field as a historical alias while preferring active social accounts', async () => {
   mockClientType();
   mockQuery.mockResolvedValueOnce({ rows: [] });
   mockQuery.mockResolvedValueOnce({ rows: [] });
@@ -136,7 +136,6 @@ test('keeps legacy tiktok field as fallback while preferring active social accou
   expect(sql).toContain('user_social_accounts');
   expect(sql).toContain('usa.is_active = TRUE');
   expect(sql).toContain("trim(coalesce(u.tiktok, '')) <> ''");
-  expect(sql).toContain('AND NOT EXISTS (');
   expect(sql).toContain('COALESCE((');
 });
 

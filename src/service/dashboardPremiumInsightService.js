@@ -14,6 +14,47 @@ const DIRECTORATE_ROLE_CLIENT_MAP = {
   ditsamapta: ['ditsamapta'],
 };
 
+// Both premium endpoints request the same recap when the dashboard loads.
+// Share the in-flight promise and retain a short cache to avoid doubling load
+// on PostgreSQL during parallel frontend requests.
+const RECAP_CACHE_TTL_MS = 15_000;
+const recapCache = new Map();
+
+function buildRecapCacheKey(platform, context) {
+  return JSON.stringify([
+    platform,
+    context.clientId,
+    context.roleLower,
+    context.scopeLower,
+    context.regionalId,
+    context.periode,
+    context.tanggal,
+    context.startDate,
+    context.endDate,
+  ]);
+}
+
+async function getCachedPlatformRecap(platform, context) {
+  const key = buildRecapCacheKey(platform, context);
+  const now = Date.now();
+  const cached = recapCache.get(key);
+  if (cached && cached.expiresAt > now) return cached.promise;
+
+  const promise = getPlatformRecap(platform, context).catch((error) => {
+    if (recapCache.get(key)?.promise === promise) recapCache.delete(key);
+    throw error;
+  });
+  recapCache.set(key, { promise, expiresAt: now + RECAP_CACHE_TTL_MS });
+
+  // Bound memory if many clients/filters are requested over time.
+  if (recapCache.size > 100) {
+    for (const [entryKey, entry] of recapCache) {
+      if (entry.expiresAt <= now) recapCache.delete(entryKey);
+    }
+  }
+  return promise;
+}
+
 function createHttpError(statusCode, message) {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -442,7 +483,7 @@ export async function getDashboardPremiumExecutiveRecap({ dashboardUser, query }
     throw createHttpError(400, 'platform harus instagram atau tiktok');
   }
 
-  const recap = await getPlatformRecap(platform, context);
+  const recap = await getCachedPlatformRecap(platform, context);
   const clientName = await getClientName(context.clientId);
   const platformLabel = platform === 'tiktok' ? 'TikTok' : 'Instagram';
 
@@ -464,7 +505,7 @@ export async function getDashboardPremiumRiskSummary({ dashboardUser, query }) {
     throw createHttpError(400, 'platform harus instagram atau tiktok');
   }
 
-  const recap = await getPlatformRecap(platform, context);
+  const recap = await getCachedPlatformRecap(platform, context);
   const platformLabel = platform === 'tiktok' ? 'TikTok' : 'Instagram';
 
   return {

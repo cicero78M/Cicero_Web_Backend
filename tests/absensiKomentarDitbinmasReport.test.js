@@ -63,10 +63,10 @@ test('aggregates komentar report per division for Ditbinmas with current section
   expect(mockGetUsersByDirektorat).toHaveBeenCalledWith('ditbinmas', 'DITBINMAS');
   expect(msg).toContain('*Jumlah Total Personil:* 5 pers');
   expect(msg).toContain('✅ *Sudah Melaksanakan* : *3 pers*');
-  expect(msg).toContain('⚠️ *Melaksanakan kurang lengkap* : *0 pers*');
+  expect(msg).toContain('⚠️ *Melaksanakan kurang lengkap* : *1 pers*');
   expect(msg).toContain('❌ *Belum melaksanakan* : *2 pers*');
   expect(msg).toContain('⚠️❌ *Belum Update Username TikTok* : *0 pers*');
-  expect(msg).toContain('⚠️ *Melaksanakan kurang lengkap* : *0 pers*');
+  expect(msg).toContain('⚠️ *Melaksanakan kurang lengkap* : *1 pers*');
 
   // division headers should still be present in rendered order
   expect(msg).toContain('1. DIV A');
@@ -75,4 +75,49 @@ test('aggregates komentar report per division for Ditbinmas with current section
 
   // two divisions should have one person who has not performed
   expect((msg.match(/❌ Belum melaksanakan \(1 pers\)/g) || []).length).toBe(2);
+});
+
+test('matches comments with active TikTok username instead of legacy username', async () => {
+  mockQuery.mockResolvedValueOnce({ rows: [{ nama: 'DIREKTORAT BINMAS', client_tiktok: 'ditbinmastiktok' }] });
+  mockGetPostsTodayByClient.mockResolvedValueOnce([{ video_id: 'vid1' }]);
+  mockGetCommentsByVideoId.mockResolvedValueOnce({ comments: [{ username: 'active.account' }] });
+  mockGetUsersByDirektorat.mockResolvedValueOnce([{
+    user_id: 'u-active',
+    nama: 'Migrated User',
+    tiktok: 'legacy.account',
+    effective_tiktok: 'active.account',
+    divisi: 'DIV A',
+    client_id: 'DITBINMAS',
+    status: true,
+  }]);
+
+  const msg = await absensiKomentarDitbinmasReport();
+
+  expect(msg).toContain('*Jumlah Total Personil:* 1 pers');
+  expect(msg).toContain('✅ *Sudah Melaksanakan* : *1 pers*');
+  expect(msg).toContain('Migrated User');
+});
+
+test('matches historical comments after a TikTok handle change', async () => {
+  mockQuery.mockResolvedValueOnce({ rows: [{ nama: 'DIREKTORAT BINMAS', client_tiktok: 'ditbinmastiktok' }] });
+  mockGetPostsTodayByClient.mockResolvedValueOnce([{ video_id: 'vid1' }, { video_id: 'vid2' }]);
+  mockGetCommentsByVideoId
+    .mockResolvedValueOnce({ comments: [{ username: 'arymurtini' }] })
+    .mockResolvedValueOnce({ comments: [{ username: 'arymurtini' }] });
+  mockGetUsersByDirektorat.mockResolvedValueOnce([{
+    user_id: 'u-ary',
+    nama: 'ARY MURTINI, S.I.K., M.SI.',
+    tiktok: '@arymurtini',
+    effective_tiktok: '@ary.murtini',
+    divisi: 'WADIR BINMAS',
+    client_id: 'DITBINMAS',
+    status: true,
+  }]);
+
+  const msg = await absensiKomentarDitbinmasReport();
+
+  expect(msg).toContain('*Jumlah Total Personil:* 1 pers');
+  expect(msg).toContain('✅ *Sudah Melaksanakan* : *1 pers*');
+  expect(msg).toContain('ARY MURTINI, S.I.K., M.SI.');
+  expect(msg).toContain('2/2');
 });

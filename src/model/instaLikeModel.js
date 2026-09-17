@@ -1,8 +1,22 @@
 // src/model/instaLikeModel.js
-import { query } from '../repository/db.js';
+import { query, withTransaction } from '../repository/db.js';
 import { buildPriorityOrderClause } from '../utils/sqlPriority.js';
 
 const DEFAULT_ACTIVITY_START = '2025-09-01';
+const USE_INSTA_LIKE_USERS = process.env.INSTA_LIKE_USERS_ENABLED === 'true';
+
+async function queryRecapPhase(phase, text, params) {
+  const startedAt = process.hrtime.bigint();
+  try {
+    return await query(text, params);
+  } finally {
+    const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+    console.info('[INSTA_RECAP_QUERY]', {
+      phase,
+      durationMs: Number(durationMs.toFixed(2)),
+    });
+  }
+}
 
 function normalizeLikeUsername(value) {
   if (typeof value !== 'string') return null;
@@ -50,6 +64,37 @@ function normalizeLikeUsernamesPayload(payload) {
  * Disarankan kolom likes bertipe JSONB.
  */
 export async function upsertInstaLike(shortcode, likes) {
+  if (USE_INSTA_LIKE_USERS) {
+    if (!shortcode) return 0;
+    return withTransaction(async (client) => {
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [shortcode]);
+      const existingResult = await client.query(
+        'SELECT likes FROM insta_like WHERE shortcode = $1 FOR UPDATE',
+        [shortcode],
+      );
+      const existing = normalizeLikeUsernamesPayload(existingResult.rows[0]?.likes);
+      const incoming = normalizeLikeUsernamesPayload(likes);
+      const merged = [...new Set([...existing, ...incoming])];
+
+      await client.query(
+        `INSERT INTO insta_like (shortcode, likes, updated_at)
+         VALUES ($1, $2::jsonb, NOW())
+         ON CONFLICT (shortcode) DO UPDATE
+         SET likes = EXCLUDED.likes, updated_at = NOW()`,
+        [shortcode, JSON.stringify(merged)],
+      );
+      await client.query(
+        `INSERT INTO insta_like_users (shortcode, username)
+         SELECT $1, value
+         FROM jsonb_array_elements_text($2::jsonb) AS item(value)
+         WHERE value <> ''
+         ON CONFLICT (shortcode, username) DO NOTHING`,
+        [shortcode, JSON.stringify(merged)],
+      );
+      return merged.length;
+    });
+  }
+
   const result = await query(
     `INSERT INTO insta_like (shortcode, likes, updated_at)
      VALUES ($1, $2, NOW())
@@ -571,27 +616,67 @@ export async function getRekapLikesByClient(
   const { priorityCase, fallbackRank } = buildPriorityOrderClause('u.nama', addPriorityParam);
   const priorityExpr = `(${priorityCase})`;
 
-  const { rows } = await query(`
-    WITH valid_likes AS (
+  const likeSourceSql = USE_INSTA_LIKE_USERS
+    ? `
+      SELECT
+        l.shortcode,
+        p.created_at,
+        p.client_id,
+        l.username
+      FROM insta_like_users l
+      JOIN filtered_posts p ON p.shortcode = l.shortcode
+      UNION ALL
+      -- Safety net while the relational projection is being repaired or
+      -- backfilled. A shortcode with no helper rows must still use the
+      -- canonical JSONB source instead of making every user look uncompleted.
       SELECT
         l.shortcode,
         p.created_at,
         p.client_id,
         lower(replace(trim(lk.username), '@', '')) AS username
       FROM insta_like l
-      JOIN insta_post p ON p.shortcode = l.shortcode
+      JOIN filtered_posts p ON p.shortcode = l.shortcode
+      CROSS JOIN LATERAL (
+        SELECT COALESCE(elem->>'username', trim(both '"' FROM elem::text)) AS username
+        FROM jsonb_array_elements(COALESCE(l.likes, '[]'::jsonb)) AS elem
+      ) AS lk
+      WHERE NOT EXISTS (
+        SELECT 1 FROM insta_like_users lu
+        WHERE lu.shortcode = l.shortcode
+      )
+    `
+    : `
+      SELECT
+        l.shortcode,
+        p.created_at,
+        p.client_id,
+        lower(replace(trim(lk.username), '@', '')) AS username
+      FROM insta_like l
+      JOIN filtered_posts p ON p.shortcode = l.shortcode
+      CROSS JOIN LATERAL (
+        SELECT COALESCE(elem->>'username', trim(both '"' FROM elem::text)) AS username
+        FROM jsonb_array_elements(l.likes) AS elem
+      ) AS lk
+    `;
+
+  const { rows } = await queryRecapPhase('likes_users', `
+    WITH filtered_posts AS MATERIALIZED (
+      SELECT DISTINCT
+        p.shortcode,
+        p.created_at,
+        p.client_id
+      FROM insta_post p
       ${postRegionalJoinLikes}
       ${postRoleJoinLikes}
       ${postOfficialJoinLikes}
-      JOIN LATERAL (
-        SELECT COALESCE(elem->>'username', trim(both '"' FROM elem::text)) AS username
-        FROM jsonb_array_elements(l.likes) AS elem
-      ) AS lk ON TRUE
       WHERE ${postClientFilter}
         ${postRoleFilter}
         ${postRegionalFilterLikes}
         ${postOfficialFilterLikes}
         AND ${tanggalFilter}
+    ),
+    valid_likes AS MATERIALIZED (
+      ${likeSourceSql}
     ),
     user_accounts AS (
       SELECT
@@ -606,21 +691,22 @@ export async function getRekapLikesByClient(
 
       UNION ALL
 
-      -- Keep u.insta only when no active Instagram account has been migrated.
+      -- Keep the legacy username as an alias as well. Older snapshots may
+      -- contain the legacy value even after an active account is migrated.
       SELECT
         u.user_id,
         u.client_id,
         lower(replace(trim(coalesce(u.insta, '')), '@', '')) AS username
       FROM "user" u
       WHERE trim(coalesce(u.insta, '')) <> ''
-        AND NOT EXISTS (
-          SELECT 1
-          FROM user_social_accounts usa
-          WHERE usa.user_id = u.user_id
-            AND LOWER(usa.platform) = 'instagram'
-            AND usa.is_active = TRUE
-            AND trim(coalesce(usa.username, '')) <> ''
-        )
+    ),
+    eligible_user_accounts AS MATERIALIZED (
+      SELECT ua.*
+      FROM user_accounts ua
+      JOIN "user" u ON u.user_id = ua.user_id
+      JOIN clients c ON c.client_id = u.client_id
+      WHERE u.status = true
+        AND ${userWhere}
     ),
     user_like_counts AS (
       SELECT
@@ -628,7 +714,7 @@ export async function getRekapLikesByClient(
         COUNT(DISTINCT vl.shortcode) AS jumlah_like,
         ARRAY_AGG(DISTINCT vl.shortcode ORDER BY vl.shortcode)
           FILTER (WHERE vl.shortcode IS NOT NULL) AS completed_task_shortcodes
-      FROM user_accounts ua
+      FROM eligible_user_accounts ua
       JOIN valid_likes vl
         ON ua.username = vl.username
         ${likeAccountClientJoin}
@@ -679,28 +765,28 @@ export async function getRekapLikesByClient(
         AND ${postTanggalFilter}
     )`;
 
-  const { rows: postRows } = await query(
+  const { rows: postRows } = await queryRecapPhase(
+    'posts_and_shortcodes',
     `${postsCteSql}
-    SELECT COUNT(DISTINCT shortcode) AS total_post FROM posts`,
+    SELECT
+      COUNT(DISTINCT shortcode) AS total_post,
+      COALESCE(
+        ARRAY_AGG(DISTINCT shortcode ORDER BY shortcode)
+          FILTER (WHERE shortcode IS NOT NULL),
+        ARRAY[]::text[]
+      ) AS shortcodes
+    FROM posts`,
     postParams
   );
   const totalKonten = parseInt(postRows[0]?.total_post || '0', 10);
 
-  const { rows: taskLinkRows } = await query(
-    `${postsCteSql}
-    SELECT DISTINCT shortcode
-     FROM posts
-     ORDER BY shortcode ASC`,
-    postParams
-  );
-  const taskLinksToday = taskLinkRows
-    .map((row) => String(row?.shortcode || '').trim())
-    .filter(Boolean)
-    .map((shortcode) => `https://www.instagram.com/p/${shortcode}`);
-
-  const allTaskShortcodes = taskLinkRows
-    .map((row) => String(row?.shortcode || '').trim())
+  const allTaskShortcodes = (Array.isArray(postRows[0]?.shortcodes)
+    ? postRows[0].shortcodes
+    : [])
+    .map((shortcode) => String(shortcode || '').trim())
     .filter(Boolean);
+  const taskLinksToday = allTaskShortcodes
+    .map((shortcode) => `https://www.instagram.com/p/${shortcode}`);
 
   for (const user of rows) {
     user.jumlah_like = parseInt(user.jumlah_like, 10);

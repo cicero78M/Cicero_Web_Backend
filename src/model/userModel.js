@@ -738,6 +738,7 @@ export async function getUsersByDirektorat(flag, clientId = null) {
     const { effective_insta, effective_tiktok, ...user } = row;
     return {
       ...user,
+      tiktok_legacy: user.tiktok,
       insta: effective_insta ?? user.insta,
       tiktok: effective_tiktok ?? user.tiktok,
     };

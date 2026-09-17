@@ -42,7 +42,7 @@ async function applySessionSettings(client, sessionSettings = {}) {
 }
 
 export const query = async (text, params) => {
-  const shouldLog = process.env.NODE_ENV !== 'production';
+  const shouldLog = env.DB_DEBUG_LOGGING || process.env.NODE_ENV === 'development';
   const paramSummary = summarizeParams(params);
   if (shouldLog) {
     console.log('[DB QUERY]', text, paramSummary);
@@ -50,13 +50,14 @@ export const query = async (text, params) => {
   try {
     const res = await adapter.query(text, params);
     const count = res?.rowCount ?? res?.rows?.length ?? 0;
-    console.log('[DB RESULT]', count);
+    if (shouldLog) console.log('[DB RESULT]', count);
     return res;
   } catch (err) {
+    const poolStats = adapter.getPoolStats?.();
     if (shouldLog) {
-      console.error('[DB ERROR]', err.message, { text, paramSummary });
+      console.error('[DB ERROR]', err.message, { text, paramSummary, poolStats });
     } else {
-      console.error('[DB ERROR]', err.message);
+      console.error('[DB ERROR]', err.message, poolStats || '');
     }
     throw err;
   }
@@ -85,3 +86,4 @@ export const withTransaction = async (callback, { sessionSettings } = {}) => {
 };
 
 export const close = () => adapter.close?.();
+export const getPoolStats = () => adapter.getPoolStats?.() || null;

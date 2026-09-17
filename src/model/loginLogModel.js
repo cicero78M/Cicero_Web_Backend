@@ -1,10 +1,18 @@
 import { query } from '../repository/db.js';
 
 export async function insertLoginLog({ actorId, loginType, loginSource }) {
-  await query(
-    'INSERT INTO login_log (actor_id, login_type, login_source) VALUES ($1, $2, $3)',
-    [actorId || '', loginType || '', loginSource || '']
-  );
+  try {
+    await query(
+      'INSERT INTO login_log (actor_id, login_type, login_source) VALUES ($1, $2, $3)',
+      [actorId || '', loginType || '', loginSource || '']
+    );
+    return true;
+  } catch (error) {
+    // Audit logging must not make an otherwise valid login fail when the DB
+    // pool is saturated or temporarily restarting.
+    console.warn('[AUTH_AUDIT] Failed to persist login log:', error?.message || error);
+    return false;
+  }
 }
 
 export async function getLoginLogs() {

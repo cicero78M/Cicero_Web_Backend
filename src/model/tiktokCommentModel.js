@@ -3,6 +3,19 @@ import { buildPriorityOrderClause } from '../utils/sqlPriority.js';
 
 const DEFAULT_ACTIVITY_START = '2025-09-01';
 
+async function queryTiktokRecapPhase(phase, text, params) {
+  const startedAt = process.hrtime.bigint();
+  try {
+    return await query(text, params);
+  } finally {
+    const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+    console.info('[TIKTOK_RECAP_QUERY]', {
+      phase,
+      durationMs: Number(durationMs.toFixed(2)),
+    });
+  }
+}
+
 function normalizeUsername(uname) {
   if (typeof uname !== 'string' || uname.length === 0) return null;
   const lower = uname.toLowerCase();
@@ -596,7 +609,8 @@ export async function getRekapKomentarByClient(
   const { priorityCase, fallbackRank } = buildPriorityOrderClause('u.nama', addPriorityParam);
   const priorityExpr = `(${priorityCase})`;
 
-  const { rows } = await query(
+  const { rows } = await queryTiktokRecapPhase(
+    'comments_users',
     `WITH scoped_posts AS MATERIALIZED (
       SELECT DISTINCT p.video_id
       FROM tiktok_post p
@@ -629,20 +643,14 @@ export async function getRekapKomentarByClient(
 
       UNION ALL
 
-      -- Keep u.tiktok only when no active TikTok account has been migrated.
+      -- Keep the legacy username as a historical alias as well.  A user can
+      -- have changed handles; old comments must remain attributable to the
+      -- same person while the active account remains the display username.
       SELECT
         u.user_id,
         lower(replace(trim(coalesce(u.tiktok, '')), '@', '')) AS username
       FROM "user" u
       WHERE trim(coalesce(u.tiktok, '')) <> ''
-        AND NOT EXISTS (
-          SELECT 1
-          FROM user_social_accounts usa
-          WHERE usa.user_id = u.user_id
-            AND LOWER(usa.platform) = 'tiktok'
-            AND usa.is_active = TRUE
-            AND trim(coalesce(usa.username, '')) <> ''
-        )
     ),
     total_posts AS (
       SELECT COUNT(*) AS total_konten
@@ -732,7 +740,8 @@ export async function getRekapKomentarByClient(
     params: scopedTaskLinkParams,
   } = buildScopedQueryParams(taskLinksSql, params);
 
-  const { rows: taskLinkRows } = await query(
+  const { rows: taskLinkRows } = await queryTiktokRecapPhase(
+    'posts_and_links',
     scopedTaskLinksSql,
     scopedTaskLinkParams
   );
